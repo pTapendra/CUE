@@ -1,0 +1,167 @@
+import express, { type NextFunction, type Request, type Response } from "express";
+import { z } from "zod";
+import type { AccountRepository } from "../accounts/AccountRepository.js";
+import { CanvasAuthError, CanvasUnavailableError } from "../canvas/CanvasClient.js";
+import {
+  CanvasNotConnectedError,
+  InvalidCanvasUrlError,
+  SyncExpiredError,
+  type CanvasReaderService,
+} from "../canvasReader/CanvasReaderService.js";
+import { NotFoundError, type ScheduleService } from "../schedule/ScheduleService.js";
+
+export interface Services {
+  accounts: AccountRepository;
+  canvasReader: CanvasReaderService;
+  schedule: ScheduleService;
+}
+
+const isoDate = z.string().refine((s) => !Number.isNaN(Date.parse(s)), "must be an ISO date");
+const kind = z.enum(["assignment", "exam", "event"]);
+
+const schemas = {
+  connect: z.object({ baseUrl: z.string().min(1).max(200), token: z.string().min(10).max(500) }),
+  confirm: z.object({
+    syncId: z.string().uuid(),
+    accept: z.array(z.string().max(100)).max(2000),
+    dates: z.record(z.string(), isoDate).optional(),
+  }),
+  week: z.object({ from: isoDate }),
+  course: z.object({ name: z.string().trim().min(1).max(120), code: z.string().trim().max(40).nullable().optional() }),
+  newItem: z.object({
+    title: z.string().trim().min(1).max(200),
+    kind,
+    dueAt: isoDate.nullable(),
+    courseId: z.string().uuid().nullable().optional(),
+  }),
+  editItem: z
+    .object({
+      title: z.string().trim().min(1).max(200),
+      kind,
+      dueAt: isoDate.nullable(),
+      courseId: z.string().uuid().nullable(),
+    })
+    .partial(),
+  status: z.object({ status: z.enum(["not_started", "in_progress", "done", "postponed"]) }),
+};
+
+type Authed = Request & { studentId: string };
+
+export function createApp(s: Services) {
+  const app = express();
+  app.disable("x-powered-by");
+  app.use(express.json({ limit: "200kb" }));
+
+  app.get("/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+
+  // Creates an anonymous account for a newly installed app. No name or email.
+  app.post("/api/devices", (_req, res) => {
+    const { deviceToken } = s.accounts.create();
+    res.status(201).json({ deviceToken });
+  });
+
+  const api = express.Router();
+  api.use((req, res, next) => {
+    const header = req.header("authorization") ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    const studentId = token ? s.accounts.findByToken(token) : null;
+    if (!studentId) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    (req as Authed).studentId = studentId;
+    next();
+  });
+
+  const sid = (req: Request) => (req as Authed).studentId;
+
+  api.delete("/account", (req, res) => {
+    s.accounts.delete(sid(req));
+    res.status(204).end();
+  });
+
+  // --- Canvas Reader (UC1) ---
+  api.get("/canvas/connection", (req, res) => {
+    res.json(s.canvasReader.status(sid(req)));
+  });
+
+  api.put("/canvas/connection", async (req, res) => {
+    const body = schemas.connect.parse(req.body);
+    await s.canvasReader.connect(sid(req), body.baseUrl, body.token);
+    res.json(s.canvasReader.status(sid(req)));
+  });
+
+  api.delete("/canvas/connection", (req, res) => {
+    s.canvasReader.disconnect(sid(req));
+    res.status(204).end();
+  });
+
+  api.post("/canvas/sync", async (req, res) => {
+    res.json(await s.canvasReader.preview(sid(req)));
+  });
+
+  api.post("/canvas/sync/confirm", (req, res) => {
+    const body = schemas.confirm.parse(req.body);
+    const imported = s.canvasReader.confirm(sid(req), body.syncId, body.accept, body.dates);
+    res.json({ imported });
+  });
+
+  // --- Schedule Manager (UC2) ---
+  api.get("/courses", (req, res) => {
+    res.json({ courses: s.schedule.listCourses(sid(req)) });
+  });
+
+  api.post("/courses", (req, res) => {
+    const body = schemas.course.parse(req.body);
+    res.status(201).json(s.schedule.addCourse(sid(req), body.name, body.code ?? null));
+  });
+
+  api.get("/schedule/week", (req, res) => {
+    const { from } = schemas.week.parse(req.query);
+    res.json(s.schedule.getWeek(sid(req), new Date(from)));
+  });
+
+  api.post("/items", (req, res) => {
+    const body = schemas.newItem.parse(req.body);
+    res.status(201).json(s.schedule.addItem(sid(req), { ...body, courseId: body.courseId ?? null }));
+  });
+
+  api.patch("/items/:id", (req, res) => {
+    const body = schemas.editItem.parse(req.body);
+    res.json(s.schedule.updateItem(sid(req), String(req.params.id), body));
+  });
+
+  api.put("/items/:id/status", (req, res) => {
+    const { status } = schemas.status.parse(req.body);
+    res.json(s.schedule.setStatus(sid(req), String(req.params.id), status));
+  });
+
+  api.delete("/items/:id", (req, res) => {
+    s.schedule.deleteItem(sid(req), String(req.params.id));
+    res.status(204).end();
+  });
+
+  app.use("/api", api);
+
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    const [status, error, message] = describe(err);
+    if (status >= 500) console.error(err);
+    res.status(status).json({ error, message });
+  });
+
+  return app;
+}
+
+function describe(err: unknown): [number, string, string] {
+  if (err instanceof z.ZodError) return [400, "invalid_request", err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")];
+  if (err instanceof SyntaxError) return [400, "invalid_json", "Request body is not valid JSON"];
+  if (err instanceof NotFoundError) return [404, "not_found", err.message];
+  if (err instanceof InvalidCanvasUrlError) return [400, "invalid_canvas_url", err.message];
+  if (err instanceof CanvasNotConnectedError) return [409, "canvas_not_connected", err.message];
+  if (err instanceof CanvasAuthError) return [409, "canvas_token_rejected", "Canvas rejected the token. Please reconnect."];
+  if (err instanceof SyncExpiredError) return [409, "sync_expired", err.message];
+  if (err instanceof CanvasUnavailableError) return [502, "canvas_unavailable", err.message];
+  return [500, "server_error", "Something went wrong"];
+}
