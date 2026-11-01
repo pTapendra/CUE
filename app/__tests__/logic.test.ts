@@ -1,5 +1,6 @@
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item } from '../src/api/types';
+import { serverUrl } from '../src/config';
 import { addDays, fromInput, startOfWeek, toInput } from '../src/dates';
 import { normalizeUrl } from '../src/viewmodels/useConnectCanvas';
 import { buildDates } from '../src/viewmodels/useSyncReview';
@@ -71,5 +72,19 @@ describe('ApiClient', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(friendlyMessage(err)).toMatch(/reconnect/);
     expect(friendlyMessage(new TypeError('Network request failed'))).toMatch(/Cannot reach/);
+  });
+});
+
+describe('serverUrl', () => {
+  it('uses the computer that serves the app in Expo Go', () => {
+    expect(serverUrl(undefined, '192.168.1.20:8081')).toBe('http://192.168.1.20:3000');
+  });
+
+  it('lets an environment variable override it', () => {
+    expect(serverUrl('https://cue.example.edu/', '192.168.1.20:8081')).toBe('https://cue.example.edu');
+  });
+
+  it('falls back to localhost', () => {
+    expect(serverUrl(undefined, undefined)).toBe('http://localhost:3000');
   });
 });

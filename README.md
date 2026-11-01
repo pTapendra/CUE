@@ -7,7 +7,7 @@ This repository holds two parts:
 | Folder | What it is |
 | --- | --- |
 | `server/` | Back-end server: Node.js, Express, TypeScript, SQLite |
-| `app/` | Mobile app: React Native (bare CLI), TypeScript |
+| `app/` | Mobile app: React Native with Expo, TypeScript (runs in Expo Go; can be turned into a bare React Native project at any time) |
 
 The app talks only to the server. Only the server talks to Canvas, and only with read (GET) requests.
 
@@ -48,21 +48,39 @@ Without `CUE_SECRET_KEY` the server makes a temporary key, and saved Canvas toke
 
 The server reads `server/.env` on start when the file exists.
 
-## Run the app
+## Run the app on your phone (Expo Go)
 
-Bare React Native needs the native tool chains on your computer. Follow the official [environment setup](https://reactnative.dev/docs/set-up-your-environment) for Android (Android Studio, JDK 17) and, on a Mac, iOS (Xcode, CocoaPods).
+No Xcode or Android Studio needed.
+
+1. Install **Expo Go** on your phone from the App Store or Google Play.
+2. Put the phone and your computer on the **same Wi-Fi**.
+3. Start the server (above), then in a second terminal:
 
 ```bash
 cd app
 npm install
-npm start                   # Metro bundler, keep it running
-npm run android             # in a second terminal, with an emulator open or a phone plugged in
-# iOS, on a Mac:
-cd ios && bundle install && bundle exec pod install && cd .. && npm run ios
-npm test                    # 10 tests
+npm start                   # shows a QR code
+npm test                    # 13 tests
 ```
 
-The app looks for the server at `http://10.0.2.2:3000` on the Android emulator and `http://localhost:3000` on the iOS simulator. On a real phone, set your computer's LAN address in `app/src/config.ts`.
+4. Scan the QR code: on iPhone with the Camera app, on Android from inside Expo Go. The app opens and reloads when you save a file.
+
+The app finds the server automatically on the computer that runs `npm start` (port 3000). To use a server elsewhere, copy `app/.env.example` to `app/.env` and set `EXPO_PUBLIC_SERVER_URL`.
+
+If the phone cannot connect, try `npx expo start --tunnel` for the app, check that your computer's firewall allows incoming connections to Node on port 3000, and make sure the Wi-Fi does not isolate devices (some campus networks do; a phone hotspot works instead).
+
+### Going back to bare React Native
+
+The app uses Expo's continuous native generation, so the native projects can be created at any time:
+
+```bash
+cd app
+npm run native:prebuild     # creates ios/ and android/ from app.json
+npm run native:ios          # build and run with Xcode tools (Mac)
+npm run native:android      # build and run with the Android SDK
+```
+
+From then on it is a normal React Native project with native folders. To commit those folders and edit them by hand, remove `/ios` and `/android` from `app/.gitignore`.
 
 ### Getting a Canvas token
 

@@ -1,4 +1,23 @@
 {
-  "name": "CueApp",
-  "displayName": "CueApp"
+  "expo": {
+    "name": "Cue",
+    "slug": "cue",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "edu.cue.app"
+    },
+    "android": {
+      "package": "edu.cue.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    }
+  }
 }
