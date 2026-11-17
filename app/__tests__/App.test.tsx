@@ -5,11 +5,15 @@
 import React from 'react';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import { Text } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
+
+// Opening a real browser is not possible in tests; record where the app tries to go.
+jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })) }));
 
 async function flush() {
   for (let i = 0; i < 5; i++) {
@@ -29,6 +33,12 @@ function press(root: ReactTestRenderer.ReactTestInstance, label: string) {
   return act(async () => {
     await target.props.onPress();
   });
+}
+
+function isDisabled(root: ReactTestRenderer.ReactTestInstance, label: string): boolean {
+  const button = root.findAll((n) => n.props.accessibilityRole === 'button' && texts(n).includes(label))[0];
+  if (!button) throw new Error(`No button "${label}" in: ${texts(root).join(' | ')}`);
+  return !!button.props.accessibilityState?.disabled;
 }
 
 function type(root: ReactTestRenderer.ReactTestInstance, placeholder: string, value: string) {
@@ -72,6 +82,28 @@ it('connects Canvas, confirms items with a missing exam date, and shows the week
   expect(shown).toContain('SQL homework');
   expect(shown).toContain('Exam: Midterm Exam');
   expect(shown).not.toContain('Needs a date');
+
+  await act(async () => {
+    tree!.unmount();
+  });
+});
+
+it('opens the school Canvas settings page in the app so the student can make a token on the phone', async () => {
+  const server = fakeServer();
+  const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    tree = ReactTestRenderer.create(<App client={client} />);
+  });
+  await flush();
+  const root = tree!.root;
+
+  expect(isDisabled(root, 'Open Canvas to create a token')).toBe(true);
+  await type(root, 'yourschool.instructure.com', 's.instructure.com');
+  expect(isDisabled(root, 'Open Canvas to create a token')).toBe(false);
+  await press(root, 'Open Canvas to create a token');
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://s.instructure.com/profile/settings');
 
   await act(async () => {
     tree!.unmount();

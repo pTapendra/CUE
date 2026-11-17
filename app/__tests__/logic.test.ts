@@ -2,7 +2,7 @@ import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item } from '../src/api/types';
 import { serverUrl } from '../src/config';
 import { addDays, fromInput, startOfWeek, toInput } from '../src/dates';
-import { normalizeUrl } from '../src/viewmodels/useConnectCanvas';
+import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
 import { buildDates } from '../src/viewmodels/useSyncReview';
 import { groupByDay } from '../src/viewmodels/useWeek';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
@@ -50,6 +50,24 @@ describe('view model helpers', () => {
   it('adds https:// to a bare Canvas address', () => {
     expect(normalizeUrl(' school.instructure.com ')).toBe('https://school.instructure.com');
     expect(normalizeUrl('https://school.instructure.com')).toBe('https://school.instructure.com');
+  });
+});
+
+describe('canvasSettingsUrl', () => {
+  it('points a bare Canvas address at the page where tokens are made', () => {
+    expect(canvasSettingsUrl(' school.instructure.com ')).toBe('https://school.instructure.com/profile/settings');
+  });
+
+  it('keeps only the host of a pasted Canvas link', () => {
+    expect(canvasSettingsUrl('https://school.instructure.com/courses/42?x=1')).toBe(
+      'https://school.instructure.com/profile/settings',
+    );
+  });
+
+  it('gives no link until a usable address is typed', () => {
+    expect(canvasSettingsUrl('')).toBeNull();
+    expect(canvasSettingsUrl('   ')).toBeNull();
+    expect(canvasSettingsUrl('my school')).toBeNull();
   });
 });
 

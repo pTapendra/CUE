@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
 
@@ -11,6 +12,18 @@ export function useConnectCanvas(initialUrl = '') {
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit = baseUrl.trim().length > 0 && token.trim().length >= 10 && !busy;
+  const settingsUrl = canvasSettingsUrl(baseUrl);
+
+  /** Opens the school's Canvas settings in a browser inside the app, where the token is made. */
+  async function openCanvasSettings(): Promise<void> {
+    if (!settingsUrl) return;
+    setError(null);
+    try {
+      await WebBrowser.openBrowserAsync(settingsUrl);
+    } catch {
+      setError(`Could not open Canvas. Open ${settingsUrl} in your phone's browser instead.`);
+    }
+  }
 
   async function connect(): Promise<boolean> {
     if (!canSubmit) return false;
@@ -28,11 +41,31 @@ export function useConnectCanvas(initialUrl = '') {
     }
   }
 
-  return { baseUrl, setBaseUrl, token, setToken, busy, error, canSubmit, connect };
+  return {
+    baseUrl,
+    setBaseUrl,
+    token,
+    setToken,
+    busy,
+    error,
+    canSubmit,
+    connect,
+    canOpenSettings: settingsUrl != null,
+    openCanvasSettings,
+  };
 }
 
 /** Accepts "school.instructure.com" as well as a full https:// address. */
 export function normalizeUrl(input: string): string {
   const t = input.trim();
   return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
+/**
+ * The Canvas page where students create an access token, or null when the
+ * address cannot be a Canvas site yet. Only the host is kept, as on the server.
+ */
+export function canvasSettingsUrl(input: string): string | null {
+  const m = /^(https?:\/\/[^/?#\s]+)(?:[/?#]\S*)?$/i.exec(normalizeUrl(input));
+  return m ? `${m[1]}/profile/settings` : null;
 }

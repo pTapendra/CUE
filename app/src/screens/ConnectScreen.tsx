@@ -34,9 +34,15 @@ export function ConnectScreen({
           value={vm.baseUrl}
           onChangeText={vm.setBaseUrl}
         />
+        <Button
+          title="Open Canvas to create a token"
+          variant="secondary"
+          disabled={!vm.canOpenSettings}
+          onPress={vm.openCanvasSettings}
+        />
         <Field
           label="Access token"
-          hint="In Canvas: Account → Settings → New Access Token. Cue stores it encrypted on its server, not on this phone."
+          hint="On the Canvas page, log in, tap “+ New Access Token”, copy the token, then tap Done and paste it here. Cue keeps it encrypted on its server, not on this phone."
           placeholder="Paste your token"
           autoCapitalize="none"
           autoCorrect={false}

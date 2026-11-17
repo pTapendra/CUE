@@ -84,7 +84,14 @@ From then on it is a normal React Native project with native folders. To commit 
 
 ### Getting a Canvas token
 
-In Canvas: **Account → Settings → Approved Integrations → New Access Token**. Paste it into the app with your school's Canvas address (for example `yourschool.instructure.com`). You can delete the token in Canvas at any time.
+The Canvas mobile app cannot create tokens, but the Canvas website can, including in a phone's browser. On the Connect screen:
+
+1. Type your school's Canvas address (for example `yourschool.instructure.com`).
+2. Tap **Open Canvas to create a token**. Your Canvas settings page opens inside Cue.
+3. Log in, tap **+ New Access Token**, copy the token (Canvas shows it only once), then tap **Done**.
+4. Paste the token and tap **Connect and sync**.
+
+On a computer the same page is **Account → Settings → Approved Integrations → New Access Token**. You can delete the token in Canvas at any time. Some schools turn off token creation for students; if Canvas shows no **New Access Token** button, use **Skip** and add dates by hand.
 
 ## How the code is organised
 
