@@ -143,9 +143,16 @@ export class ScheduleService {
     return this.repo.importedExternalIds(studentId);
   }
 
-  addItem(studentId: string, v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null }): Item {
+  addItem(
+    studentId: string,
+    v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt?: string | null; studyMinutes?: number },
+  ): Item {
     this.checkCourse(studentId, v.courseId);
-    const item = this.repo.createManualItem(studentId, { ...v, dueAt: normalizeDate(v.dueAt) });
+    const item = this.repo.createManualItem(studentId, {
+      ...v,
+      dueAt: normalizeDate(v.dueAt),
+      endsAt: normalizeDate(v.endsAt ?? null),
+    });
     this.emit(studentId);
     return this.present(item);
   }
@@ -153,11 +160,15 @@ export class ScheduleService {
   updateItem(
     studentId: string,
     itemId: string,
-    v: Partial<{ courseId: string | null; kind: ItemKind; title: string; dueAt: string | null }>,
+    v: Partial<{ courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt: string | null; studyMinutes: number }>,
   ): Item {
     if (!this.repo.findItem(studentId, itemId)) throw new NotFoundError("Item");
     if ("courseId" in v) this.checkCourse(studentId, v.courseId ?? null);
-    const changes = "dueAt" in v ? { ...v, dueAt: normalizeDate(v.dueAt ?? null) } : v;
+    const changes = {
+      ...v,
+      ...("dueAt" in v ? { dueAt: normalizeDate(v.dueAt ?? null) } : {}),
+      ...("endsAt" in v ? { endsAt: normalizeDate(v.endsAt ?? null) } : {}),
+    };
     const item = this.repo.updateItem(studentId, itemId, changes)!;
     this.emit(studentId);
     return this.present(item);

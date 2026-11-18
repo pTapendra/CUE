@@ -248,4 +248,23 @@ describe("Schedule Manager: study blocks", () => {
     }
     expect(() => schedule.rejectBlock(sid, early.id)).toThrow("Block not found");
   });
+
+  it("saves study time and an event's end time through the service", () => {
+    const { sid, schedule } = setup();
+    let announced = 0;
+    schedule.onChange(() => announced++);
+
+    const exam = schedule.addItem(sid, { courseId: null, kind: "exam", title: "Final", dueAt: "2026-11-20T15:00:00-06:00", studyMinutes: 120 });
+    const event = schedule.addItem(sid, { courseId: null, kind: "event", title: "Lab", dueAt: "2026-11-10T15:00:00Z", endsAt: "2026-11-10T10:30:00-06:00" });
+    expect(exam.studyMinutes).toBe(120);
+    expect(event.endsAt).toBe("2026-11-10T16:30:00.000Z");
+
+    const updated = schedule.updateItem(sid, exam.id, { studyMinutes: 0 });
+    expect(updated.studyMinutes).toBe(0);
+    expect(updated.title).toBe("Final");
+    expect(schedule.updateItem(sid, event.id, { endsAt: "2026-11-10T11:00:00-06:00" }).endsAt).toBe("2026-11-10T17:00:00.000Z");
+    expect(schedule.updateItem(sid, event.id, { title: "Lab 2" }).endsAt).toBe("2026-11-10T17:00:00.000Z");
+    expect(schedule.updateItem(sid, event.id, { endsAt: null }).endsAt).toBeNull();
+    expect(announced).toBe(6);
+  });
 });

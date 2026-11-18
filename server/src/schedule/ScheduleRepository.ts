@@ -144,16 +144,16 @@ export class ScheduleRepository {
 
   createManualItem(
     studentId: string,
-    v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt?: string | null },
+    v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt?: string | null; studyMinutes?: number | null },
   ): Item {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, due_at, ends_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, due_at, ends_at, study_minutes, created_at, updated_at)
+         VALUES (?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, studentId, v.courseId, id, v.kind, v.title, v.dueAt, v.endsAt ?? null, now, now);
+      .run(id, studentId, v.courseId, id, v.kind, v.title, v.dueAt, v.endsAt ?? null, v.studyMinutes ?? null, now, now);
     return this.findItem(studentId, id)!;
   }
 
