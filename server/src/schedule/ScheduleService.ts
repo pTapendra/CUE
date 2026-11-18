@@ -336,8 +336,15 @@ export class ScheduleService {
     return { ...item, studyMinutes };
   }
 
+  /** Tells each listener; the change is already saved, so a listener that fails is logged and skipped. */
   private emit(studentId: string): void {
-    for (const listener of this.listeners) listener(studentId);
+    for (const listener of this.listeners) {
+      try {
+        listener(studentId);
+      } catch (err) {
+        console.error(err);
+      }
+    }
   }
 
   private checkCourse(studentId: string, courseId: string | null | undefined): void {

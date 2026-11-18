@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AccountRepository } from "../src/accounts/AccountRepository.js";
 import { openDb } from "../src/db.js";
 import type { BlockRef } from "../src/planner/types.js";
@@ -77,6 +77,25 @@ describe("Schedule Manager: study blocks", () => {
     schedule.moveBlock(sid, third.id, "2026-11-07T00:00:00Z");
     schedule.deleteItem(sid, exam.id);
     expect(announced).toEqual([sid, sid, sid, sid, sid, sid, sid]);
+  });
+
+  it("a listener that fails does not fail the change or stop the other listeners", () => {
+    const { sid, schedule } = setup();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const heard: string[] = [];
+      schedule.onChange(() => {
+        throw new Error("planner broke");
+      });
+      schedule.onChange((id) => heard.push(id));
+
+      const exam = schedule.addItem(sid, { courseId: null, kind: "exam", title: "Final", dueAt: "2026-11-13T15:00:00Z" });
+      expect(exam.title).toBe("Final");
+      expect(heard).toEqual([sid]);
+      expect(logged).toHaveBeenCalledTimes(1);
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it("applies a plan and numbers blocks in the week", () => {
