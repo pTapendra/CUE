@@ -15,4 +15,11 @@ describe("time-zone helpers", () => {
     expect(isValidTimeZone("America/Chicago")).toBe(true);
     expect(isValidTimeZone("Mars/Base")).toBe(false);
   });
+
+  it("converts study times across daylight saving east of UTC", () => {
+    expect(zonedTimeToUtc("2026-10-25", "02:30", "Europe/Berlin").toISOString()).toBe("2026-10-25T00:30:00.000Z");
+    expect(zonedTimeToUtc("2027-03-28", "02:30", "Europe/Berlin").toISOString()).toBe("2027-03-28T01:30:00.000Z");
+    expect(zonedTimeToUtc("2026-10-25", "01:30", "Europe/London").toISOString()).toBe("2026-10-25T00:30:00.000Z");
+    expect(zonedTimeToUtc("2026-11-02", "18:00", "Asia/Kolkata").toISOString()).toBe("2026-11-02T12:30:00.000Z");
+  });
 });

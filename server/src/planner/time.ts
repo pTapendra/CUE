@@ -39,10 +39,16 @@ export function zonedTimeToUtc(localDate: string, time: string, timeZone: string
   const [y, mo, d] = localDate.split("-").map(Number);
   const [h, mi] = time.split(":").map(Number);
   const guess = Date.UTC(y, mo - 1, d, h, mi);
-  const t1 = guess - offsetAt(guess, timeZone);
-  if (offsetAt(t1, timeZone) === offsetAt(guess, timeZone)) return new Date(t1);
-  const t2 = guess - offsetAt(t1, timeZone);
-  return new Date(localFieldsAsUtc(t2, timeZone) === guess ? t2 : t1);
+  const DAY = 24 * 60 * 60 * 1000;
+  // The offsets in force a day before and after bracket any single transition.
+  const before = offsetAt(guess - DAY, timeZone);
+  const after = offsetAt(guess + DAY, timeZone);
+  const matches = [...new Set([before, after])]
+    .map((offset) => guess - offset)
+    .filter((t) => localFieldsAsUtc(t, timeZone) === guess);
+  // Ambiguous (fall back): earliest instant. Skipped (spring forward): none match, so use the
+  // offset in force before the transition, which lands one hour later.
+  return new Date(matches.length > 0 ? Math.min(...matches) : guess - before);
 }
 
 export function localDateOf(instant: Date, timeZone: string): string {
