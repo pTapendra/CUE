@@ -293,6 +293,35 @@ describe('item editor', () => {
     expect(patch!.body).toMatchObject({ studyMinutes: 480 });
   });
 
+  it("shows the new type's default study time after switching type, and does not send one", async () => {
+    const exam: Item = {
+      id: 'item-chem',
+      courseId: null,
+      courseName: null,
+      source: 'manual',
+      kind: 'exam',
+      title: 'Chem exam',
+      dueAt: new Date(2026, 10, 4, 10, 0).toISOString(),
+      endsAt: null,
+      allDay: false,
+      studyMinutes: 480,
+      status: 'not_started',
+    };
+    const { server, root } = await openWeek([exam]);
+    await press(root, 'Exam: Chem exam');
+    expect(texts(root)).toContain('8 h');
+
+    await press(root, 'Assignment');
+    expect(texts(root)).toContain('2 h');
+    expect(texts(root)).not.toContain('8 h');
+    await press(root, 'Save');
+    await flush();
+
+    const patch = server.state.calls.find((c) => c.method === 'PATCH' && c.path === '/api/items/item-chem');
+    expect(patch!.body).toMatchObject({ kind: 'assignment' });
+    expect(patch!.body).not.toHaveProperty('studyMinutes');
+  });
+
   it('shows an event whose end is not after its start as one hour, and refuses such an end', async () => {
     const at18 = new Date(2026, 10, 3, 18, 0).toISOString();
     const review: Item = {

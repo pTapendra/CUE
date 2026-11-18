@@ -61,7 +61,8 @@ export function ItemEditor({
   const [busy, setBusy] = useState(false);
 
   const needsStudy = kind === 'exam' || kind === 'assignment';
-  const initialHours = item?.studyMinutes != null ? item.studyMinutes / 60 : defaultHours(kind);
+  // The item's own amount while it keeps its type; after a switch, the new type's default.
+  const initialHours = item?.studyMinutes != null && kind === item.kind ? item.studyMinutes / 60 : defaultHours(kind);
   const hours = pickedHours ?? initialHours;
   const parsedDue = fromInput(due);
   const dueError = parsedDue === undefined ? 'Use the form 2026-11-06 or 2026-11-06 14:00' : undefined;
