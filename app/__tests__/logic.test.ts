@@ -3,6 +3,7 @@ import type { Item } from '../src/api/types';
 import { serverUrl } from '../src/config';
 import { addDays, fromInput, startOfWeek, toInput } from '../src/dates';
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
+import { withDeviceTimeZone } from '../src/timeZone';
 import { buildDates } from '../src/viewmodels/useSyncReview';
 import { groupByDay } from '../src/viewmodels/useWeek';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
@@ -120,5 +121,20 @@ describe('serverUrl', () => {
 
   it('falls back to localhost', () => {
     expect(serverUrl(undefined, undefined)).toBe('http://localhost:3000');
+  });
+});
+
+describe('withDeviceTimeZone', () => {
+  const base = { timeZone: null as string | null, dailyLimitMinutes: 180, windows: [] };
+
+  it('returns null when the zone already matches', () => {
+    expect(withDeviceTimeZone({ ...base, timeZone: 'Europe/Oslo' }, 'Europe/Oslo')).toBeNull();
+  });
+
+  it('returns a copy with the zone when it differs or is null', () => {
+    const input = { ...base, timeZone: 'Europe/Oslo' };
+    expect(withDeviceTimeZone(input, 'Asia/Dhaka')).toEqual({ ...input, timeZone: 'Asia/Dhaka' });
+    expect(input.timeZone).toBe('Europe/Oslo');
+    expect(withDeviceTimeZone(base, 'Asia/Dhaka')).toEqual({ ...base, timeZone: 'Asia/Dhaka' });
   });
 });

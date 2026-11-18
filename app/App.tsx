@@ -8,6 +8,7 @@ import { SERVER_URL } from './src/config';
 import { ConnectScreen } from './src/screens/ConnectScreen';
 import { ReviewScreen } from './src/screens/ReviewScreen';
 import { WeekScreen } from './src/screens/WeekScreen';
+import { syncTimeZone } from './src/timeZone';
 import { Button } from './src/ui/components';
 import { useTheme } from './src/ui/theme';
 
@@ -37,6 +38,7 @@ function Root({ api }: { api: ApiClient }) {
     (async () => {
       try {
         await api.ensureAccount();
+        await syncTimeZone(api).catch(() => {});
         const status = await api.getConnection();
         if (cancelled) return;
         setCanvasUrl(status.baseUrl);

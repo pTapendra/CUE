@@ -8,6 +8,7 @@ import { Text } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
+import { deviceTimeZone } from '../src/timeZone';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
@@ -64,10 +65,14 @@ it('connects Canvas, confirms items with a missing exam date, and shows the week
   await type(root, 'Paste your token', 'good-token-123');
   await press(root, 'Connect and sync');
   await flush();
-  expect(server.state.calls.find((c) => c.method === 'PUT')!.body).toEqual({
+  expect(server.state.calls.find((c) => c.method === 'PUT' && c.path !== '/api/planner/settings')!.body).toEqual({
     baseUrl: 'https://s.instructure.com',
     token: 'good-token-123',
   });
+
+  // The phone's time zone was sent to the Planner at startup.
+  const zonePut = server.state.calls.find((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
+  expect((zonePut!.body as { timeZone: string }).timeZone).toBe(deviceTimeZone());
 
   // Review screen: the exam has no date, so the student types one.
   expect(texts(root)).toContain('Check what Cue found');
