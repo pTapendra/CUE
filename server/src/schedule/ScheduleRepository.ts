@@ -20,6 +20,10 @@ export interface Item {
   kind: ItemKind;
   title: string;
   dueAt: string | null;
+  endsAt: string | null;
+  allDay: boolean;
+  /** Raw column; null means "use the default". */
+  studyMinutes: number | null;
   status: ItemStatus;
 }
 
@@ -31,6 +35,9 @@ interface ItemRow {
   kind: ItemKind;
   title: string;
   due_at: string | null;
+  ends_at: string | null;
+  all_day: number;
+  study_minutes: number | null;
   status: ItemStatus;
 }
 
@@ -42,11 +49,15 @@ const toItem = (r: ItemRow): Item => ({
   kind: r.kind,
   title: r.title,
   dueAt: r.due_at,
+  endsAt: r.ends_at,
+  allDay: r.all_day === 1,
+  studyMinutes: r.study_minutes,
   status: r.status,
 });
 
 const ITEM_SELECT = `
-  SELECT i.id, i.course_id, c.name AS course_name, i.source, i.kind, i.title, i.due_at, i.status
+  SELECT i.id, i.course_id, c.name AS course_name, i.source, i.kind, i.title, i.due_at, i.ends_at, i.all_day,
+         i.study_minutes, i.status
   FROM items i LEFT JOIN courses c ON c.id = i.course_id`;
 
 /** Data owned by the Schedule Manager: courses and schedule items. */
@@ -119,16 +130,16 @@ export class ScheduleRepository {
 
   createManualItem(
     studentId: string,
-    v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null },
+    v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt?: string | null },
   ): Item {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, due_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, due_at, ends_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, studentId, v.courseId, id, v.kind, v.title, v.dueAt, now, now);
+      .run(id, studentId, v.courseId, id, v.kind, v.title, v.dueAt, v.endsAt ?? null, now, now);
     return this.findItem(studentId, id)!;
   }
 
@@ -142,11 +153,22 @@ export class ScheduleRepository {
   updateItem(
     studentId: string,
     itemId: string,
-    v: Partial<{ courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; status: ItemStatus }>,
+    v: Partial<{
+      courseId: string | null;
+      kind: ItemKind;
+      title: string;
+      dueAt: string | null;
+      endsAt: string | null;
+      studyMinutes: number | null;
+      status: ItemStatus;
+    }>,
   ): Item | null {
     const sets: string[] = [];
     const args: unknown[] = [];
-    const columns = { courseId: "course_id", kind: "kind", title: "title", dueAt: "due_at", status: "status" } as const;
+    const columns = { courseId: "course_id", kind: "kind", title: "title", dueAt: "due_at",
+      endsAt: "ends_at",
+      studyMinutes: "study_minutes",
+      status: "status" } as const;
     for (const [field, column] of Object.entries(columns)) {
       if (field in v) {
         sets.push(`${column} = ?`);
