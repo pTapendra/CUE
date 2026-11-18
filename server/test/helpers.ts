@@ -7,6 +7,8 @@ import { CanvasReaderRepository } from "../src/canvasReader/CanvasReaderReposito
 import { CanvasReaderService } from "../src/canvasReader/CanvasReaderService.js";
 import { openDb } from "../src/db.js";
 import { PLANNER_DEFAULTS } from "../src/planner/config.js";
+import { PlannerRepository } from "../src/planner/PlannerRepository.js";
+import { PlannerService } from "../src/planner/PlannerService.js";
 import { ScheduleRepository } from "../src/schedule/ScheduleRepository.js";
 import { ScheduleService } from "../src/schedule/ScheduleService.js";
 
@@ -38,6 +40,8 @@ export function setup() {
     blockMinutes: PLANNER_DEFAULTS.blockMinutes,
     now: () => NOW,
   });
+  const planner = new PlannerService(new PlannerRepository(db), schedule, { now: () => NOW });
+  schedule.onChange((id) => planner.replan(id));
   const canvasReader = new CanvasReaderService(
     new CanvasReaderRepository(db),
     schedule,
@@ -47,7 +51,7 @@ export function setup() {
     },
     { secretKey: randomBytes(32), now: () => NOW },
   );
-  const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule });
+  const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule, planner });
 
   async function newStudent() {
     const res = await request(app).post("/api/devices").expect(201);

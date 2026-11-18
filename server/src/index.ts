@@ -6,6 +6,8 @@ import { CanvasReaderService } from "./canvasReader/CanvasReaderService.js";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db.js";
 import { PLANNER_DEFAULTS } from "./planner/config.js";
+import { PlannerRepository } from "./planner/PlannerRepository.js";
+import { PlannerService } from "./planner/PlannerService.js";
 import { ScheduleRepository } from "./schedule/ScheduleRepository.js";
 import { ScheduleService } from "./schedule/ScheduleService.js";
 
@@ -23,6 +25,8 @@ const schedule = new ScheduleService(new ScheduleRepository(db), {
   defaultStudyMinutes: PLANNER_DEFAULTS.studyMinutes,
   blockMinutes: PLANNER_DEFAULTS.blockMinutes,
 });
+const planner = new PlannerService(new PlannerRepository(db), schedule);
+schedule.onChange((id) => planner.replan(id));
 const canvasReader = new CanvasReaderService(
   new CanvasReaderRepository(db),
   schedule,
@@ -30,7 +34,7 @@ const canvasReader = new CanvasReaderService(
   { secretKey: config.secretKey, allowInsecureUrls: process.env.CUE_ALLOW_INSECURE_CANVAS === "1" },
 );
 
-const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule });
+const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule, planner });
 
 app.listen(config.port, () => {
   console.log(`Cue server listening on http://localhost:${config.port}`);
