@@ -6,6 +6,7 @@ import { deviceTimeZone } from '../timeZone';
 
 export const MIN_LIMIT_HOURS = 1;
 export const MAX_LIMIT_HOURS = 12;
+const MIN_WINDOW_MINUTES = 60;
 const MAX_WINDOW_MINUTES = 12 * 60;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -23,6 +24,7 @@ function length(w: StudyWindow): number {
 export function windowError(w: StudyWindow): string | null {
   if (!TIME.test(w.start) || !TIME.test(w.end)) return 'Use the form 18:00';
   if (w.start === w.end) return "Start and end can't be the same";
+  if (length(w) < MIN_WINDOW_MINUTES) return 'At least 1 hour';
   if (length(w) > MAX_WINDOW_MINUTES) return 'At most 12 hours';
   return null;
 }

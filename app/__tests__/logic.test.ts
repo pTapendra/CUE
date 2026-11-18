@@ -236,6 +236,13 @@ describe('study windows', () => {
     }
   });
 
+  it('rejects less than 1 hour', () => {
+    expect(windowError(win('18:00', '18:59'))).toBe('At least 1 hour');
+    expect(windowError(win('23:30', '00:15'))).toBe('At least 1 hour');
+    expect(windowError(win('18:00', '19:00'))).toBeNull();
+    expect(windowError(win('23:30', '00:30'))).toBeNull();
+  });
+
   it('rejects equal start and end, and more than 12 hours', () => {
     expect(windowError(win('18:00', '18:00'))).toBe("Start and end can't be the same");
     expect(windowError(win('08:00', '20:01'))).toBe('At most 12 hours');
