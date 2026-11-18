@@ -32,6 +32,23 @@ describe("UC2: view and edit the schedule", () => {
     expect(week.undated.map((i: { title: string }) => i.title)).toEqual(["Exam, date unknown"]);
   });
 
+  it("a page can end at a given instant, so a day when the clocks go back fits", async () => {
+    const { newStudent } = setup();
+    const s = await newStudent();
+    await s.post("/api/items", { title: "Due Mon 23:59", kind: "assignment", dueAt: "2026-11-03T05:59:00Z" }).expect(201);
+
+    // Sat 31 Oct to Mon 2 Nov in Chicago: the clocks go back on Sunday, so these three days last 73 hours.
+    const page = (await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&to=2026-11-03T06:00:00Z").expect(200)).body;
+    expect(page.to).toBe("2026-11-03T06:00:00.000Z");
+    expect(page.items.map((i: { title: string }) => i.title)).toEqual(["Due Mon 23:59"]);
+
+    const byDays = (await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&days=3").expect(200)).body;
+    expect(byDays.to).toBe("2026-11-03T05:00:00.000Z");
+    expect(byDays.items).toEqual([]);
+    await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&to=2026-10-30T05:00:00Z").expect(400);
+    await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&to=2026-12-31T05:00:00Z").expect(400);
+  });
+
   it("edits an item and sets each of the four statuses", async () => {
     const { newStudent } = setup();
     const s = await newStudent();

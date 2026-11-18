@@ -42,7 +42,8 @@ export function useWeek(today: Date = new Date()) {
     setError(null);
     try {
       const [w, c, s] = await Promise.all([
-        api.getWeek(from, DAYS_PER_PAGE),
+        // Up to local midnight after the last day: a page over a clock change is not 72 hours.
+        api.getWeek(from, addDays(from, DAYS_PER_PAGE)),
         api.listCourses(),
         api.getPlannerSettings(),
       ]);

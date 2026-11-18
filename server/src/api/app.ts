@@ -20,6 +20,8 @@ export interface Services {
 }
 
 const isoDate = z.string().refine((s) => !Number.isNaN(Date.parse(s)), "must be an ISO date");
+/** The longest page of the schedule: 14 days, plus the hour a clock change can add. */
+const MAX_PAGE_MS = (14 * 24 + 1) * 60 * 60 * 1000;
 const studyMinutes = z.number().int().min(0).max(2400).multipleOf(60);
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
@@ -45,7 +47,13 @@ const schemas = {
     accept: z.array(z.string().max(100)).max(2000),
     dates: z.record(z.string(), isoDate).optional(),
   }),
-  week: z.object({ from: isoDate, days: z.coerce.number().int().min(1).max(14).default(7) }),
+  // `to`, when given, ends the page instead of `days`: a page of local days is not always a multiple of 24 hours.
+  week: z
+    .object({ from: isoDate, days: z.coerce.number().int().min(1).max(14).default(7), to: isoDate.optional() })
+    .refine((q) => q.to === undefined || (Date.parse(q.to) > Date.parse(q.from) && Date.parse(q.to) - Date.parse(q.from) <= MAX_PAGE_MS), {
+      message: "must be after from and at most 14 days later",
+      path: ["to"],
+    }),
   settings: z.object({
     timeZone: z.string().refine(isValidTimeZone, "must be an IANA time zone"),
     dailyLimitMinutes: z.number().int().min(60).max(720).multipleOf(60),
@@ -152,9 +160,10 @@ export function createApp(s: Services) {
   });
 
   api.get("/schedule/week", (req, res) => {
-    const { from, days } = schemas.week.parse(req.query);
+    const { from, days, to } = schemas.week.parse(req.query);
     s.planner.replanIfNewDay(sid(req));
-    res.json({ ...s.schedule.getWeek(sid(req), new Date(from), days), shortfalls: s.planner.shortfalls(sid(req)) });
+    const week = s.schedule.getWeek(sid(req), new Date(from), to === undefined ? days : new Date(to));
+    res.json({ ...week, shortfalls: s.planner.shortfalls(sid(req)) });
   });
 
   // --- Planner (UC2) ---

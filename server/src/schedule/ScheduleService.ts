@@ -125,8 +125,9 @@ export class ScheduleService {
     return this.repo.createManualCourse(studentId, name, code);
   }
 
-  getWeek(studentId: string, from: Date, days = 7): Week {
-    const to = new Date(from.getTime() + days * DAY_MS);
+  /** The schedule from `from` for a number of days, or up to an end instant. */
+  getWeek(studentId: string, from: Date, until: number | Date = 7): Week {
+    const to = until instanceof Date ? until : new Date(from.getTime() + until * DAY_MS);
     return {
       from: from.toISOString(),
       to: to.toISOString(),

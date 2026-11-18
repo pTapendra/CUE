@@ -96,9 +96,10 @@ export class ApiClient {
     return this.call<{ imported: number }>('POST', '/api/canvas/sync/confirm', { syncId, accept, dates });
   }
 
-  getWeek(from: Date, days?: number) {
-    const range = days === undefined ? '' : `&days=${days}`;
-    return this.call<Week>('GET', `/api/schedule/week?from=${encodeURIComponent(from.toISOString())}${range}`);
+  /** The schedule from `from` up to `to`. */
+  getWeek(from: Date, to: Date) {
+    const range = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+    return this.call<Week>('GET', `/api/schedule/week?${range}`);
   }
 
   getPlannerSettings() {

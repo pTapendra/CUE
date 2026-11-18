@@ -67,6 +67,14 @@ it('shows suggested blocks and shortfalls on the grid', async () => {
   expect(shown).toContain('DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours.');
 });
 
+it('asks for the days on screen, up to midnight after the last one', async () => {
+  const { server } = await openWeek();
+
+  const get = server.state.calls.filter((c) => c.path === '/api/schedule/week').pop();
+  // Local midnights, so a page over a clock change still ends where its last day ends.
+  expect(get!.query).toEqual({ from: new Date(2026, 10, 2).toISOString(), to: new Date(2026, 10, 5).toISOString() });
+});
+
 it('accepts all suggestions on screen', async () => {
   const { server, root } = await openWeek();
 

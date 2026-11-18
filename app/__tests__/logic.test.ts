@@ -82,13 +82,16 @@ describe('ApiClient', () => {
     expect(friendlyMessage(new TypeError('Network request failed'))).toMatch(/Cannot reach/);
   });
 
-  it('asks for a three-day week and reads its blocks', async () => {
+  it('asks for the schedule between two instants and reads its blocks', async () => {
     const server = fakeServer();
     const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
-    const week = await api.getWeek(new Date('2026-11-17T00:00:00.000Z'), 3);
-    expect(server.state.calls.at(-1)!.path).toBe('/api/schedule/week');
+    const week = await api.getWeek(new Date('2026-11-17T06:00:00.000Z'), new Date('2026-11-20T06:00:00.000Z'));
+    expect(server.state.calls.at(-1)).toMatchObject({
+      path: '/api/schedule/week',
+      query: { from: '2026-11-17T06:00:00.000Z', to: '2026-11-20T06:00:00.000Z' },
+    });
     expect(week.blocks).toEqual([]);
-    expect(Date.parse(week.to) - Date.parse(week.from)).toBe(3 * 864e5);
+    expect(week.to).toBe('2026-11-20T06:00:00.000Z');
   });
 
   it('explains a refused move', () => {

@@ -27,7 +27,7 @@ export function fakeServer() {
         { key: 'assignment:2', courseName: 'Software Engineering', kind: 'exam', title: 'Midterm Exam', dueAt: null, needsDate: true, alreadyImported: false },
       ],
     },
-    calls: [] as { method: string; path: string; body: any; auth: string | null }[],
+    calls: [] as { method: string; path: string; query: Record<string, string>; body: any; auth: string | null }[],
   };
 
   const routes: Record<string, Handler> = {
@@ -62,8 +62,8 @@ export function fakeServer() {
     },
     'GET /api/schedule/week': (_b, url) => {
       const from = Date.parse(url.searchParams.get('from')!);
-      const days = Number(url.searchParams.get('days') ?? 7);
-      const to = from + days * 864e5;
+      const until = url.searchParams.get('to');
+      const to = until ? Date.parse(until) : from + Number(url.searchParams.get('days') ?? 7) * 864e5;
       return {
         status: 200,
         body: {
@@ -111,7 +111,7 @@ export function fakeServer() {
     const method = init.method ?? 'GET';
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     const auth = (init.headers as Record<string, string> | undefined)?.Authorization ?? null;
-    state.calls.push({ method, path: url.pathname, body, auth });
+    state.calls.push({ method, path: url.pathname, query: Object.fromEntries(url.searchParams), body, auth });
 
     const status = /^\/api\/items\/([^/]+)\/status$/.exec(url.pathname);
     const block = /^\/api\/blocks\/([^/]+)\/(accept|reject|move)$/.exec(url.pathname);
