@@ -64,3 +64,8 @@ export function fromInput(text: string): string | null | undefined {
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
+
+/** "Mon 2 Nov – Wed 4 Nov" for `days` days starting on `from`. */
+export function rangeLabel(from: Date, days: number): string {
+  return `${dayLabel(from)} – ${dayLabel(addDays(from, days - 1))}`;
+}

@@ -1,7 +1,8 @@
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
-import type { Item } from '../src/api/types';
+import type { Item, StudyBlock, StudyWindow } from '../src/api/types';
 import { serverUrl } from '../src/config';
-import { addDays, fromInput, startOfWeek, toInput } from '../src/dates';
+import { addDays, fromInput, rangeLabel, startOfWeek, toInput } from '../src/dates';
+import { deadlinesFor, gridRange, placeInDay, timedEventsFor } from '../src/viewmodels/grid';
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
 import { withDeviceTimeZone } from '../src/timeZone';
 import { buildDates } from '../src/viewmodels/useSyncReview';
@@ -136,5 +137,63 @@ describe('withDeviceTimeZone', () => {
     expect(withDeviceTimeZone(input, 'Asia/Dhaka')).toEqual({ ...input, timeZone: 'Asia/Dhaka' });
     expect(input.timeZone).toBe('Europe/Oslo');
     expect(withDeviceTimeZone(base, 'Asia/Dhaka')).toEqual({ ...base, timeZone: 'Asia/Dhaka' });
+  });
+});
+
+describe('grid layout', () => {
+  const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).toISOString();
+  const entry = (sd: number, sh: number, ed: number, eh: number) => ({ startsAt: at(sd, sh), endsAt: at(ed, eh) });
+  const item = (over: Partial<Item>): Item => ({
+    id: 'i', courseId: null, courseName: null, source: 'manual', kind: 'event', title: 't',
+    dueAt: null, endsAt: null, allDay: false, studyMinutes: null, status: 'not_started', ...over,
+  });
+  const win = (weekday: number, start: string, end: string, enabled = true): StudyWindow => ({ weekday, enabled, start, end });
+
+  it('places a block by its local hour', () => {
+    const [p] = placeInDay(new Date(2026, 10, 2), [entry(2, 19, 2, 20)], { startHour: 18, endHour: 22 });
+    expect([p.top, p.height]).toEqual([50, 50]);
+  });
+
+  it('clips an entry that crosses midnight to each day', () => {
+    const e = entry(2, 23, 3, 1);
+    const range = { startHour: 0, endHour: 24 };
+    const mon = placeInDay(new Date(2026, 10, 2), [e], range);
+    const tue = placeInDay(new Date(2026, 10, 3), [e], range);
+    expect([mon[0].top, mon[0].height]).toEqual([23 * 50, 50]);
+    expect([tue[0].top, tue[0].height]).toEqual([0, 50]);
+    expect(placeInDay(new Date(2026, 10, 4), [e], range)).toEqual([]);
+    expect(placeInDay(new Date(2026, 10, 2), [e], { startHour: 8, endHour: 22 })).toEqual([]);
+  });
+
+  it('covers the study times of the visible days', () => {
+    const days = [new Date(2026, 10, 2), new Date(2026, 10, 3)]; // Mon, Tue
+    const windows = [win(1, '18:00', '22:00'), win(2, '17:30', '21:00'), win(3, '06:00', '07:00'), win(0, '10:00', '16:00', false)];
+    expect(gridRange(days, windows, [], [])).toEqual({ startHour: 17, endHour: 22 });
+    const block = { startsAt: at(3, 9), endsAt: at(3, 10, 15) } as StudyBlock;
+    expect(gridRange(days, windows, [block], [])).toEqual({ startHour: 9, endHour: 22 });
+    expect(gridRange(days, [], [], [])).toEqual({ startHour: 8, endHour: 22 });
+    // overnight window: Mon 22:00-02:00 covers Mon to 24 and Tue from 0
+    expect(gridRange([days[0]], [win(1, '22:00', '02:00')], [], [])).toEqual({ startHour: 22, endHour: 24 });
+    expect(gridRange([days[1]], [win(1, '22:00', '02:00')], [], [])).toEqual({ startHour: 0, endHour: 2 });
+  });
+
+  it('puts all-day events and deadlines in the deadline row and timed events in the grid', () => {
+    const day = new Date(2026, 10, 2);
+    const items = [
+      item({ id: 'a', kind: 'assignment', dueAt: at(2, 23) }),
+      item({ id: 'x', kind: 'exam', dueAt: at(2, 9) }),
+      item({ id: 'd', kind: 'event', allDay: true, dueAt: at(2, 0) }),
+      item({ id: 't', kind: 'event', dueAt: at(2, 14), endsAt: at(2, 15, 30) }),
+      item({ id: 'u', kind: 'event', dueAt: at(2, 16) }),
+      item({ id: 'o', kind: 'exam', dueAt: at(3, 9) }),
+    ];
+    expect(deadlinesFor(day, items).map((i) => i.id)).toEqual(['d', 'x', 'a']);
+    const timed = timedEventsFor(day, items);
+    expect(timed.map((e) => e.item.id)).toEqual(['t', 'u']);
+    expect(timed[1].endsAt).toBe(at(2, 17));
+  });
+
+  it('labels a range of days', () => {
+    expect(rangeLabel(new Date(2026, 10, 2), 3)).toBe('Mon 2 Nov – Wed 4 Nov');
   });
 });
