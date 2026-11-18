@@ -1,66 +1,82 @@
 import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { Item } from '../api/types';
-import { dayLabel, sameDay, timeLabel, weekLabel } from '../dates';
+import type { Item, Shortfall } from '../api/types';
+import { dayLabel, rangeLabel, timeLabel } from '../dates';
 import { Button, ErrorBanner } from '../ui/components';
 import { useTheme } from '../ui/theme';
-import { useWeek } from '../viewmodels/useWeek';
+import { DAYS_PER_PAGE, useWeek } from '../viewmodels/useWeek';
 import { ItemEditor, STATUSES } from './ItemEditor';
+import { TimeGrid } from './TimeGrid';
 
 export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; onCanvasSettings: () => void }) {
   const t = useTheme();
   const vm = useWeek();
   const [editing, setEditing] = useState<Item | null | 'new'>(null);
-  const today = new Date();
+  const suggested = vm.suggestedCount;
+  const hasBanners = !!vm.error || vm.undated.length > 0 || vm.shortfalls.length > 0 || suggested > 0;
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screen}>
       <View style={[styles.header, { borderColor: t.border }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Previous week" onPress={vm.previousWeek} hitSlop={12}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Previous days" onPress={vm.previous} hitSlop={12}>
           <Text style={[styles.arrow, { color: t.primary }]}>‹</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityHint="Go to this week" onPress={vm.thisWeek}>
-          <Text style={[styles.week, { color: t.text }]}>{weekLabel(vm.from)}</Text>
+        <Pressable accessibilityRole="button" accessibilityHint="Go to today" onPress={vm.goToday}>
+          <Text style={[styles.title, { color: t.text }]}>{rangeLabel(vm.from, DAYS_PER_PAGE)}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Next week" onPress={vm.nextWeek} hitSlop={12}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Next days" onPress={vm.next} hitSlop={12}>
           <Text style={[styles.arrow, { color: t.primary }]}>›</Text>
         </Pressable>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.body}
-        refreshControl={<RefreshControl refreshing={vm.loading} onRefresh={vm.reload} />}>
-        <ErrorBanner message={vm.error} />
+      <View style={styles.body}>
+        {hasBanners ? (
+          <ScrollView style={styles.banners} contentContainerStyle={styles.bannerList}>
+            <ErrorBanner message={vm.error} />
 
-        {vm.undated.length > 0 ? (
-          <View style={[styles.day, { backgroundColor: t.examTint }]}>
-            <Text style={[styles.dayTitle, { color: t.exam }]}>Needs a date</Text>
-            {vm.undated.map((item) => (
-              <ItemRow key={item.id} item={item} onPress={() => setEditing(item)} />
+            {vm.undated.length > 0 ? (
+              <View style={[styles.banner, { backgroundColor: t.examTint }]}>
+                <Text style={[styles.bannerTitle, { color: t.exam }]}>Needs a date</Text>
+                {vm.undated.map((item) => (
+                  <ItemRow key={item.id} item={item} onPress={() => setEditing(item)} />
+                ))}
+              </View>
+            ) : null}
+
+            {vm.shortfalls.map((s) => (
+              <View key={s.itemId} style={[styles.banner, { backgroundColor: t.examTint }]}>
+                <Text style={{ color: t.exam }}>{shortfallText(s)}</Text>
+              </View>
             ))}
-          </View>
+
+            {suggested > 0 ? (
+              <View style={[styles.banner, styles.suggestions, { backgroundColor: t.surface }]}>
+                <Text style={[styles.bannerTitle, { color: t.text }]}>
+                  {`${suggested} suggested block${suggested === 1 ? '' : 's'}`}
+                </Text>
+                <Button title="Accept all" onPress={vm.acceptVisible} />
+              </View>
+            ) : null}
+          </ScrollView>
         ) : null}
 
-        {vm.days.map((day) => (
-          <View key={day.date.toISOString()} style={[styles.day, { backgroundColor: t.surface }]}>
-            <Text style={[styles.dayTitle, { color: sameDay(day.date, today) ? t.primary : t.text }]}>
-              {dayLabel(day.date)}
-              {sameDay(day.date, today) ? ' · Today' : ''}
-            </Text>
-            {day.items.length === 0 ? (
-              <Text style={{ color: t.muted, fontSize: 13 }}>Nothing due</Text>
-            ) : (
-              day.items.map((item) => <ItemRow key={item.id} item={item} onPress={() => setEditing(item)} />)
-            )}
-          </View>
-        ))}
-      </ScrollView>
+        <TimeGrid
+          days={vm.days}
+          range={vm.range}
+          blocks={vm.blocks}
+          items={vm.items}
+          // Blocks have no sheet to open yet, so tapping one does nothing.
+          onBlock={() => {}}
+          onItem={setEditing}
+          refreshControl={<RefreshControl refreshing={vm.loading} onRefresh={vm.reload} />}
+        />
+      </View>
 
       <View style={[styles.footer, { borderColor: t.border, backgroundColor: t.background }]}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.footerButton}>
           <Button title="Add" onPress={() => setEditing('new')} />
         </View>
-        <View style={{ flex: 1 }}>
+        <View style={styles.footerButton}>
           <Button title="Sync Canvas" variant="secondary" onPress={onSync} />
         </View>
         <Button title="⚙" variant="secondary" onPress={onCanvasSettings} />
@@ -82,6 +98,12 @@ export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; o
   );
 }
 
+/** "DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours." */
+function shortfallText(s: Shortfall): string {
+  const fit = `${s.plannedMinutes / 60} of ${s.neededMinutes / 60} hours fit`;
+  return `${s.itemTitle}: ${fit} before ${dayLabel(new Date(s.dueAt))}. Add study times or lower the hours.`;
+}
+
 function ItemRow({ item, onPress }: { item: Item; onPress: () => void }) {
   const t = useTheme();
   const due = item.dueAt ? new Date(item.dueAt) : null;
@@ -92,23 +114,24 @@ function ItemRow({ item, onPress }: { item: Item; onPress: () => void }) {
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.item, { borderColor: item.kind === 'exam' ? t.exam : t.border, opacity: pressed ? 0.7 : 1 }]}>
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: t.text, fontWeight: '600', textDecorationLine: done ? 'line-through' : 'none' }}>
+      <View style={styles.itemText}>
+        <Text style={[styles.itemTitle, { color: t.text }, done ? styles.done : null]}>
           {item.kind === 'exam' ? 'Exam: ' : ''}
           {item.title}
         </Text>
-        <Text style={{ color: t.muted, fontSize: 13 }}>
+        <Text style={[styles.itemDetail, { color: t.muted }]}>
           {[item.courseName, due ? timeLabel(due) : null, item.status !== 'not_started' ? status : null]
             .filter(Boolean)
             .join(' · ')}
         </Text>
       </View>
-      {done ? <Text style={{ color: t.done, fontWeight: '700' }}>✓</Text> : null}
+      {done ? <Text style={[styles.check, { color: t.done }]}>✓</Text> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -118,10 +141,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   arrow: { fontSize: 30, paddingHorizontal: 8 },
-  week: { fontSize: 18, fontWeight: '700' },
-  body: { padding: 16, gap: 12 },
-  day: { borderRadius: 12, padding: 12, gap: 8 },
-  dayTitle: { fontSize: 15, fontWeight: '700' },
+  title: { fontSize: 17, fontWeight: '700' },
+  body: { flex: 1, padding: 12, gap: 8 },
+  banners: { flexGrow: 0, maxHeight: '40%' },
+  bannerList: { gap: 8 },
+  banner: { borderRadius: 10, padding: 10, gap: 8 },
+  bannerTitle: { fontSize: 15, fontWeight: '700' },
+  suggestions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   item: { flexDirection: 'row', alignItems: 'center', borderLeftWidth: 4, borderWidth: 1, borderRadius: 8, padding: 10 },
+  itemText: { flex: 1 },
+  itemTitle: { fontWeight: '600' },
+  itemDetail: { fontSize: 13 },
+  done: { textDecorationLine: 'line-through' },
+  check: { fontWeight: '700' },
   footer: { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1 },
+  footerButton: { flex: 1 },
 });

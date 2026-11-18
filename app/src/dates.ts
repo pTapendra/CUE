@@ -1,9 +1,14 @@
 /** Start of the week (Monday 00:00, local time) containing `d`. */
 export function startOfWeek(d: Date): Date {
-  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const out = startOfDay(d);
   const offset = (out.getDay() + 6) % 7; // Monday = 0
   out.setDate(out.getDate() - offset);
   return out;
+}
+
+/** Local midnight at the start of `d`'s day. */
+export function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 export function addDays(d: Date, days: number): Date {
@@ -22,12 +27,6 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /** "Mon 2 Nov" */
 export function dayLabel(d: Date): string {
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-
-/** "2 Nov – 8 Nov" for the week starting on `from`. */
-export function weekLabel(from: Date): string {
-  const to = addDays(from, 6);
-  return `${from.getDate()} ${MONTHS[from.getMonth()]} – ${to.getDate()} ${MONTHS[to.getMonth()]}`;
 }
 
 /** "14:30" */

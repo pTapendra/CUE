@@ -1,31 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
-import type { Course, Item, ItemInput, ItemStatus, Week } from '../api/types';
-import { addDays, sameDay, startOfWeek } from '../dates';
+import type { Course, ItemInput, ItemStatus, StudyWindow, Week } from '../api/types';
+import { addDays, fromInput, startOfDay } from '../dates';
+import { gridRange, timedEventsFor } from './grid';
 
-export interface DayGroup {
-  date: Date;
-  items: Item[];
-}
+/** Days the grid shows at once; the arrows move by this many. */
+export const DAYS_PER_PAGE = 3;
 
-/** Splits a week's items into seven days, Monday first. Empty days are kept. */
-export function groupByDay(items: Item[], from: Date): DayGroup[] {
-  const days: DayGroup[] = Array.from({ length: 7 }, (_, i) => ({ date: addDays(from, i), items: [] }));
-  for (const item of items) {
-    if (!item.dueAt) continue;
-    const due = new Date(item.dueAt);
-    const day = days.find((d) => sameDay(d.date, due));
-    if (day) day.items.push(item);
-  }
-  return days;
-}
-
-/** View model for the weekly view (UC2). */
+/** View model for the Week screen: a time grid of a few days with study blocks (UC2). */
 export function useWeek(today: Date = new Date()) {
   const api = useApi();
-  const [from, setFrom] = useState(() => startOfWeek(today));
+  const [from, setFrom] = useState(() => startOfDay(today));
   const [week, setWeek] = useState<Week | null>(null);
+  const [windows, setWindows] = useState<StudyWindow[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +22,14 @@ export function useWeek(today: Date = new Date()) {
     setLoading(true);
     setError(null);
     try {
-      const [w, c] = await Promise.all([api.getWeek(from), api.listCourses()]);
+      const [w, c, s] = await Promise.all([
+        api.getWeek(from, DAYS_PER_PAGE),
+        api.listCourses(),
+        api.getPlannerSettings(),
+      ]);
       setWeek(w);
       setCourses(c.courses);
+      setWindows(s.windows);
     } catch (err) {
       setError(friendlyMessage(err));
     } finally {
@@ -61,17 +54,44 @@ export function useWeek(today: Date = new Date()) {
     }
   }
 
+  /** Moves a block to a typed local start time, such as "2026-11-06 14:00". */
+  async function moveBlock(id: string, text: string): Promise<boolean> {
+    const startsAt = fromInput(text);
+    if (!startsAt) {
+      setError('Use the form 2026-11-06 14:00');
+      return false;
+    }
+    return mutate(() => api.moveBlock(id, startsAt));
+  }
+
+  const days = Array.from({ length: DAYS_PER_PAGE }, (_, i) => addDays(from, i));
+  const items = week?.items ?? [];
+  const blocks = week?.blocks ?? [];
+  const events = days.flatMap((day) => timedEventsFor(day, items));
+
   return {
     from,
-    days: week ? groupByDay(week.items, from) : [],
+    days,
+    range: gridRange(days, windows, blocks, events),
+    blocks,
+    items,
     undated: week?.undated ?? [],
+    shortfalls: week?.shortfalls ?? [],
+    windows,
     courses,
     loading,
     error,
     reload: load,
-    previousWeek: () => setFrom((f) => addDays(f, -7)),
-    nextWeek: () => setFrom((f) => addDays(f, 7)),
-    thisWeek: () => setFrom(startOfWeek(new Date())),
+    previous: () => setFrom((f) => addDays(f, -DAYS_PER_PAGE)),
+    next: () => setFrom((f) => addDays(f, DAYS_PER_PAGE)),
+    goToday: () => setFrom(startOfDay(new Date())),
+    suggestedCount: blocks.filter((b) => b.state === 'proposed').length,
+    acceptVisible: () => mutate(() => api.acceptBlocks(from, addDays(from, DAYS_PER_PAGE))),
+    acceptBlock: (id: string) => mutate(() => api.acceptBlock(id)),
+    rejectBlock: (id: string) => mutate(() => api.rejectBlock(id)),
+    moveBlock,
+    setStudyHours: (itemId: string, hours: number) =>
+      mutate(() => api.updateItem(itemId, { studyMinutes: hours * 60 })),
     saveItem: (id: string | null, input: ItemInput) =>
       mutate(() => (id ? api.updateItem(id, input) : api.addItem(input))),
     setStatus: (id: string, status: ItemStatus) => mutate(() => api.setStatus(id, status)),

@@ -1,12 +1,11 @@
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item, StudyBlock, StudyWindow } from '../src/api/types';
 import { serverUrl } from '../src/config';
-import { addDays, fromInput, rangeLabel, startOfWeek, toInput } from '../src/dates';
+import { fromInput, rangeLabel, startOfWeek, toInput } from '../src/dates';
 import { deadlinesFor, gridRange, placeInDay, timedEventsFor } from '../src/viewmodels/grid';
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
 import { withDeviceTimeZone } from '../src/timeZone';
 import { buildDates } from '../src/viewmodels/useSyncReview';
-import { groupByDay } from '../src/viewmodels/useWeek';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
 
 describe('dates', () => {
@@ -32,19 +31,6 @@ describe('dates', () => {
 });
 
 describe('view model helpers', () => {
-  const item = (id: string, dueAt: string | null): Item => ({
-    id, dueAt, courseId: null, courseName: null, source: 'manual', kind: 'assignment', title: id, status: 'not_started',
-    endsAt: null, allDay: false, studyMinutes: null,
-  });
-
-  it('groups a week into seven days and keeps empty days', () => {
-    const from = new Date(2026, 10, 2);
-    const days = groupByDay([item('a', new Date(2026, 10, 3, 9).toISOString()), item('b', new Date(2026, 10, 8, 23).toISOString())], from);
-    expect(days).toHaveLength(7);
-    expect(days.map((d) => d.items.map((i) => i.id))).toEqual([[], ['a'], [], [], [], [], ['b']]);
-    expect(days[6].date.getTime()).toBe(addDays(from, 6).getTime());
-  });
-
   it('sends typed dates only for accepted items', () => {
     const dates = buildDates({ x: '2026-11-06 10:00', y: '2026-11-07 10:00', z: '' }, new Set(['x', 'z']));
     expect(Object.keys(dates)).toEqual(['x']);

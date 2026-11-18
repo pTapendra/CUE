@@ -4,49 +4,22 @@
 
 import React from 'react';
 import ReactTestRenderer, { act } from 'react-test-renderer';
-import { Text } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
 import { deviceTimeZone } from '../src/timeZone';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
+import { flush, press, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
 // Opening a real browser is not possible in tests; record where the app tries to go.
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })) }));
 
-async function flush() {
-  for (let i = 0; i < 5; i++) {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  }
-}
-
-function texts(root: ReactTestRenderer.ReactTestInstance): string[] {
-  return root.findAllByType(Text).map((t) => [].concat(t.props.children).filter((c) => typeof c === 'string').join(''));
-}
-
-function press(root: ReactTestRenderer.ReactTestInstance, label: string) {
-  const target = root.findAll((n) => typeof n.props.onPress === 'function' && texts(n).some((t) => t === label))[0];
-  if (!target) throw new Error(`No button "${label}" in: ${texts(root).join(' | ')}`);
-  return act(async () => {
-    await target.props.onPress();
-  });
-}
-
 function isDisabled(root: ReactTestRenderer.ReactTestInstance, label: string): boolean {
   const button = root.findAll((n) => n.props.accessibilityRole === 'button' && texts(n).includes(label))[0];
   if (!button) throw new Error(`No button "${label}" in: ${texts(root).join(' | ')}`);
   return !!button.props.accessibilityState?.disabled;
-}
-
-function type(root: ReactTestRenderer.ReactTestInstance, placeholder: string, value: string) {
-  const input = root.find((n) => n.props.placeholder === placeholder && typeof n.props.onChangeText === 'function');
-  return act(async () => {
-    input.props.onChangeText(value);
-  });
 }
 
 it('connects Canvas, confirms items with a missing exam date, and shows the week', async () => {
@@ -81,12 +54,19 @@ it('connects Canvas, confirms items with a missing exam date, and shows the week
   await press(root, 'Save 2 items');
   await flush();
 
-  // Weekly view shows both items on their days.
+  // The grid opens on today and the next two days; the homework is due on Tuesday.
   const shown = texts(root);
+  expect(shown).toContain('Mon 2 Nov – Wed 4 Nov');
   expect(shown).toContain('Tue 3 Nov');
   expect(shown).toContain('SQL homework');
-  expect(shown).toContain('Exam: Midterm Exam');
+  expect(shown).not.toContain('Exam: Midterm Exam');
   expect(shown).not.toContain('Needs a date');
+
+  // The exam on Friday is on the next page.
+  await press(root, '›');
+  await flush();
+  expect(texts(root)).toContain('Thu 5 Nov – Sat 7 Nov');
+  expect(texts(root)).toContain('Exam: Midterm Exam');
 
   await act(async () => {
     tree!.unmount();
@@ -131,7 +111,7 @@ it('lets a student skip Canvas and add an exam by hand', async () => {
   await press(root, 'Add');
   await type(root, 'e.g. Statistics midterm', 'Stats quiz');
   await press(root, 'Exam');
-  await type(root, 'YYYY-MM-DD HH:mm', '2026-11-05 14:00');
+  await type(root, 'YYYY-MM-DD HH:mm', '2026-11-04 14:00');
   await press(root, 'Save');
   await flush();
 
