@@ -36,6 +36,8 @@ export interface BlockView {
   itemKind: ItemKind;
   courseName: string | null;
   itemDueAt: string | null;
+  /** The item's study time, resolved (its own amount, else the default for its kind). */
+  itemStudyMinutes: number;
   startsAt: string;
   endsAt: string;
   state: "proposed" | "accepted";
@@ -298,6 +300,7 @@ export class ScheduleService {
         itemKind: item.kind,
         courseName: item.courseName,
         itemDueAt: item.dueAt,
+        itemStudyMinutes: item.studyMinutes ?? 0,
         startsAt: b.startsAt,
         endsAt: b.endsAt,
         state: b.state as BlockView["state"],

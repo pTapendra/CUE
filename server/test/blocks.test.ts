@@ -110,7 +110,7 @@ describe("Schedule Manager: study blocks", () => {
     const week = schedule.getWeek(sid, FROM);
     const same = {
       itemId: exam.id, itemTitle: "DB final", itemKind: "exam", courseName: "Databases",
-      itemDueAt: "2026-11-13T15:00:00.000Z", state: "proposed", total: 6, clash: null,
+      itemDueAt: "2026-11-13T15:00:00.000Z", itemStudyMinutes: 360, state: "proposed", total: 6, clash: null,
     };
     expect(week.blocks).toEqual([
       { id: expect.any(String), ...same, startsAt: "2026-11-04T00:00:00.000Z", endsAt: "2026-11-04T01:00:00.000Z", index: 1 },

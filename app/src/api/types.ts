@@ -38,6 +38,8 @@ export interface StudyBlock {
   itemKind: ItemKind;
   courseName: string | null;
   itemDueAt: string | null;
+  /** The item's study time in minutes: its own amount, else the default for its kind. */
+  itemStudyMinutes: number;
   startsAt: string;
   endsAt: string;
   state: 'proposed' | 'accepted';

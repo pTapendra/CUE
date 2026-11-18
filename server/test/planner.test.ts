@@ -30,6 +30,14 @@ describe("Planner API", () => {
     expect(week.body.shortfalls).toEqual([]);
   });
 
+  it("each block carries its item's study time", async () => {
+    const { me, item } = await planned();
+    const minutes = async () => (await me.get(WEEK)).body.blocks.map((b: { itemStudyMinutes: number }) => b.itemStudyMinutes);
+    expect(await minutes()).toEqual(Array(6).fill(360));
+    await me.patch(`/api/items/${item.id}`, { studyMinutes: 420 }).expect(200);
+    expect(await minutes()).toEqual(Array(7).fill(420));
+  });
+
   it("rejects invalid study times", async () => {
     const { newStudent } = setup();
     const me = await newStudent();

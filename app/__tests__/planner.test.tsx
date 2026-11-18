@@ -16,6 +16,7 @@ const statsBlock: StudyBlock = {
   itemKind: 'exam',
   courseName: 'Statistics',
   itemDueAt: new Date(2026, 10, 5, 9, 0).toISOString(),
+  itemStudyMinutes: 360,
   startsAt: new Date(2026, 10, 3, 19, 0).toISOString(),
   endsAt: new Date(2026, 10, 3, 20, 0).toISOString(),
   state: 'proposed',
@@ -121,15 +122,49 @@ describe('block sheet', () => {
     expect(move!.body).toEqual({ startsAt: new Date(2026, 10, 4, 20, 0).toISOString() });
   });
 
-  it('changes how much study the exam needs', async () => {
+  /** The bodies of the study-time changes sent for the Stats midterm. */
+  const studyPatches = (server: ReturnType<typeof fakeServer>) =>
+    server.state.calls.filter((c) => c.method === 'PATCH' && c.path === '/api/items/item-stats').map((c) => c.body);
+
+  it('changes how much study the exam needs, step by step, and still acts on the re-planned block', async () => {
     const { server, root } = await openSheet();
     expect(texts(root)).toContain('Study time for this exam');
+    expect(texts(root)).toContain('6 h');
 
     await press(root, '+');
     await flush();
+    await press(root, '+');
+    await flush();
 
-    const patch = server.state.calls.find((c) => c.method === 'PATCH' && c.path === '/api/items/item-stats');
-    expect(patch!.body).toEqual({ studyMinutes: 420 });
+    expect(studyPatches(server)).toEqual([{ studyMinutes: 420 }, { studyMinutes: 480 }]);
+    expect(texts(root)).toContain('8 h');
+
+    // Each change re-planned, so the suggestion has a new id; the sheet acts on that one.
+    const replanned = server.state.blocks[0].id;
+    expect(replanned).not.toBe('block-1');
+    await press(root, 'Accept');
+    await flush();
+
+    expect(server.state.calls.some((c) => c.method === 'POST' && c.path === `/api/blocks/${replanned}/accept`)).toBe(true);
+    expect(texts(root)).not.toContain('Study: Stats midterm');
+  });
+
+  it('keeps counting study time when the re-plan moves the block elsewhere', async () => {
+    const { server, root } = await openSheet();
+    // The next re-plan puts the suggestion on Wednesday instead.
+    Object.assign(server.state.blocks[0], {
+      startsAt: new Date(2026, 10, 4, 19, 0).toISOString(),
+      endsAt: new Date(2026, 10, 4, 20, 0).toISOString(),
+    });
+
+    await press(root, '+');
+    await flush();
+    expect(texts(root)).toContain('7 h');
+    await press(root, '+');
+    await flush();
+
+    expect(studyPatches(server)).toEqual([{ studyMinutes: 420 }, { studyMinutes: 480 }]);
+    expect(texts(root)).toContain('8 h');
   });
 
   it('shows a message and refreshes when the block is already gone', async () => {

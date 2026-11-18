@@ -133,9 +133,14 @@ export function fakeServer() {
         result = { status: 204 };
       }
     } else if (method === 'PATCH' && patch) {
-      const item = state.items.find((i) => i.id === patch[1])!;
-      Object.assign(item, body);
-      result = { status: 200, body: item };
+      const item = state.items.find((i) => i.id === patch[1]);
+      if (item) Object.assign(item, body);
+      // Like the real server, the change re-plans: the item's suggestions come back with new ids.
+      for (const k of state.blocks.filter((b) => b.itemId === patch[1])) {
+        if (body.studyMinutes !== undefined) k.itemStudyMinutes = body.studyMinutes;
+        if (k.state === 'proposed') k.id = `block-${nextId++}`;
+      }
+      result = { status: 200, body: item ?? { id: patch[1], ...body } };
     } else if (method === 'PUT' && status) {
       const item = state.items.find((i) => i.id === status[1])!;
       item.status = body.status;
