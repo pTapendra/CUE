@@ -6,6 +6,7 @@ import { deadlinesFor, gridRange, placeInDay, timedEventsFor } from '../src/view
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
 import { withDeviceTimeZone } from '../src/timeZone';
 import { buildDates } from '../src/viewmodels/useSyncReview';
+import { rangeText, windowError } from '../src/viewmodels/useStudyTimes';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
 
 describe('dates', () => {
@@ -181,5 +182,34 @@ describe('grid layout', () => {
 
   it('labels a range of days', () => {
     expect(rangeLabel(new Date(2026, 10, 2), 3)).toBe('Mon 2 Nov – Wed 4 Nov');
+  });
+});
+
+describe('study windows', () => {
+  const win = (start: string, end: string): StudyWindow => ({ weekday: 1, enabled: true, start, end });
+
+  it('accepts valid ranges, including one that ends the next day', () => {
+    expect(windowError(win('18:00', '22:00'))).toBeNull();
+    expect(windowError(win('22:00', '01:00'))).toBeNull();
+    expect(windowError(win('08:00', '20:00'))).toBeNull();
+  });
+
+  it('rejects a bad format', () => {
+    for (const bad of ['6pm', '25:00', '18:60', '', '1800']) {
+      expect(windowError(win(bad, '22:00'))).toBe('Use the form 18:00');
+      expect(windowError(win('18:00', bad))).toBe('Use the form 18:00');
+    }
+  });
+
+  it('rejects equal start and end, and more than 12 hours', () => {
+    expect(windowError(win('18:00', '18:00'))).toBe("Start and end can't be the same");
+    expect(windowError(win('08:00', '20:01'))).toBe('At most 12 hours');
+    expect(windowError(win('22:00', '11:00'))).toBe('At most 12 hours');
+    expect(windowError(win('22:00', '10:00'))).toBeNull();
+  });
+
+  it('describes the range', () => {
+    expect(rangeText(win('18:00', '22:00'))).toBe('18:00 – 22:00');
+    expect(rangeText(win('22:00', '01:00'))).toBe('22:00 – 01:00 (next day)');
   });
 });

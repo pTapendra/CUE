@@ -141,3 +141,26 @@ describe('block sheet', () => {
     expect(texts(root)).not.toContain('Stats midterm');
   });
 });
+
+describe('study times', () => {
+  it('switches Friday off and saves', async () => {
+    const { server, root } = await openWeek();
+
+    await press(root, '⚙');
+    await press(root, 'Study times');
+    await flush();
+    expect(texts(root)).toContain('Most study in one day');
+
+    const friday = root.find((n) => n.props.accessibilityLabel === 'Fri on' && typeof n.props.onValueChange === 'function');
+    await act(async () => {
+      friday.props.onValueChange(false);
+    });
+    await press(root, 'Save and plan');
+    await flush();
+
+    const put = server.state.calls.filter((c) => c.method === 'PUT' && c.path === '/api/planner/settings').pop();
+    expect(put!.body.windows.find((w: { weekday: number }) => w.weekday === 5).enabled).toBe(false);
+    expect(texts(root)).toContain('Add');
+    expect(texts(root)).not.toContain('Save and plan');
+  });
+});

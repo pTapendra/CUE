@@ -7,13 +7,23 @@ import { useTheme } from '../ui/theme';
 import { DAYS_PER_PAGE, useWeek } from '../viewmodels/useWeek';
 import { BlockSheet } from './BlockSheet';
 import { ItemEditor, STATUSES } from './ItemEditor';
+import { SettingsMenu } from './SettingsMenu';
 import { TimeGrid } from './TimeGrid';
 
-export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; onCanvasSettings: () => void }) {
+export function WeekScreen({
+  onSync,
+  onCanvasSettings,
+  onStudyTimes,
+}: {
+  onSync: () => void;
+  onCanvasSettings: () => void;
+  onStudyTimes: () => void;
+}) {
   const t = useTheme();
   const vm = useWeek();
   const [editing, setEditing] = useState<Item | null | 'new'>(null);
   const [openBlock, setOpenBlock] = useState<StudyBlock | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const suggested = vm.suggestedCount;
   const hasBanners = !!vm.error || vm.undated.length > 0 || vm.shortfalls.length > 0 || suggested > 0;
 
@@ -80,8 +90,21 @@ export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; o
         <View style={styles.footerButton}>
           <Button title="Sync Canvas" variant="secondary" onPress={onSync} />
         </View>
-        <Button title="⚙" variant="secondary" onPress={onCanvasSettings} />
+        <Button title="⚙" variant="secondary" onPress={() => setMenuOpen(true)} />
       </View>
+
+      <SettingsMenu
+        visible={menuOpen}
+        onStudyTimes={() => {
+          setMenuOpen(false);
+          onStudyTimes();
+        }}
+        onCanvas={() => {
+          setMenuOpen(false);
+          onCanvasSettings();
+        }}
+        onClose={() => setMenuOpen(false)}
+      />
 
       {openBlock ? (
         <BlockSheet

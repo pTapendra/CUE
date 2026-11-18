@@ -6,13 +6,14 @@ import { ApiProvider } from './src/api/ApiContext';
 import { ApiClient, friendlyMessage } from './src/api/client';
 import { SERVER_URL } from './src/config';
 import { ConnectScreen } from './src/screens/ConnectScreen';
+import { StudyTimesScreen } from './src/screens/StudyTimesScreen';
 import { ReviewScreen } from './src/screens/ReviewScreen';
 import { WeekScreen } from './src/screens/WeekScreen';
 import { syncTimeZone } from './src/timeZone';
 import { Button } from './src/ui/components';
 import { useTheme } from './src/ui/theme';
 
-type Screen = 'loading' | 'connect' | 'review' | 'week';
+type Screen = 'loading' | 'connect' | 'review' | 'week' | 'studyTimes';
 
 export default function App({ client }: { client?: ApiClient }) {
   const api = useMemo(() => client ?? new ApiClient(SERVER_URL, AsyncStorage), [client]);
@@ -78,7 +79,14 @@ function Root({ api }: { api: ApiClient }) {
       ) : null}
       {screen === 'review' ? <ReviewScreen onDone={() => setScreen('week')} onCancel={() => setScreen('week')} /> : null}
       {screen === 'week' ? (
-        <WeekScreen onSync={() => setScreen('review')} onCanvasSettings={() => setScreen('connect')} />
+        <WeekScreen
+          onSync={() => setScreen('review')}
+          onCanvasSettings={() => setScreen('connect')}
+          onStudyTimes={() => setScreen('studyTimes')}
+        />
+      ) : null}
+      {screen === 'studyTimes' ? (
+        <StudyTimesScreen onDone={() => setScreen('week')} onCancel={() => setScreen('week')} />
       ) : null}
     </SafeAreaView>
   );
