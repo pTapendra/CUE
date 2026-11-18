@@ -14,8 +14,8 @@ The app talks only to the server. Only the server talks to Canvas, and only with
 ## What works
 
 - **Retrieve schedule data (UC1).** Connect a Canvas account with a personal access token, read courses, assignment deadlines and calendar events, and review them before anything is saved. Exams are recognised by their titles (exam, midterm, final, test). An exam with no date in Canvas is flagged so the student can type one in.
-- **View and edit the schedule (UC2).** A weekly view, Monday to Sunday, with a "Needs a date" list. Students can add items by hand (including exams Canvas does not list), edit them, delete them, and set one of four statuses: Not started, In progress, Done, Postponed.
-- **Study planner.** Students set their study times (which hours of each weekday they can study, in their own time zone) and a daily limit, and give each item an amount of study time (an exam defaults to 6 hours, an assignment to 2). Cue suggests study blocks that fit inside the study times, before the due date, and shows them on a three-day time grid next to events and deadlines. A student can accept, move or reject each block, or accept a whole day at once. Where the time does not fit, the app says how much is missing.
+- **View and edit the schedule (UC2).** A three-day time grid (the arrows move three days; tapping the title returns to today) with a "Needs a date" list. Students can add items by hand (including exams Canvas does not list), edit them, delete them, and set one of four statuses: Not started, In progress, Done, Postponed.
+- **Study planner.** Students set their study times (which hours of each weekday they can study, in their own time zone) and a daily limit, and give each item an amount of study time (an exam defaults to 6 hours, an assignment to 2). Cue suggests study blocks that fit inside the study times, before the due date, and shows them on a three-day time grid next to events and deadlines. A student can accept, move or reject each block, or accept all suggestions on screen at once. Where the time does not fit, the app says how much is missing.
 - **Privacy.** Each installed app gets an anonymous account. No name or email is collected. The Canvas token is encrypted (AES-256-GCM) on the server and never stored on the phone.
 
 Not built yet: start reminders, notes and slides, quizzes, weak topics.
@@ -29,7 +29,7 @@ cd server
 npm install
 cp .env.example .env        # then set CUE_SECRET_KEY (see below)
 npm run dev                 # http://localhost:3000
-npm test                    # 66 tests, uses a fake Canvas
+npm test                    # 77 tests, uses a fake Canvas
 ```
 
 Create a secret key once and put it in `.env`:
@@ -61,7 +61,7 @@ No Xcode or Android Studio needed.
 cd app
 npm install
 npm start                   # shows a QR code
-npm test                    # 39 tests
+npm test                    # 50 tests
 ```
 
 4. Scan the QR code: on iPhone with the Camera app, on Android from inside Expo Go. The app opens and reloads when you save a file.
@@ -108,9 +108,9 @@ server/src/
   canvas/HttpCanvasClient.ts     real Canvas REST client
   canvas/FakeCanvasClient.ts     in-memory Canvas for tests
   canvasReader/                  Canvas Reader: connect, preview, confirm (UC1)
-  schedule/                      Schedule Manager: courses, items, weekly view (UC2)
+  schedule/                      Schedule Manager: courses, items, study blocks (UC2)
   planner/                       Planner: study times, suggested study blocks
-  db.ts                          SQLite schema
+  db.ts                          SQLite schema and migrations
   crypto.ts                      token encryption and hashing
 
 app/src/
@@ -136,10 +136,10 @@ All `/api` routes except `POST /api/devices` need `Authorization: Bearer <device
 | `POST /api/canvas/sync` | Read Canvas and return items to confirm (stores nothing) |
 | `POST /api/canvas/sync/confirm` | Save `{ syncId, accept: [keys], dates?: { key: ISO date } }` |
 | `GET /api/courses` · `POST /api/courses` | List or add courses |
-| `GET /api/schedule/week?from=<ISO date>&days=<n>` | Items due in the `days` days from `from` (default 7), plus undated items, the suggested study `blocks` in that range and any `shortfalls` |
-| `GET /api/planner/settings` · `PUT /api/planner/settings` | Read or save the time zone, daily limit and study times |
-| `POST /api/blocks/accept` | Accept every proposed block in `{ from, to }`; returns `{ accepted }` |
+| `GET /api/schedule/week?from=<ISO date>&to=<ISO date>` | Items due from `from` up to `to` (or, without `to`, in the `days=<n>` days from `from`, default 7), plus undated items, the study `blocks` in that range (accepted, and proposed ones that have not started; each carries its item's `itemStudyMinutes`) and any `shortfalls` |
+| `GET /api/planner/settings` · `PUT /api/planner/settings` | Read or save the time zone, daily limit and study times; a save needs all seven weekdays, each with `enabled`, `start` and `end` |
+| `POST /api/blocks/accept` | Accept every proposed block that starts in `{ from, to }` and has not started yet; returns `{ accepted }` |
 | `POST /api/blocks/:id/accept` · `POST /api/blocks/:id/reject` | Accept or reject one block (204) |
 | `POST /api/blocks/:id/move` | Move a block to `{ startsAt }`; 409 `block_move_invalid` if it does not fit |
-| `POST /api/items` · `PATCH /api/items/:id` · `DELETE /api/items/:id` | Add, edit, delete items; items accept `studyMinutes` and `endsAt` |
+| `POST /api/items` · `PATCH /api/items/:id` · `DELETE /api/items/:id` | Add, edit, delete items; items accept `studyMinutes` and `endsAt` (which must be after `dueAt`) |
 | `PUT /api/items/:id/status` | Set `not_started`, `in_progress`, `done` or `postponed` |
