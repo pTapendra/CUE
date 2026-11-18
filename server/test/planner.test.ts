@@ -12,11 +12,11 @@ const SETTINGS = { timeZone: "America/Chicago", dailyLimitMinutes: 180, windows:
 const EXAM = { title: "Midterm", kind: "exam", dueAt: "2026-11-13T15:00:00Z" };
 
 async function planned() {
-  const { newStudent, db } = setup();
+  const { newStudent, db, setClock } = setup();
   const me = await newStudent();
   await me.put("/api/planner/settings", SETTINGS).expect(200);
   const item = (await me.post("/api/items", EXAM).expect(201)).body;
-  return { me, db, item };
+  return { me, db, item, setClock };
 }
 
 describe("Planner API", () => {
@@ -93,6 +93,16 @@ describe("Planner API", () => {
     expect(week.shortfalls).toHaveLength(1);
     expect(week.shortfalls[0]).toMatchObject({ itemTitle: "Midterm", neededMinutes: 360 });
     expect(week.shortfalls[0].plannedMinutes).toBeLessThan(360);
+  });
+
+  it("leaves out shortfalls whose deadline has passed", async () => {
+    const { me, setClock } = await planned();
+    await me.post("/api/items", { title: "Quiz", kind: "exam", dueAt: "2026-11-03T02:00:00Z" }).expect(201); // Mon 20:00
+    const before = (await me.get(WEEK)).body.shortfalls;
+    expect(before.map((s: { itemTitle: string }) => s.itemTitle)).toEqual(["Quiz"]);
+
+    setClock(new Date("2026-11-03T03:00:00Z")); // Mon 21:00 in Chicago: the same day, so no re-plan
+    expect((await me.get(WEEK)).body.shortfalls).toEqual([]);
   });
 
   it("deleting the account removes blocks and settings", async () => {

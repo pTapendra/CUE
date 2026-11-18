@@ -31,16 +31,19 @@ export function fakeCanvas() {
   });
 }
 
+/** A test server whose clock starts at NOW; `setClock` moves it. */
 export function setup() {
+  let clock = NOW;
+  const now = () => clock;
   const db = openDb(":memory:");
   const canvas = fakeCanvas();
   const tokensSeen: string[] = [];
   const schedule = new ScheduleService(new ScheduleRepository(db), {
     defaultStudyMinutes: PLANNER_DEFAULTS.studyMinutes,
     blockMinutes: PLANNER_DEFAULTS.blockMinutes,
-    now: () => NOW,
+    now,
   });
-  const planner = new PlannerService(new PlannerRepository(db), schedule, { now: () => NOW });
+  const planner = new PlannerService(new PlannerRepository(db), schedule, { now });
   schedule.onChange((id) => planner.replan(id));
   const canvasReader = new CanvasReaderService(
     new CanvasReaderRepository(db),
@@ -49,7 +52,7 @@ export function setup() {
       tokensSeen.push(token);
       return canvas;
     },
-    { secretKey: randomBytes(32), now: () => NOW },
+    { secretKey: randomBytes(32), now },
   );
   const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule, planner });
 
@@ -65,7 +68,11 @@ export function setup() {
     };
   }
 
-  return { app, db, canvas, tokensSeen, newStudent };
+  const setClock = (d: Date) => {
+    clock = d;
+  };
+
+  return { app, db, canvas, tokensSeen, newStudent, setClock };
 }
 
 export const CANVAS = { baseUrl: "https://school.instructure.com/", token: "canvas-token-1234567890" };

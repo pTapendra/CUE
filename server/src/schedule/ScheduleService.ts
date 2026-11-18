@@ -215,14 +215,17 @@ export class ScheduleService {
     });
   }
 
+  /** Accepts one block. A suggestion whose start has passed is gone. */
   acceptBlock(studentId: string, id: string): void {
-    this.findLiveBlock(studentId, id);
+    const block = this.findLiveBlock(studentId, id);
+    if (block.state === "proposed" && this.hasStarted(block)) throw new NotFoundError("Block");
     this.repo.updateBlock(studentId, id, { state: "accepted" });
   }
 
-  /** Accepts every suggestion that starts in [from, to). Returns how many. */
+  /** Accepts every suggestion that starts in [from, to) and has not started yet. Returns how many. */
   acceptBlocks(studentId: string, from: Date, to: Date): number {
-    const inRange = (b: StudyBlock) => Date.parse(b.startsAt) >= from.getTime() && Date.parse(b.startsAt) < to.getTime();
+    const inRange = (b: StudyBlock) =>
+      !this.hasStarted(b) && Date.parse(b.startsAt) >= from.getTime() && Date.parse(b.startsAt) < to.getTime();
     return this.repo.transaction(() => {
       const ids = this.repo.listBlocks(studentId, ["proposed"]).filter(inRange).map((b) => b.id);
       for (const id of ids) this.repo.updateBlock(studentId, id, { state: "accepted" });
@@ -261,10 +264,15 @@ export class ScheduleService {
     this.emit(studentId);
   }
 
-  /** Proposed and accepted blocks overlapping [from, to), numbered among all of their item's blocks. */
+  /**
+   * Accepted blocks and suggestions that have not started, overlapping [from, to),
+   * numbered among all of their item's blocks.
+   */
   private blocksBetween(studentId: string, from: Date, to: Date): BlockView[] {
     const range = { startsAt: from.toISOString(), endsAt: to.toISOString() };
-    const blocks = this.repo.listBlocks(studentId, ["proposed", "accepted"]);
+    const blocks = this.repo
+      .listBlocks(studentId, ["proposed", "accepted"])
+      .filter((b) => b.state === "accepted" || !this.hasStarted(b));
     const index = new Map<string, number>();
     const count = new Map<string, number>();
     for (const b of blocks) {
@@ -303,6 +311,10 @@ export class ScheduleService {
   /** The earliest busy item overlapping the interval, if any. */
   private firstBusy(studentId: string, interval: Interval): Item | null {
     return this.repo.busyItems(studentId, new Date(interval.startsAt), new Date(interval.endsAt))[0] ?? null;
+  }
+
+  private hasStarted(block: StudyBlock): boolean {
+    return Date.parse(block.startsAt) < this.now().getTime();
   }
 
   /** A block the student can still act on: it exists and was not rejected. */

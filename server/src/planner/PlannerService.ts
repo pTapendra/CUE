@@ -76,7 +76,9 @@ export class PlannerService {
     if (saved.lastPlannedOn !== localDateOf(this.now(), saved.timeZone)) this.replan(studentId);
   }
 
+  /** What the last plan could not fit, for items whose deadline is still ahead. */
   shortfalls(studentId: string): Shortfall[] {
-    return this.repo.get(studentId)?.shortfalls ?? [];
+    const now = this.now().getTime();
+    return (this.repo.get(studentId)?.shortfalls ?? []).filter((s) => Date.parse(s.dueAt) > now);
   }
 }

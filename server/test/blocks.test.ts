@@ -10,15 +10,19 @@ const FROM = new Date("2026-11-02T06:00:00.000Z"); // Mon 2 Nov, midnight in Chi
 const HOUR = 60 * 60 * 1000;
 
 function setup() {
+  let clock = NOW;
   const db = openDb(":memory:");
   const accounts = new AccountRepository(db);
   const repo = new ScheduleRepository(db);
   const schedule = new ScheduleService(repo, {
     defaultStudyMinutes: { exam: 360, assignment: 120 },
     blockMinutes: 60,
-    now: () => NOW,
+    now: () => clock,
   });
-  return { sid: accounts.create().studentId, accounts, repo, schedule };
+  const setClock = (d: Date) => {
+    clock = d;
+  };
+  return { sid: accounts.create().studentId, accounts, repo, schedule, setClock };
 }
 
 /** A one-hour block, unless an end is given. */
@@ -247,6 +251,29 @@ describe("Schedule Manager: study blocks", () => {
       expect(() => schedule.rejectBlock(studentId, id)).toThrow(NotFoundError);
     }
     expect(() => schedule.rejectBlock(sid, early.id)).toThrow("Block not found");
+  });
+
+  it("leaves suggestions that already started out of the week and out of accepting", () => {
+    const { sid, schedule, setClock } = setup();
+    const exam = schedule.addItem(sid, { courseId: null, kind: "exam", title: "DB final", dueAt: "2026-11-13T15:00:00Z" });
+    schedule.applyPlan(sid, {
+      proposed: [block(exam.id, "2026-11-03T00:00:00.000Z"), block(exam.id, "2026-11-04T00:00:00.000Z"), block(exam.id, "2026-11-05T00:00:00.000Z")],
+      removeAccepted: [],
+    });
+    const [first, second] = schedule.getWeek(sid, FROM).blocks;
+    schedule.acceptBlock(sid, first.id);
+
+    setClock(new Date("2026-11-04T00:30:00Z")); // both have started; only the first was accepted
+    expect(schedule.getWeek(sid, FROM).blocks.map((b) => [b.startsAt, b.state])).toEqual([
+      ["2026-11-03T00:00:00.000Z", "accepted"],
+      ["2026-11-05T00:00:00.000Z", "proposed"],
+    ]);
+    expect(() => schedule.acceptBlock(sid, second.id)).toThrow(NotFoundError);
+    expect(schedule.acceptBlocks(sid, FROM, new Date("2026-11-09T06:00:00Z"))).toBe(1);
+    expect(schedule.planningSnapshot(sid).accepted.map((b) => b.startsAt)).toEqual([
+      "2026-11-03T00:00:00.000Z",
+      "2026-11-05T00:00:00.000Z",
+    ]);
   });
 
   it("saves study time and an event's end time through the service", () => {
