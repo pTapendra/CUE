@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Course, Item, ItemInput, ItemKind, ItemStatus } from '../api/types';
 import { fromInput, toInput } from '../dates';
 import { Button, Chip, Field } from '../ui/components';
@@ -17,6 +17,13 @@ export const STATUSES: { value: ItemStatus; label: string }[] = [
   { value: 'done', label: 'Done' },
   { value: 'postponed', label: 'Postponed' },
 ];
+
+const MAX_STUDY_HOURS = 40;
+
+/** Hours a new exam or assignment starts with. */
+function defaultHours(kind: ItemKind): number {
+  return kind === 'exam' ? 6 : 2;
+}
 
 /** Add or edit one schedule item. `item` is null when adding. */
 export function ItemEditor({
@@ -41,11 +48,32 @@ export function ItemEditor({
   const [kind, setKind] = useState<ItemKind>(item?.kind ?? 'assignment');
   const [due, setDue] = useState(toInput(item?.dueAt ?? null));
   const [courseId, setCourseId] = useState<string | null>(item?.courseId ?? null);
+  const [ends, setEnds] = useState(toInput(item?.endsAt ?? null));
+  // null until the student touches the stepper, so the default follows the kind chips.
+  const [pickedHours, setPickedHours] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const needsStudy = kind === 'exam' || kind === 'assignment';
+  const initialHours = item?.studyMinutes != null ? item.studyMinutes / 60 : defaultHours(kind);
+  const hours = pickedHours ?? initialHours;
+  const parsedEnds = fromInput(ends);
+  const endsError =
+    kind === 'event' && parsedEnds === undefined ? 'Use the form 2026-11-06 14:00' : undefined;
 
   const parsedDue = fromInput(due);
   const dueError = parsedDue === undefined ? 'Use the form 2026-11-06 or 2026-11-06 14:00' : undefined;
-  const canSave = title.trim().length > 0 && parsedDue !== undefined && !busy;
+  const canSave = title.trim().length > 0 && parsedDue !== undefined && !endsError && !busy;
+
+  function save() {
+    const input: ItemInput = { title: title.trim(), kind, dueAt: parsedDue ?? null, courseId };
+    if (kind === 'event') input.endsAt = parsedEnds ?? null;
+    if (needsStudy && pickedHours !== null && pickedHours !== initialHours) input.studyMinutes = pickedHours * 60;
+    return run(() => onSave(input));
+  }
+
+  function step(delta: number) {
+    setPickedHours(Math.min(MAX_STUDY_HOURS, Math.max(0, hours + delta)));
+  }
 
   async function run(action: () => Promise<boolean>) {
     setBusy(true);
@@ -88,6 +116,33 @@ export function ItemEditor({
             error={dueError}
           />
 
+          {kind === 'event' ? (
+            <Field
+              label="Ends"
+              value={ends}
+              onChangeText={setEnds}
+              placeholder="YYYY-MM-DD HH:mm"
+              autoCapitalize="none"
+              hint="Leave empty if it has no set end."
+              error={endsError}
+            />
+          ) : null}
+
+          {needsStudy ? (
+            <View style={[styles.stepperRow, { borderColor: t.border }]}>
+              <Text style={[styles.label, { color: t.text }]}>Study time</Text>
+              <View style={styles.stepper}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Less study time" hitSlop={8} onPress={() => step(-1)}>
+                  <Text style={[styles.stepButton, { color: t.primary }]}>–</Text>
+                </Pressable>
+                <Text style={{ color: t.text }}>{`${hours} h`}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="More study time" hitSlop={8} onPress={() => step(1)}>
+                  <Text style={[styles.stepButton, { color: t.primary }]}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+
           {courses.length > 0 ? (
             <View style={styles.group}>
               <Text style={[styles.label, { color: t.text }]}>Course</Text>
@@ -121,7 +176,7 @@ export function ItemEditor({
               title="Save"
               busy={busy}
               disabled={!canSave}
-              onPress={() => run(() => onSave({ title: title.trim(), kind, dueAt: parsedDue ?? null, courseId }))}
+              onPress={save}
             />
             <Button title="Cancel" variant="secondary" onPress={onClose} />
             {item ? <Button title="Delete" variant="danger" onPress={() => run(onDelete)} /> : null}
@@ -138,5 +193,8 @@ const styles = StyleSheet.create({
   group: { gap: 8 },
   label: { fontSize: 14, fontWeight: '600' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: 12 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  stepButton: { fontSize: 22, fontWeight: '600', paddingHorizontal: 6 },
   actions: { gap: 10, marginTop: 8 },
 });

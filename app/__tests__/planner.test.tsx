@@ -1,8 +1,9 @@
 import React from 'react';
+import { TextInput } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
-import type { StudyBlock } from '../src/api/types';
+import type { Item, StudyBlock } from '../src/api/types';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
 import { flush, press, texts, type } from '../test-support/ui';
 
@@ -26,8 +27,9 @@ const statsBlock: StudyBlock = {
 let tree: ReactTestRenderer.ReactTestRenderer | undefined;
 
 /** Opens the app on the Week screen with one suggested block and one short item. */
-async function openWeek() {
+async function openWeek(items: Item[] = []) {
   const server = fakeServer();
+  server.state.items = items;
   server.state.connected = true;
   server.state.blocks = [{ ...statsBlock }];
   server.state.shortfalls = [
@@ -162,5 +164,57 @@ describe('study times', () => {
     expect(put!.body.windows.find((w: { weekday: number }) => w.weekday === 5).enabled).toBe(false);
     expect(texts(root)).toContain('Add');
     expect(texts(root)).not.toContain('Save and plan');
+  });
+});
+
+describe('item editor', () => {
+  it('edits how much study an exam needs', async () => {
+    const exam: Item = {
+      id: 'item-chem',
+      courseId: null,
+      courseName: null,
+      source: 'manual',
+      kind: 'exam',
+      title: 'Chem exam',
+      dueAt: new Date(2026, 10, 4, 10, 0).toISOString(),
+      endsAt: null,
+      allDay: false,
+      studyMinutes: 360,
+      status: 'not_started',
+    };
+    const { server, root } = await openWeek([exam]);
+    await press(root, 'Exam: Chem exam');
+    expect(texts(root)).toContain('Study time');
+    expect(texts(root)).toContain('6 h');
+
+    await press(root, '+');
+    await press(root, '+');
+    await press(root, 'Save');
+    await flush();
+
+    const patch = server.state.calls.find((c) => c.method === 'PATCH' && c.path === '/api/items/item-chem');
+    expect(patch!.body).toMatchObject({ studyMinutes: 480 });
+  });
+
+  it('adds an event with an end time', async () => {
+    const { server, root } = await openWeek();
+    await press(root, 'Add');
+    await type(root, 'e.g. Statistics midterm', 'Club meeting');
+    await press(root, 'Other');
+    expect(texts(root)).not.toContain('Study time');
+    const fields = root.findAllByType(TextInput).filter((n) => n.props.placeholder === 'YYYY-MM-DD HH:mm');
+    expect(fields).toHaveLength(2);
+    await act(async () => {
+      fields[0].props.onChangeText('2026-11-03 15:00');
+    });
+    await act(async () => {
+      fields[1].props.onChangeText('2026-11-03 17:00');
+    });
+    await press(root, 'Save');
+    await flush();
+
+    const post = server.state.calls.find((c) => c.method === 'POST' && c.path === '/api/items');
+    expect(post!.body).toMatchObject({ kind: 'event', endsAt: new Date(2026, 10, 3, 17, 0).toISOString() });
+    expect(post!.body).not.toHaveProperty('studyMinutes');
   });
 });
