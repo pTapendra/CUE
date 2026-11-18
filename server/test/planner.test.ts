@@ -77,6 +77,19 @@ describe("Planner API", () => {
     expect(after.map((b: { id: string }) => b.id).sort()).toEqual(kept.map((b: { id: string }) => b.id).sort());
   });
 
+  it("reading the week re-plans on a new local day, once", async () => {
+    const { me, setClock } = await planned();
+    const ids = async (): Promise<string[]> => (await me.get(WEEK).expect(200)).body.blocks.map((b: { id: string }) => b.id);
+    const monday = await ids();
+    expect(await ids()).toEqual(monday); // the same day: no re-plan, so the suggestions keep their ids
+
+    setClock(new Date("2026-11-03T15:00:00Z")); // Tue 09:00 in Chicago
+    const tuesday = await ids();
+    expect(tuesday.length).toBeGreaterThan(0);
+    expect(tuesday.filter((id) => monday.includes(id))).toEqual([]); // a re-plan replaces every suggestion
+    expect(await ids()).toEqual(tuesday);
+  });
+
   it("rejecting a block that a re-plan replaced is a 404", async () => {
     const { me, item } = await planned();
     const old = (await me.get(WEEK)).body.blocks[0];

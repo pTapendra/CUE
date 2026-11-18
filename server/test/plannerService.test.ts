@@ -85,6 +85,23 @@ describe("PlannerService", () => {
     expect(kept).toMatchObject({ state: "accepted", startsAt: first.startsAt, endsAt: first.endsAt });
   });
 
+  it("keeps an accepted block that a new event clashes with, flags it, and does not move it", () => {
+    const s = setup();
+    s.planner.saveSettings(s.sid, chicago());
+    addExam(s);
+    const accepted = s.blocks()[0];
+    s.schedule.acceptBlock(s.sid, accepted.id);
+
+    s.schedule.addItem(s.sid, { courseId: null, kind: "event", title: "Club meeting", dueAt: accepted.startsAt }); // re-plans
+    s.planner.replan(s.sid);
+    expect(s.blocks().find((b) => b.id === accepted.id)).toMatchObject({
+      state: "accepted",
+      startsAt: accepted.startsAt,
+      endsAt: accepted.endsAt,
+      clash: { title: "Club meeting", startsAt: accepted.startsAt },
+    });
+  });
+
   it("lowering study time removes extra future accepted blocks; 0 h removes all future ones", () => {
     const s = setup();
     s.planner.saveSettings(s.sid, chicago());
