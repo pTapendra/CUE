@@ -1,4 +1,4 @@
-import type { Item } from '../src/api/types';
+import type { Item, PlannerSettings, Shortfall, StudyBlock } from '../src/api/types';
 
 type Handler = (body: any, url: URL) => { status: number; body?: unknown };
 
@@ -8,6 +8,18 @@ export function fakeServer() {
   const state = {
     connected: false,
     items: [] as Item[],
+    blocks: [] as StudyBlock[],
+    shortfalls: [] as Shortfall[],
+    settings: {
+      timeZone: null,
+      dailyLimitMinutes: 180,
+      windows: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        enabled: true,
+        start: weekday >= 1 && weekday <= 5 ? '18:00' : '10:00',
+        end: weekday >= 1 && weekday <= 5 ? '22:00' : '16:00',
+      })),
+    } as PlannerSettings,
     preview: {
       syncId: '11111111-1111-4111-8111-111111111111',
       items: [
@@ -40,6 +52,9 @@ export function fakeServer() {
           kind: p.kind as Item['kind'],
           title: p.title,
           dueAt: b.dates?.[p.key] ?? p.dueAt,
+          endsAt: null,
+          allDay: false,
+          studyMinutes: p.kind === 'exam' ? 360 : p.kind === 'assignment' ? 120 : null,
           status: 'not_started',
         });
       }
@@ -47,7 +62,8 @@ export function fakeServer() {
     },
     'GET /api/schedule/week': (_b, url) => {
       const from = Date.parse(url.searchParams.get('from')!);
-      const to = from + 7 * 864e5;
+      const days = Number(url.searchParams.get('days') ?? 7);
+      const to = from + days * 864e5;
       return {
         status: 200,
         body: {
@@ -55,12 +71,36 @@ export function fakeServer() {
           to: new Date(to).toISOString(),
           items: state.items.filter((i) => i.dueAt && Date.parse(i.dueAt) >= from && Date.parse(i.dueAt) < to),
           undated: state.items.filter((i) => !i.dueAt),
+          blocks: state.blocks.filter((k) => Date.parse(k.startsAt) < to && Date.parse(k.endsAt) > from),
+          shortfalls: state.shortfalls,
         },
       };
     },
+    'GET /api/planner/settings': () => ({ status: 200, body: state.settings }),
+    'PUT /api/planner/settings': (b) => {
+      state.settings = b;
+      return { status: 200, body: state.settings };
+    },
+    'POST /api/blocks/accept': (b) => {
+      const from = Date.parse(b.from);
+      const to = Date.parse(b.to);
+      const due = state.blocks.filter((k) => k.state === 'proposed' && Date.parse(k.startsAt) >= from && Date.parse(k.startsAt) < to);
+      for (const k of due) k.state = 'accepted';
+      return { status: 200, body: { accepted: due.length } };
+    },
     'GET /api/courses': () => ({ status: 200, body: { courses: [] } }),
     'POST /api/items': (b) => {
-      const item: Item = { id: String(nextId++), courseId: null, courseName: null, source: 'manual', status: 'not_started', ...b };
+      const item: Item = {
+        id: String(nextId++),
+        courseId: null,
+        courseName: null,
+        source: 'manual',
+        status: 'not_started',
+        endsAt: null,
+        allDay: false,
+        studyMinutes: b.kind === 'exam' ? 360 : b.kind === 'assignment' ? 120 : null,
+        ...b,
+      };
       state.items.push(item);
       return { status: 201, body: item };
     },
@@ -74,8 +114,29 @@ export function fakeServer() {
     state.calls.push({ method, path: url.pathname, body, auth });
 
     const status = /^\/api\/items\/([^/]+)\/status$/.exec(url.pathname);
+    const block = /^\/api\/blocks\/([^/]+)\/(accept|reject|move)$/.exec(url.pathname);
+    const patch = /^\/api\/items\/([^/]+)$/.exec(url.pathname);
     let result: { status: number; body?: unknown };
-    if (method === 'PUT' && status) {
+    if (method === 'POST' && block) {
+      const found = state.blocks.find((k) => k.id === block[1]);
+      if (!found) {
+        result = { status: 404, body: { error: 'not_found', message: 'nope' } };
+      } else {
+        if (block[2] === 'accept') found.state = 'accepted';
+        else if (block[2] === 'reject') state.blocks.splice(state.blocks.indexOf(found), 1);
+        else {
+          const length = Date.parse(found.endsAt) - Date.parse(found.startsAt);
+          found.startsAt = body.startsAt;
+          found.endsAt = new Date(Date.parse(body.startsAt) + length).toISOString();
+          found.state = 'accepted';
+        }
+        result = { status: 204 };
+      }
+    } else if (method === 'PATCH' && patch) {
+      const item = state.items.find((i) => i.id === patch[1])!;
+      Object.assign(item, body);
+      result = { status: 200, body: item };
+    } else if (method === 'PUT' && status) {
       const item = state.items.find((i) => i.id === status[1])!;
       item.status = body.status;
       result = { status: 200, body: item };

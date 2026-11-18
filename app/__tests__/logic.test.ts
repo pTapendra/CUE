@@ -32,6 +32,7 @@ describe('dates', () => {
 describe('view model helpers', () => {
   const item = (id: string, dueAt: string | null): Item => ({
     id, dueAt, courseId: null, courseName: null, source: 'manual', kind: 'assignment', title: id, status: 'not_started',
+    endsAt: null, allDay: false, studyMinutes: null,
   });
 
   it('groups a week into seven days and keeps empty days', () => {
@@ -90,6 +91,21 @@ describe('ApiClient', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(friendlyMessage(err)).toMatch(/reconnect/);
     expect(friendlyMessage(new TypeError('Network request failed'))).toMatch(/Cannot reach/);
+  });
+
+  it('asks for a three-day week and reads its blocks', async () => {
+    const server = fakeServer();
+    const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    const week = await api.getWeek(new Date('2026-11-17T00:00:00.000Z'), 3);
+    expect(server.state.calls.at(-1)!.path).toBe('/api/schedule/week');
+    expect(week.blocks).toEqual([]);
+    expect(Date.parse(week.to) - Date.parse(week.from)).toBe(3 * 864e5);
+  });
+
+  it('explains a refused move', () => {
+    expect(friendlyMessage(new ApiError(409, 'block_move_invalid', 'Pick a time before the deadline.'))).toBe(
+      'Pick a time before the deadline.',
+    );
   });
 });
 

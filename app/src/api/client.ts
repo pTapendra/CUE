@@ -4,6 +4,7 @@ import type {
   Item,
   ItemInput,
   ItemStatus,
+  PlannerSettings,
   SyncPreview,
   Week,
 } from './types';
@@ -42,6 +43,8 @@ export function friendlyMessage(err: unknown): string {
         return 'Canvas is not responding right now. Your saved schedule is still here.';
       case 'sync_expired':
         return 'That sync is out of date. Please sync again.';
+      case 'block_move_invalid':
+        return err.message;
       case 'invalid_request':
         return 'Some details are not valid. Please check and try again.';
       default:
@@ -93,8 +96,36 @@ export class ApiClient {
     return this.call<{ imported: number }>('POST', '/api/canvas/sync/confirm', { syncId, accept, dates });
   }
 
-  getWeek(from: Date) {
-    return this.call<Week>('GET', `/api/schedule/week?from=${encodeURIComponent(from.toISOString())}`);
+  getWeek(from: Date, days?: number) {
+    const range = days === undefined ? '' : `&days=${days}`;
+    return this.call<Week>('GET', `/api/schedule/week?from=${encodeURIComponent(from.toISOString())}${range}`);
+  }
+
+  getPlannerSettings() {
+    return this.call<PlannerSettings>('GET', '/api/planner/settings');
+  }
+
+  savePlannerSettings(settings: PlannerSettings & { timeZone: string }) {
+    return this.call<PlannerSettings>('PUT', '/api/planner/settings', settings);
+  }
+
+  acceptBlock(id: string) {
+    return this.call<void>('POST', `/api/blocks/${id}/accept`);
+  }
+
+  acceptBlocks(from: Date, to: Date) {
+    return this.call<{ accepted: number }>('POST', '/api/blocks/accept', {
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+  }
+
+  rejectBlock(id: string) {
+    return this.call<void>('POST', `/api/blocks/${id}/reject`);
+  }
+
+  moveBlock(id: string, startsAt: string) {
+    return this.call<void>('POST', `/api/blocks/${id}/move`, { startsAt });
   }
 
   listCourses() {

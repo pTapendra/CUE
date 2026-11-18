@@ -9,6 +9,9 @@ export interface Item {
   kind: ItemKind;
   title: string;
   dueAt: string | null;
+  endsAt: string | null;
+  allDay: boolean;
+  studyMinutes: number | null;
   status: ItemStatus;
 }
 
@@ -24,6 +27,44 @@ export interface Week {
   to: string;
   items: Item[];
   undated: Item[];
+  blocks: StudyBlock[];
+  shortfalls: Shortfall[];
+}
+
+export interface StudyBlock {
+  id: string;
+  itemId: string;
+  itemTitle: string;
+  itemKind: ItemKind;
+  courseName: string | null;
+  itemDueAt: string | null;
+  startsAt: string;
+  endsAt: string;
+  state: 'proposed' | 'accepted';
+  index: number;
+  total: number;
+  clash: { title: string; startsAt: string; endsAt: string } | null;
+}
+
+export interface Shortfall {
+  itemId: string;
+  itemTitle: string;
+  dueAt: string;
+  neededMinutes: number;
+  plannedMinutes: number;
+}
+
+export interface StudyWindow {
+  weekday: number;
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+export interface PlannerSettings {
+  timeZone: string | null;
+  dailyLimitMinutes: number;
+  windows: StudyWindow[];
 }
 
 export interface ConnectionStatus {
@@ -52,4 +93,6 @@ export interface ItemInput {
   kind: ItemKind;
   dueAt: string | null;
   courseId?: string | null;
+  endsAt?: string | null;
+  studyMinutes?: number;
 }
