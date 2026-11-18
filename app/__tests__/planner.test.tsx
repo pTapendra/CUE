@@ -1,9 +1,10 @@
 import React from 'react';
-import { TextInput } from 'react-native';
+import { AppState, TextInput } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { Item, StudyBlock } from '../src/api/types';
+import { deviceTimeZone } from '../src/timeZone';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
 import { flush, isDisabled, press, texts, type } from '../test-support/ui';
 
@@ -187,7 +188,60 @@ describe('block sheet', () => {
   });
 });
 
+describe('time zone', () => {
+  /** What React Native does when the student leaves the app and comes back to it. */
+  async function leaveAndComeBack() {
+    const listeners = (AppState.addEventListener as jest.Mock).mock.calls.filter(([event]) => event === 'change');
+    const onChange = listeners.at(-1)![1];
+    await act(async () => {
+      onChange('background');
+      onChange('active');
+    });
+    await flush();
+  }
+
+  it('sends a changed time zone when the app comes back to the front, then reloads the week', async () => {
+    const { server } = await openWeek();
+    const weekLoads = () => server.state.calls.filter((c) => c.path === '/api/schedule/week').length;
+    const zoneSaves = () => server.state.calls.filter((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
+    const loads = weekLoads();
+    const saves = zoneSaves().length;
+
+    await leaveAndComeBack();
+    expect(zoneSaves()).toHaveLength(saves); // the server already has the phone's zone
+    expect(weekLoads()).toBe(loads);
+
+    server.state.settings.timeZone = 'Antarctica/Troll'; // saved before the phone moved
+    await leaveAndComeBack();
+    expect(zoneSaves()).toHaveLength(saves + 1);
+    expect(zoneSaves().at(-1)!.body.timeZone).toBe(deviceTimeZone());
+    expect(weekLoads()).toBe(loads + 1);
+
+    const subscription = (AppState.addEventListener as jest.Mock).mock.results.at(-1)!.value;
+    await act(async () => {
+      tree!.unmount();
+    });
+    tree = undefined;
+    expect(subscription.remove).toHaveBeenCalled();
+  });
+});
+
 describe('study times', () => {
+  it("saves with the phone's current time zone", async () => {
+    const { server, root } = await openWeek();
+    server.state.settings.timeZone = 'Antarctica/Troll'; // saved before the phone moved
+
+    await press(root, '⚙');
+    await press(root, 'Study times');
+    await flush();
+    expect(texts(root)).toContain(`Time zone: ${deviceTimeZone()}`);
+    await press(root, 'Save and plan');
+    await flush();
+
+    const put = server.state.calls.filter((c) => c.method === 'PUT' && c.path === '/api/planner/settings').pop();
+    expect(put!.body.timeZone).toBe(deviceTimeZone());
+  });
+
   it('switches Friday off and saves', async () => {
     const { server, root } = await openWeek();
 

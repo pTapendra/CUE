@@ -67,6 +67,25 @@ it('connects Canvas, confirms items with a missing exam date, and shows the week
   });
 });
 
+it('starts without waiting for the time zone to be sent', async () => {
+  const server = fakeServer();
+  // The Planner settings never answer; everything else does.
+  const slowSettings = ((url: string, init?: RequestInit) =>
+    new URL(url).pathname === '/api/planner/settings' ? new Promise(() => {}) : server.fetchImpl(url, init)) as unknown as typeof fetch;
+  const client = new ApiClient('http://cue.test', memoryStore(), slowSettings);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    tree = ReactTestRenderer.create(<App client={client} />);
+  });
+  await flush();
+  expect(texts(tree!.root)).toContain('Connect Canvas');
+
+  await act(async () => {
+    tree!.unmount();
+  });
+});
+
 it('opens the school Canvas settings page in the app so the student can make a token on the phone', async () => {
   const server = fakeServer();
   const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);

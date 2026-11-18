@@ -39,7 +39,7 @@ function Root({ api }: { api: ApiClient }) {
     (async () => {
       try {
         await api.ensureAccount();
-        await syncTimeZone(api).catch(() => {});
+        syncTimeZone(api); // not awaited: a slow server never holds up startup (and it never fails)
         const status = await api.getConnection();
         if (cancelled) return;
         setCanvasUrl(status.baseUrl);

@@ -11,8 +11,18 @@ export function withDeviceTimeZone(s: PlannerSettings, tz: string): (PlannerSett
   return { ...s, timeZone: tz };
 }
 
-/** Tells the server which zone the phone is in, only when it differs from what the server has. */
-export async function syncTimeZone(api: ApiClient, tz: string = deviceTimeZone()): Promise<void> {
-  const next = withDeviceTimeZone(await api.getPlannerSettings(), tz);
-  if (next) await api.savePlannerSettings(next);
+/**
+ * Tells the server which zone the phone is in, only when it differs from what the server has.
+ * Returns true when it saved a new zone. It never fails: when the server cannot be reached,
+ * the next try sends the zone.
+ */
+export async function syncTimeZone(api: ApiClient, tz: string = deviceTimeZone()): Promise<boolean> {
+  try {
+    const next = withDeviceTimeZone(await api.getPlannerSettings(), tz);
+    if (!next) return false;
+    await api.savePlannerSettings(next);
+    return true;
+  } catch {
+    return false;
+  }
 }

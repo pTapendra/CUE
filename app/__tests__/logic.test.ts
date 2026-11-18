@@ -4,7 +4,7 @@ import { serverUrl } from '../src/config';
 import { fromInput, rangeLabel, startOfWeek, toInput } from '../src/dates';
 import { deadlinesFor, gridRange, placeInDay, timedEventsFor } from '../src/viewmodels/grid';
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
-import { withDeviceTimeZone } from '../src/timeZone';
+import { syncTimeZone, withDeviceTimeZone } from '../src/timeZone';
 import { buildDates } from '../src/viewmodels/useSyncReview';
 import { rangeText, windowError } from '../src/viewmodels/useStudyTimes';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
@@ -127,6 +127,28 @@ describe('withDeviceTimeZone', () => {
     expect(withDeviceTimeZone(input, 'Asia/Dhaka')).toEqual({ ...input, timeZone: 'Asia/Dhaka' });
     expect(input.timeZone).toBe('Europe/Oslo');
     expect(withDeviceTimeZone(base, 'Asia/Dhaka')).toEqual({ ...base, timeZone: 'Asia/Dhaka' });
+  });
+});
+
+describe('syncTimeZone', () => {
+  it("saves the phone's zone only when the server has another, and says whether it did", async () => {
+    const server = fakeServer();
+    server.state.settings.timeZone = 'Europe/Oslo';
+    const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+
+    expect(await syncTimeZone(api, 'Europe/Oslo')).toBe(false);
+    expect(server.state.calls.filter((c) => c.method === 'PUT')).toEqual([]);
+
+    expect(await syncTimeZone(api, 'Asia/Dhaka')).toBe(true);
+    expect(server.state.settings.timeZone).toBe('Asia/Dhaka');
+  });
+
+  it('gives up quietly when the settings cannot be read', async () => {
+    const offline = (async () => {
+      throw new TypeError('Network request failed');
+    }) as unknown as typeof fetch;
+    const api = new ApiClient('http://cue.test', memoryStore(), offline);
+    await expect(syncTimeZone(api, 'Asia/Dhaka')).resolves.toBe(false);
   });
 });
 

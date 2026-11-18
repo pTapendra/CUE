@@ -41,7 +41,8 @@ export function useStudyTimes(onDone: () => void) {
   const api = useApi();
   const [rows, setRows] = useState<StudyWindow[]>([]);
   const [dailyLimitHours, setDailyLimitHours] = useState(3);
-  const [timeZone, setTimeZone] = useState(deviceTimeZone());
+  // The zone the phone is in now; the server may still have the one from before a trip.
+  const timeZone = deviceTimeZone();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +55,6 @@ export function useStudyTimes(onDone: () => void) {
         if (cancelled) return;
         setRows(MONDAY_FIRST.map((d) => s.windows.find((w) => w.weekday === d)).filter((w): w is StudyWindow => !!w));
         setDailyLimitHours(Math.min(MAX_LIMIT_HOURS, Math.max(MIN_LIMIT_HOURS, Math.round(s.dailyLimitMinutes / 60))));
-        setTimeZone(s.timeZone ?? deviceTimeZone());
       })
       .catch((err) => !cancelled && setError(friendlyMessage(err)))
       .finally(() => !cancelled && setLoading(false));

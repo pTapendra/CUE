@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
 import type { Course, ItemInput, ItemStatus, Shortfall, StudyBlock, StudyWindow, Week } from '../api/types';
 import { addDays, dayLabel, fromInput, startOfDay } from '../dates';
+import { syncTimeZone } from '../timeZone';
 import { gridRange, timedEventsFor } from './grid';
 
 /** Days the grid shows at once; the arrows move by this many. */
@@ -60,6 +62,18 @@ export function useWeek(today: Date = new Date()) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The phone may be in another time zone when the student comes back to the app.
+  // When the server gets a new zone it re-plans, so load the week again.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      syncTimeZone(api).then((changed) => {
+        if (changed) load();
+      });
+    });
+    return () => subscription.remove();
+  }, [api, load]);
 
   /** Runs a change, then reloads the week. If it fails, reloads anyway and then shows the error; returns false. */
   async function mutate(action: () => Promise<unknown>): Promise<boolean> {
