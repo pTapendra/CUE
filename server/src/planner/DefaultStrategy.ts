@@ -61,16 +61,20 @@ export class DefaultStrategy implements PlanningStrategy {
 
       const n = Math.min(needed, days.length);
       const last = days.length - 1;
+      let placed = 0;
       for (let k = 0; k < n; k++) {
         const index = n === 1 ? last : last - Math.round((k * last) / (n - 1));
-        const slot = earliestByDay.get(days[index])!;
+        const slot = slots.find((s) => s.day === days[index] && usable(s));
+        if (!slot) continue;
         proposed.push({ itemId: item.id, start: slot.start, end: slot.end, day: slot.day });
+        itemDays.add(slot.day);
         dayUsed.set(slot.day, (dayUsed.get(slot.day) ?? 0) + blockMinutes);
+        placed++;
       }
-      if (n < needed) {
+      if (placed < needed) {
         shortfalls.push({
           itemId: item.id, itemTitle: item.title, dueAt: item.dueAt,
-          neededMinutes: item.studyMinutes, plannedMinutes: acceptedMinutes + n * blockMinutes,
+          neededMinutes: item.studyMinutes, plannedMinutes: acceptedMinutes + placed * blockMinutes,
         });
       }
     }
@@ -101,7 +105,12 @@ export class DefaultStrategy implements PlanningStrategy {
     for (let day = addDays(localDateOf(now, settings.timeZone), -1); day <= lastDay; day = addDays(day, 1)) {
       const range = this.windowRange(settings, day);
       if (!range) continue;
-      for (let s = range.start; s + blockMs <= range.end; s += blockMs) slots.push({ start: s, end: s + blockMs, day });
+      const previous = this.windowRange(settings, addDays(day, -1));
+      for (let s = range.start; s + blockMs <= range.end; s += blockMs) {
+        // An instant belongs to one study day: the previous day's range wins an overlap.
+        if (previous && s >= previous.start && s < previous.end) continue;
+        slots.push({ start: s, end: s + blockMs, day });
+      }
     }
     return slots;
   }
@@ -109,7 +118,7 @@ export class DefaultStrategy implements PlanningStrategy {
   /** The window day whose range contains the instant, else its local date. */
   private studyDayOf(settings: PlannerSettings, start: number): string {
     const local = localDateOf(new Date(start), settings.timeZone);
-    for (const day of [local, addDays(local, -1)]) {
+    for (const day of [addDays(local, -1), local]) {
       const range = this.windowRange(settings, day);
       if (range && start >= range.start && start < range.end) return day;
     }

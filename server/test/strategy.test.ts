@@ -112,4 +112,15 @@ describe("DefaultStrategy", () => {
     expect(r.proposed.map((b) => [b.itemId, b.startsAt])).toEqual([["1", "2026-11-03T04:00:00.000Z"], ["2", "2026-11-03T05:00:00.000Z"]]);
     expect(r.shortfalls.map((s) => s.itemId)).toEqual(["3"]);
   });
+
+  it("never proposes the same time twice when neighbouring study ranges overlap", () => {
+    const windows = PLANNER_DEFAULTS.windows.map((w) =>
+      w.weekday === 1 ? { weekday: 1, enabled: true, start: "20:00", end: "08:00" }
+        : w.weekday === 2 ? { weekday: 2, enabled: true, start: "06:00", end: "18:00" }
+        : { ...w, enabled: false });
+    const r = plan({ now: new Date("2026-11-03T11:30:00Z"), settings: settings(windows),
+      items: [exam("E", "2026-11-03T23:00:00Z", 120)] });
+    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T12:00:00.000Z", "2026-11-03T14:00:00.000Z"]);
+    expect(r.shortfalls).toEqual([]);
+  });
 });
