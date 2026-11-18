@@ -11,13 +11,14 @@ This repository holds two parts:
 
 The app talks only to the server. Only the server talks to Canvas, and only with read (GET) requests.
 
-## Sprint 1: what works
+## What works
 
 - **Retrieve schedule data (UC1).** Connect a Canvas account with a personal access token, read courses, assignment deadlines and calendar events, and review them before anything is saved. Exams are recognised by their titles (exam, midterm, final, test). An exam with no date in Canvas is flagged so the student can type one in.
 - **View and edit the schedule (UC2).** A weekly view, Monday to Sunday, with a "Needs a date" list. Students can add items by hand (including exams Canvas does not list), edit them, delete them, and set one of four statuses: Not started, In progress, Done, Postponed.
+- **Study planner.** Students set their study times (which hours of each weekday they can study, in their own time zone) and a daily limit, and give each item an amount of study time (an exam defaults to 6 hours, an assignment to 2). Cue suggests study blocks that fit inside the study times, before the due date, and shows them on a three-day time grid next to events and deadlines. A student can accept, move or reject each block, or accept a whole day at once. Where the time does not fit, the app says how much is missing.
 - **Privacy.** Each installed app gets an anonymous account. No name or email is collected. The Canvas token is encrypted (AES-256-GCM) on the server and never stored on the phone.
 
-Not in sprint 1: study schedule suggestions, start reminders, notes and slides, quizzes, weak topics.
+Not built yet: start reminders, notes and slides, quizzes, weak topics.
 
 ## Run the server
 
@@ -28,7 +29,7 @@ cd server
 npm install
 cp .env.example .env        # then set CUE_SECRET_KEY (see below)
 npm run dev                 # http://localhost:3000
-npm test                    # 21 tests, uses a fake Canvas
+npm test                    # 66 tests, uses a fake Canvas
 ```
 
 Create a secret key once and put it in `.env`:
@@ -60,10 +61,12 @@ No Xcode or Android Studio needed.
 cd app
 npm install
 npm start                   # shows a QR code
-npm test                    # 13 tests
+npm test                    # 39 tests
 ```
 
 4. Scan the QR code: on iPhone with the Camera app, on Android from inside Expo Go. The app opens and reloads when you save a file.
+
+Students set their study times from **⚙ → Study times** in the app. Until they do, Cue uses the defaults (Monday to Friday 18:00 to 22:00, Saturday and Sunday 10:00 to 16:00, at most 3 hours a day).
 
 The app finds the server automatically on the computer that runs `npm start` (port 3000). To use a server elsewhere, copy `app/.env.example` to `app/.env` and set `EXPO_PUBLIC_SERVER_URL`.
 
@@ -106,19 +109,20 @@ server/src/
   canvas/FakeCanvasClient.ts     in-memory Canvas for tests
   canvasReader/                  Canvas Reader: connect, preview, confirm (UC1)
   schedule/                      Schedule Manager: courses, items, weekly view (UC2)
+  planner/                       Planner: study times, suggested study blocks
   db.ts                          SQLite schema
   crypto.ts                      token encryption and hashing
 
 app/src/
   api/                           API client and types
   viewmodels/                    hooks holding screen logic (MVVM)
-  screens/                       Connect, Review, Week, ItemEditor
+  screens/                       Connect, Review, Week, TimeGrid, BlockSheet, StudyTimes, ItemEditor
   ui/                            shared components and theme
 ```
 
 Each subsystem reads and writes only its own data through a repository (Repository pattern). Canvas is reached only through the `CanvasClient` interface (Adapter pattern), so tests use a fake and the access route can change in one place.
 
-## API (sprint 1)
+## API
 
 All `/api` routes except `POST /api/devices` need `Authorization: Bearer <device token>`.
 
@@ -132,6 +136,10 @@ All `/api` routes except `POST /api/devices` need `Authorization: Bearer <device
 | `POST /api/canvas/sync` | Read Canvas and return items to confirm (stores nothing) |
 | `POST /api/canvas/sync/confirm` | Save `{ syncId, accept: [keys], dates?: { key: ISO date } }` |
 | `GET /api/courses` · `POST /api/courses` | List or add courses |
-| `GET /api/schedule/week?from=<ISO date>` | Items due in the 7 days from `from`, plus undated items |
-| `POST /api/items` · `PATCH /api/items/:id` · `DELETE /api/items/:id` | Add, edit, delete items |
+| `GET /api/schedule/week?from=<ISO date>&days=<n>` | Items due in the `days` days from `from` (default 7), plus undated items, the suggested study `blocks` in that range and any `shortfalls` |
+| `GET /api/planner/settings` · `PUT /api/planner/settings` | Read or save the time zone, daily limit and study times |
+| `POST /api/blocks/accept` | Accept every proposed block in `{ from, to }`; returns `{ accepted }` |
+| `POST /api/blocks/:id/accept` · `POST /api/blocks/:id/reject` | Accept or reject one block (204) |
+| `POST /api/blocks/:id/move` | Move a block to `{ startsAt }`; 409 `block_move_invalid` if it does not fit |
+| `POST /api/items` · `PATCH /api/items/:id` · `DELETE /api/items/:id` | Add, edit, delete items; items accept `studyMinutes` and `endsAt` |
 | `PUT /api/items/:id/status` | Set `not_started`, `in_progress`, `done` or `postponed` |
