@@ -10,7 +10,7 @@ import {
 } from "../canvasReader/CanvasReaderService.js";
 import { isValidTimeZone } from "../planner/time.js";
 import type { PlannerService } from "../planner/PlannerService.js";
-import { BlockMoveError, NotFoundError, type ScheduleService } from "../schedule/ScheduleService.js";
+import { BlockMoveError, InvalidItemError, NotFoundError, type ScheduleService } from "../schedule/ScheduleService.js";
 
 export interface Services {
   accounts: AccountRepository;
@@ -222,6 +222,7 @@ export function createApp(s: Services) {
 function describe(err: unknown): [number, string, string] {
   if (err instanceof z.ZodError) return [400, "invalid_request", err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")];
   if (err instanceof SyntaxError) return [400, "invalid_json", "Request body is not valid JSON"];
+  if (err instanceof InvalidItemError) return [400, "invalid_request", err.message];
   if (err instanceof NotFoundError) return [404, "not_found", err.message];
   if (err instanceof BlockMoveError) return [409, "block_move_invalid", err.message];
   if (err instanceof InvalidCanvasUrlError) return [400, "invalid_canvas_url", err.message];

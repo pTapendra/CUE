@@ -163,6 +163,22 @@ describe("Schedule Manager: study blocks", () => {
     ]);
   });
 
+  it("treats a saved end that is not after the start as an unknown end", () => {
+    const { sid, repo, schedule } = setup();
+    const exam = schedule.addItem(sid, { courseId: null, kind: "exam", title: "DB final", dueAt: "2026-11-13T15:00:00Z" });
+    const lab = schedule.addItem(sid, { courseId: null, kind: "event", title: "Lab", dueAt: "2026-11-04T00:00:00Z" });
+    repo.updateItem(sid, lab.id, { endsAt: "2026-11-03T23:00:00.000Z" }); // saved before such ends were refused
+    const labHour = { startsAt: "2026-11-04T00:00:00.000Z", endsAt: "2026-11-04T01:00:00.000Z" };
+    expect(schedule.planningSnapshot(sid).busy).toEqual([
+      labHour,
+      { startsAt: "2026-11-13T15:00:00.000Z", endsAt: "2026-11-13T16:00:00.000Z" },
+    ]);
+
+    schedule.applyPlan(sid, { proposed: [block(exam.id, "2026-11-04T00:30:00.000Z")], removeAccepted: [] });
+    schedule.acceptBlock(sid, schedule.getWeek(sid, FROM).blocks[0].id);
+    expect(schedule.getWeek(sid, FROM).blocks[0].clash).toEqual({ title: "Lab", ...labHour });
+  });
+
   it("moves a block: refuses the past, after the deadline, events and accepted blocks, and remembers the old slot", () => {
     const { sid, schedule } = setup();
     const exam = schedule.addItem(sid, { courseId: null, kind: "exam", title: "DB final", dueAt: "2026-11-06T15:00:00Z" });

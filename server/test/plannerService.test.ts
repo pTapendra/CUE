@@ -166,6 +166,22 @@ describe("PlannerService", () => {
     }
   });
 
+  it("a Canvas event whose end is not after its start is saved without an end and takes up an hour", () => {
+    const tuesday = PLANNER_DEFAULTS.windows.map((w) => ({ ...w, enabled: w.weekday === 2, start: "18:00", end: "19:00" }));
+    const s = setup();
+    s.planner.saveSettings(s.sid, chicago(tuesday));
+    s.schedule.importFromCanvas(s.sid, {
+      courses: [{ externalId: "c", name: "Course", code: null }],
+      items: [
+        { externalId: "ev", courseExternalId: "c", kind: "event", title: "Review session", dueAt: "2026-11-04T00:00:00.000Z", endsAt: "2026-11-04T00:00:00.000Z", allDay: false },
+        { externalId: "hw", courseExternalId: "c", kind: "assignment", title: "HW", dueAt: "2026-11-05T05:00:00.000Z", endsAt: null, allDay: false },
+      ],
+    });
+    const week = s.schedule.getWeek(s.sid, FROM, 7);
+    expect(week.items.find((i) => i.title === "Review session")!.endsAt).toBeNull();
+    expect(week.blocks).toEqual([]); // Tuesday 18:00 is the only study time, and the event takes it
+  });
+
   it("all-day events do not block study time", () => {
     const monday = PLANNER_DEFAULTS.windows.map((w) => ({ ...w, enabled: w.weekday === 1, start: "18:00", end: "19:00" }));
     const exam = { externalId: "e1", courseExternalId: "c", kind: "exam" as const, title: "Final", dueAt: "2026-11-03T15:00:00.000Z", endsAt: null, allDay: false };

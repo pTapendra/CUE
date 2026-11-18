@@ -226,14 +226,16 @@ export class ScheduleRepository {
 
   /**
    * Dated events and exams that are not all-day and overlap [from, to), earliest first.
-   * Each one takes up [due_at, ends_at), or one hour when the end is unknown.
+   * Each one takes up [due_at, ends_at), or one hour when the end is unknown (missing or not after the start).
    */
   busyItems(studentId: string, from: Date, to: Date): Item[] {
     const rows = this.db
       .prepare(
         `${ITEM_SELECT}
          WHERE i.student_id = ? AND i.kind IN ('event', 'exam') AND i.due_at IS NOT NULL AND i.all_day = 0
-           AND i.due_at < ? AND COALESCE(i.ends_at, strftime('%Y-%m-%dT%H:%M:%fZ', i.due_at, '+1 hour')) > ?
+           AND i.due_at < ?
+           AND CASE WHEN i.ends_at > i.due_at THEN i.ends_at
+                    ELSE strftime('%Y-%m-%dT%H:%M:%fZ', i.due_at, '+1 hour') END > ?
          ORDER BY i.due_at, i.title`,
       )
       .all(studentId, to.toISOString(), from.toISOString()) as ItemRow[];

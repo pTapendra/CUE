@@ -115,6 +115,26 @@ describe("UC1: retrieve schedule data", () => {
     expect(week.items.find((i: { title: string }) => i.title === "No class")).toMatchObject({ allDay: true, endsAt: "2026-11-27T06:00:00.000Z" });
   });
 
+  it("re-syncing refreshes an event's end and all-day flag and keeps the student's status and study time", async () => {
+    const { newStudent, canvas } = setup();
+    const s = await newStudent();
+    await s.put("/api/canvas/connection", CANVAS).expect(200);
+    let preview = (await s.post("/api/canvas/sync").expect(200)).body;
+    await s.post("/api/canvas/sync/confirm", { syncId: preview.syncId, accept: ["event:900"] }).expect(200);
+    const december = "/api/schedule/week?from=2026-12-07T00:00:00Z";
+    const exam = (await s.get(december)).body.items[0];
+    await s.put(`/api/items/${exam.id}/status`, { status: "in_progress" }).expect(200);
+    await s.patch(`/api/items/${exam.id}`, { studyMinutes: 600 }).expect(200);
+
+    Object.assign(canvas.data.events[0], { endAt: "2026-12-10T18:00:00Z", allDay: true });
+    preview = (await s.post("/api/canvas/sync").expect(200)).body;
+    await s.post("/api/canvas/sync/confirm", { syncId: preview.syncId, accept: ["event:900"] }).expect(200);
+
+    expect((await s.get(december)).body.items).toEqual([
+      expect.objectContaining({ id: exam.id, endsAt: "2026-12-10T18:00:00.000Z", allDay: true, status: "in_progress", studyMinutes: 600 }),
+    ]);
+  });
+
   it("keeps the last synced data and asks to reconnect when Canvas rejects the token", async () => {
     const { canvas, newStudent } = setup();
     const s = await newStudent();

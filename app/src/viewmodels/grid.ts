@@ -122,14 +122,14 @@ export function deadlinesFor(day: Date, items: Item[]): Item[] {
     .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime());
 }
 
-/** Events with a time on `day`; an event without an end lasts one hour. */
+/** Events with a time on `day`. An event whose end is missing or not after its start lasts one hour. */
 export function timedEventsFor(day: Date, items: Item[]): TimedEvent[] {
   return items
     .filter((i) => i.kind === 'event' && !i.allDay && dueOn(i, day))
-    .map((item) => ({
-      item,
-      startsAt: item.dueAt!,
-      endsAt: item.endsAt ?? new Date(new Date(item.dueAt!).getTime() + HOUR_MS).toISOString(),
-    }))
+    .map((item) => {
+      const start = new Date(item.dueAt!).getTime();
+      const knownEnd = item.endsAt !== null && new Date(item.endsAt).getTime() > start;
+      return { item, startsAt: item.dueAt!, endsAt: knownEnd ? item.endsAt! : new Date(start + HOUR_MS).toISOString() };
+    })
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }

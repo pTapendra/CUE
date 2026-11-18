@@ -9,18 +9,12 @@ import App from '../App';
 import { ApiClient } from '../src/api/client';
 import { deviceTimeZone } from '../src/timeZone';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, press, texts, type } from '../test-support/ui';
+import { flush, isDisabled, press, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
 // Opening a real browser is not possible in tests; record where the app tries to go.
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })) }));
-
-function isDisabled(root: ReactTestRenderer.ReactTestInstance, label: string): boolean {
-  const button = root.findAll((n) => n.props.accessibilityRole === 'button' && texts(n).includes(label))[0];
-  if (!button) throw new Error(`No button "${label}" in: ${texts(root).join(' | ')}`);
-  return !!button.props.accessibilityState?.disabled;
-}
 
 it('connects Canvas, confirms items with a missing exam date, and shows the week', async () => {
   const server = fakeServer();

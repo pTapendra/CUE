@@ -26,6 +26,13 @@ export function press(root: Node, label: string) {
   });
 }
 
+/** Whether the button labelled `label` is disabled. */
+export function isDisabled(root: Node, label: string): boolean {
+  const button = root.findAll((n) => n.props.accessibilityRole === 'button' && texts(n).includes(label))[0];
+  if (!button) throw new Error(`No button "${label}" in: ${texts(root).join(' | ')}`);
+  return !!button.props.accessibilityState?.disabled;
+}
+
 /** Types `value` into the field with this placeholder. */
 export function type(root: Node, placeholder: string, value: string) {
   const input = root.find((n) => n.props.placeholder === placeholder && typeof n.props.onChangeText === 'function');

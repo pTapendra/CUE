@@ -16,6 +16,14 @@ export class BlockMoveError extends Error {
   }
 }
 
+/** Item details the API accepted but that do not fit together; the message says which. */
+export class InvalidItemError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidItemError";
+  }
+}
+
 /** Stores dates in one canonical form so they compare correctly as text. */
 export function normalizeDate(value: string | null): string | null {
   if (value == null) return null;
@@ -70,10 +78,23 @@ const END_OF_TIME = new Date("9999-12-31T23:59:59.999Z");
 const overlaps = (a: Interval, b: Interval) =>
   Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
 
+/** True when the end is after the start. An end that is not means the end is unknown. */
+function endsAfterStart(dueAt: string, endsAt: string | null): endsAt is string {
+  return endsAt !== null && Date.parse(endsAt) > Date.parse(dueAt);
+}
+
 /** The time a busy item takes up: until its end, or one hour when the end is unknown. */
 function busyInterval(item: Item): Interval {
   const startsAt = item.dueAt!; // busy items are always dated
-  return { startsAt, endsAt: item.endsAt ?? new Date(Date.parse(startsAt) + HOUR_MS).toISOString() };
+  const endsAt = endsAfterStart(startsAt, item.endsAt) ? item.endsAt : new Date(Date.parse(startsAt) + HOUR_MS).toISOString();
+  return { startsAt, endsAt };
+}
+
+/** Refuses an end that is not after the start. */
+function checkEnd(dueAt: string | null, endsAt: string | null): void {
+  if (dueAt !== null && endsAt !== null && !endsAfterStart(dueAt, endsAt)) {
+    throw new InvalidItemError("endsAt: must be after dueAt");
+  }
 }
 
 /**
@@ -125,13 +146,16 @@ export class ScheduleService {
       for (const item of data.items) {
         const courseId = courseIds.get(item.courseExternalId);
         if (!courseId) continue;
+        const dueAt = normalizeDate(item.dueAt);
+        const endsAt = normalizeDate(item.endsAt);
         this.repo.upsertCanvasItem(studentId, {
           externalId: item.externalId,
           courseId,
           kind: item.kind,
           title: item.title,
-          dueAt: normalizeDate(item.dueAt),
-          endsAt: normalizeDate(item.endsAt),
+          dueAt,
+          // Canvas may give an end that is not after the start; that end is unknown.
+          endsAt: dueAt !== null && endsAfterStart(dueAt, endsAt) ? endsAt : null,
           allDay: item.allDay,
         });
       }
@@ -150,11 +174,10 @@ export class ScheduleService {
     v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt?: string | null; studyMinutes?: number },
   ): Item {
     this.checkCourse(studentId, v.courseId);
-    const item = this.repo.createManualItem(studentId, {
-      ...v,
-      dueAt: normalizeDate(v.dueAt),
-      endsAt: normalizeDate(v.endsAt ?? null),
-    });
+    const dueAt = normalizeDate(v.dueAt);
+    const endsAt = normalizeDate(v.endsAt ?? null);
+    checkEnd(dueAt, endsAt);
+    const item = this.repo.createManualItem(studentId, { ...v, dueAt, endsAt });
     this.emit(studentId);
     return this.present(item);
   }
@@ -164,13 +187,16 @@ export class ScheduleService {
     itemId: string,
     v: Partial<{ courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt: string | null; studyMinutes: number }>,
   ): Item {
-    if (!this.repo.findItem(studentId, itemId)) throw new NotFoundError("Item");
+    const saved = this.repo.findItem(studentId, itemId);
+    if (!saved) throw new NotFoundError("Item");
     if ("courseId" in v) this.checkCourse(studentId, v.courseId ?? null);
     const changes = {
       ...v,
       ...("dueAt" in v ? { dueAt: normalizeDate(v.dueAt ?? null) } : {}),
       ...("endsAt" in v ? { endsAt: normalizeDate(v.endsAt ?? null) } : {}),
     };
+    // A new end is compared with the new start, or with the saved one when the start does not change.
+    if ("endsAt" in changes) checkEnd("dueAt" in changes ? (changes.dueAt ?? null) : saved.dueAt, changes.endsAt ?? null);
     const item = this.repo.updateItem(studentId, itemId, changes)!;
     this.emit(studentId);
     return this.present(item);

@@ -5,7 +5,7 @@ import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { Item, StudyBlock } from '../src/api/types';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, press, texts, type } from '../test-support/ui';
+import { flush, isDisabled, press, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -229,6 +229,44 @@ describe('item editor', () => {
 
     const patch = server.state.calls.find((c) => c.method === 'PATCH' && c.path === '/api/items/item-chem');
     expect(patch!.body).toMatchObject({ studyMinutes: 480 });
+  });
+
+  it('shows an event whose end is not after its start as one hour, and refuses such an end', async () => {
+    const at18 = new Date(2026, 10, 3, 18, 0).toISOString();
+    const review: Item = {
+      id: 'item-review',
+      courseId: null,
+      courseName: null,
+      source: 'canvas',
+      kind: 'event',
+      title: 'Review session',
+      dueAt: at18,
+      endsAt: at18, // saved before such ends were refused
+      allDay: false,
+      studyMinutes: null,
+      status: 'not_started',
+    };
+    const { server, root } = await openWeek([review]);
+    await press(root, 'Review session'); // it is on the grid
+
+    const ends = () => root.findAllByType(TextInput).filter((n) => n.props.placeholder === 'YYYY-MM-DD HH:mm')[1];
+    expect(texts(root)).toContain('Ends must be after the start');
+    expect(isDisabled(root, 'Save')).toBe(true);
+    await act(async () => {
+      ends().props.onChangeText('2026-11-03 17:00');
+    });
+    expect(texts(root)).toContain('Ends must be after the start');
+    expect(isDisabled(root, 'Save')).toBe(true);
+
+    // An empty end means it has no set end.
+    await act(async () => {
+      ends().props.onChangeText('');
+    });
+    expect(texts(root)).not.toContain('Ends must be after the start');
+    await press(root, 'Save');
+    await flush();
+    const patch = server.state.calls.find((c) => c.method === 'PATCH' && c.path === '/api/items/item-review');
+    expect(patch!.body).toMatchObject({ endsAt: null });
   });
 
   it('adds an event with an end time', async () => {

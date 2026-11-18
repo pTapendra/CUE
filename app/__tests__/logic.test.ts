@@ -180,6 +180,16 @@ describe('grid layout', () => {
     expect(timed[1].endsAt).toBe(at(2, 17));
   });
 
+  it('shows an event whose end is not after its start as one hour', () => {
+    const day = new Date(2026, 10, 2);
+    const timed = timedEventsFor(day, [
+      item({ id: 'same', dueAt: at(2, 14), endsAt: at(2, 14) }),
+      item({ id: 'before', dueAt: at(2, 16), endsAt: at(2, 15) }),
+    ]);
+    expect(timed.map((e) => e.endsAt)).toEqual([at(2, 15), at(2, 17)]);
+    expect(placeInDay(day, timed, { startHour: 8, endHour: 22 }).map((p) => p.height)).toEqual([50, 50]);
+  });
+
   it('labels a range of days', () => {
     expect(rangeLabel(new Date(2026, 10, 2), 3)).toBe('Mon 2 Nov – Wed 4 Nov');
   });

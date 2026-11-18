@@ -25,6 +25,13 @@ function defaultHours(kind: ItemKind): number {
   return kind === 'exam' ? 6 : 2;
 }
 
+/** What is wrong with an event's end, given its parsed start and end; undefined when nothing is. */
+function endsProblem(due: string | null | undefined, ends: string | null | undefined): string | undefined {
+  if (ends === undefined) return 'Use the form 2026-11-06 14:00';
+  if (due && ends && Date.parse(ends) <= Date.parse(due)) return 'Ends must be after the start';
+  return undefined;
+}
+
 /** Add or edit one schedule item. `item` is null when adding. */
 export function ItemEditor({
   visible,
@@ -56,12 +63,11 @@ export function ItemEditor({
   const needsStudy = kind === 'exam' || kind === 'assignment';
   const initialHours = item?.studyMinutes != null ? item.studyMinutes / 60 : defaultHours(kind);
   const hours = pickedHours ?? initialHours;
-  const parsedEnds = fromInput(ends);
-  const endsError =
-    kind === 'event' && parsedEnds === undefined ? 'Use the form 2026-11-06 14:00' : undefined;
-
   const parsedDue = fromInput(due);
   const dueError = parsedDue === undefined ? 'Use the form 2026-11-06 or 2026-11-06 14:00' : undefined;
+
+  const parsedEnds = fromInput(ends);
+  const endsError = kind !== 'event' ? undefined : endsProblem(parsedDue, parsedEnds);
   const canSave = title.trim().length > 0 && parsedDue !== undefined && !endsError && !busy;
 
   function save() {
