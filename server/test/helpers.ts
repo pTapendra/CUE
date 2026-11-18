@@ -6,6 +6,7 @@ import { FakeCanvasClient } from "../src/canvas/FakeCanvasClient.js";
 import { CanvasReaderRepository } from "../src/canvasReader/CanvasReaderRepository.js";
 import { CanvasReaderService } from "../src/canvasReader/CanvasReaderService.js";
 import { openDb } from "../src/db.js";
+import { PLANNER_DEFAULTS } from "../src/planner/config.js";
 import { ScheduleRepository } from "../src/schedule/ScheduleRepository.js";
 import { ScheduleService } from "../src/schedule/ScheduleService.js";
 
@@ -32,7 +33,11 @@ export function setup() {
   const db = openDb(":memory:");
   const canvas = fakeCanvas();
   const tokensSeen: string[] = [];
-  const schedule = new ScheduleService(new ScheduleRepository(db));
+  const schedule = new ScheduleService(new ScheduleRepository(db), {
+    defaultStudyMinutes: PLANNER_DEFAULTS.studyMinutes,
+    blockMinutes: PLANNER_DEFAULTS.blockMinutes,
+    now: () => NOW,
+  });
   const canvasReader = new CanvasReaderService(
     new CanvasReaderRepository(db),
     schedule,

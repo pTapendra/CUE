@@ -27,6 +27,16 @@ export interface Item {
   status: ItemStatus;
 }
 
+export type BlockState = "proposed" | "accepted" | "rejected";
+
+export interface StudyBlock {
+  id: string;
+  itemId: string;
+  startsAt: string;
+  endsAt: string;
+  state: BlockState;
+}
+
 interface ItemRow {
   id: string;
   course_id: string | null;
@@ -60,7 +70,11 @@ const ITEM_SELECT = `
          i.study_minutes, i.status
   FROM items i LEFT JOIN courses c ON c.id = i.course_id`;
 
-/** Data owned by the Schedule Manager: courses and schedule items. */
+const BLOCK_SELECT = "SELECT id, item_id AS itemId, starts_at AS startsAt, ends_at AS endsAt, state FROM study_blocks";
+
+const placeholders = (values: unknown[]) => values.map(() => "?").join(", ");
+
+/** Data owned by the Schedule Manager: courses, schedule items and study blocks. */
 export class ScheduleRepository {
   constructor(private readonly db: Db) {}
 
@@ -200,5 +214,78 @@ export class ScheduleRepository {
       .prepare(`${ITEM_SELECT} WHERE i.student_id = ? AND i.due_at IS NULL ORDER BY i.kind, i.title`)
       .all(studentId) as ItemRow[];
     return rows.map(toItem);
+  }
+
+  /** Exams and assignments, the items study blocks are planned for. */
+  studyItems(studentId: string): Item[] {
+    const rows = this.db
+      .prepare(`${ITEM_SELECT} WHERE i.student_id = ? AND i.kind IN ('exam', 'assignment') ORDER BY i.due_at, i.title`)
+      .all(studentId) as ItemRow[];
+    return rows.map(toItem);
+  }
+
+  /**
+   * Dated events and exams that are not all-day and overlap [from, to), earliest first.
+   * Each one takes up [due_at, ends_at), or one hour when the end is unknown.
+   */
+  busyItems(studentId: string, from: Date, to: Date): Item[] {
+    const rows = this.db
+      .prepare(
+        `${ITEM_SELECT}
+         WHERE i.student_id = ? AND i.kind IN ('event', 'exam') AND i.due_at IS NOT NULL AND i.all_day = 0
+           AND i.due_at < ? AND COALESCE(i.ends_at, strftime('%Y-%m-%dT%H:%M:%fZ', i.due_at, '+1 hour')) > ?
+         ORDER BY i.due_at, i.title`,
+      )
+      .all(studentId, to.toISOString(), from.toISOString()) as ItemRow[];
+    return rows.map(toItem);
+  }
+
+  /** The student's blocks in the given states, earliest first. */
+  listBlocks(studentId: string, states: BlockState[]): StudyBlock[] {
+    if (states.length === 0) return [];
+    return this.db
+      .prepare(`${BLOCK_SELECT} WHERE student_id = ? AND state IN (${placeholders(states)}) ORDER BY starts_at`)
+      .all(studentId, ...states) as StudyBlock[];
+  }
+
+  findBlock(studentId: string, id: string): StudyBlock | null {
+    return (this.db.prepare(`${BLOCK_SELECT} WHERE student_id = ? AND id = ?`).get(studentId, id) as
+      | StudyBlock
+      | undefined) ?? null;
+  }
+
+  insertBlocks(studentId: string, blocks: Omit<StudyBlock, "id">[]): void {
+    const now = new Date().toISOString();
+    const insert = this.db.prepare(
+      `INSERT INTO study_blocks (id, student_id, item_id, starts_at, ends_at, state, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const b of blocks) insert.run(randomUUID(), studentId, b.itemId, b.startsAt, b.endsAt, b.state, now, now);
+  }
+
+  updateBlock(studentId: string, id: string, v: Partial<Pick<StudyBlock, "startsAt" | "endsAt" | "state">>): boolean {
+    const sets = ["updated_at = ?"];
+    const args: unknown[] = [new Date().toISOString()];
+    const columns = { startsAt: "starts_at", endsAt: "ends_at", state: "state" } as const;
+    for (const [field, column] of Object.entries(columns)) {
+      if (field in v) {
+        sets.push(`${column} = ?`);
+        args.push((v as Record<string, unknown>)[field]);
+      }
+    }
+    return this.db
+      .prepare(`UPDATE study_blocks SET ${sets.join(", ")} WHERE student_id = ? AND id = ?`)
+      .run(...args, studentId, id).changes > 0;
+  }
+
+  deleteBlocks(studentId: string, ids: string[]): void {
+    if (ids.length === 0) return;
+    this.db
+      .prepare(`DELETE FROM study_blocks WHERE student_id = ? AND id IN (${placeholders(ids)})`)
+      .run(studentId, ...ids);
+  }
+
+  deleteBlocksInState(studentId: string, state: BlockState): void {
+    this.db.prepare("DELETE FROM study_blocks WHERE student_id = ? AND state = ?").run(studentId, state);
   }
 }

@@ -5,6 +5,7 @@ import { CanvasReaderRepository } from "./canvasReader/CanvasReaderRepository.js
 import { CanvasReaderService } from "./canvasReader/CanvasReaderService.js";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db.js";
+import { PLANNER_DEFAULTS } from "./planner/config.js";
 import { ScheduleRepository } from "./schedule/ScheduleRepository.js";
 import { ScheduleService } from "./schedule/ScheduleService.js";
 
@@ -18,7 +19,10 @@ try {
 const config = loadConfig();
 const db = openDb(config.databaseFile);
 
-const schedule = new ScheduleService(new ScheduleRepository(db));
+const schedule = new ScheduleService(new ScheduleRepository(db), {
+  defaultStudyMinutes: PLANNER_DEFAULTS.studyMinutes,
+  blockMinutes: PLANNER_DEFAULTS.blockMinutes,
+});
 const canvasReader = new CanvasReaderService(
   new CanvasReaderRepository(db),
   schedule,
