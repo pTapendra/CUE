@@ -61,7 +61,17 @@ describe("HttpCanvasClient", () => {
     const ids = Array.from({ length: 12 }, (_, i) => String(i + 1));
     const events = await new HttpCanvasClient("https://s.edu", "t", impl).listCalendarEvents(ids, new Date(0), new Date());
     expect(calls).toHaveLength(2);
-    expect(events[0]).toEqual({ id: "7", courseId: "3", title: "Exam", startAt: "2026-12-01T10:00:00Z" });
+    expect(events[0]).toEqual({ id: "7", courseId: "3", title: "Exam", startAt: "2026-12-01T10:00:00Z", endAt: null, allDay: false });
+  });
+
+  it("reads an event's end time and all-day flag", async () => {
+    const { impl } = fakeFetch({
+      "https://s.edu/api/v1/calendar_events": {
+        body: [{ id: 8, title: "Break", start_at: "2026-11-26T06:00:00Z", end_at: "2026-11-28T06:00:00Z", all_day: true, context_code: "course_3" }],
+      },
+    });
+    const events = await new HttpCanvasClient("https://s.edu", "t", impl).listCalendarEvents(["3"], new Date(0), new Date());
+    expect(events[0]).toMatchObject({ endAt: "2026-11-28T06:00:00Z", allDay: true });
   });
 
   it("parses Link headers", () => {

@@ -94,6 +94,8 @@ export class CanvasReaderService {
           kind,
           title: a.name,
           dueAt: a.dueAt,
+          endsAt: null,
+          allDay: false,
           needsDate: kind === "exam" && !a.dueAt,
           alreadyImported: imported.has(externalId),
         });
@@ -113,6 +115,8 @@ export class CanvasReaderService {
         kind,
         title: e.title,
         dueAt: e.startAt,
+        endsAt: e.endAt,
+        allDay: e.allDay,
         needsDate: kind === "exam" && !e.startAt,
         alreadyImported: imported.has(externalId),
       });
@@ -139,6 +143,8 @@ export class CanvasReaderService {
         kind: i.kind,
         title: i.title,
         dueAt: dates[i.key] ?? i.dueAt,
+        endsAt: i.endsAt,
+        allDay: i.allDay,
       }));
     const used = new Set(items.map((i) => i.courseExternalId));
     const courses = preview.courses.filter((c) => used.has(c.externalId));

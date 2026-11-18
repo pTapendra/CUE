@@ -10,6 +10,10 @@ export interface ProposedItem {
   kind: ItemKind;
   title: string;
   dueAt: string | null;
+  /** When an event ends; null for assignments and events without an end. */
+  endsAt: string | null;
+  /** True for all-day events (assignments are never all-day). */
+  allDay: boolean;
   /** True when this is an exam and Canvas gave no date: the student should add one. */
   needsDate: boolean;
   /** True when this item was confirmed in an earlier sync. */

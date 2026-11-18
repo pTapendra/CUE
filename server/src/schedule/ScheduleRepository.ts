@@ -114,18 +114,18 @@ export class ScheduleRepository {
   /** Inserts or refreshes a Canvas item. The student's status is kept on refresh. */
   upsertCanvasItem(
     studentId: string,
-    v: { externalId: string; courseId: string; kind: ItemKind; title: string; dueAt: string | null },
+    v: { externalId: string; courseId: string; kind: ItemKind; title: string; dueAt: string | null; endsAt: string | null; allDay: boolean },
   ): void {
     const now = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, due_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'canvas', ?, ?, ?, ?, ?, ?)
+        `INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, due_at, ends_at, all_day, created_at, updated_at)
+         VALUES (?, ?, ?, 'canvas', ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (student_id, source, external_id) DO UPDATE SET
            course_id = excluded.course_id, kind = excluded.kind, title = excluded.title,
-           due_at = excluded.due_at, updated_at = excluded.updated_at`,
+           due_at = excluded.due_at, ends_at = excluded.ends_at, all_day = excluded.all_day, updated_at = excluded.updated_at`,
       )
-      .run(randomUUID(), studentId, v.courseId, v.externalId, v.kind, v.title, v.dueAt, now, now);
+      .run(randomUUID(), studentId, v.courseId, v.externalId, v.kind, v.title, v.dueAt, v.endsAt, v.allDay ? 1 : 0, now, now);
   }
 
   createManualItem(

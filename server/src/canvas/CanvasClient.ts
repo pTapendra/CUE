@@ -30,6 +30,8 @@ export interface CanvasEvent {
   courseId: string;
   title: string;
   startAt: string | null;
+  endAt: string | null;
+  allDay: boolean;
 }
 
 export type CanvasClientFactory = (baseUrl: string, token: string) => CanvasClient;

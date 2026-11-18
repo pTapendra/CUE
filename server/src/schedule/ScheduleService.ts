@@ -17,7 +17,7 @@ export function normalizeDate(value: string | null): string | null {
 
 export interface CanvasImport {
   courses: { externalId: string; name: string; code: string | null }[];
-  items: { externalId: string; courseExternalId: string; kind: ItemKind; title: string; dueAt: string | null }[];
+  items: { externalId: string; courseExternalId: string; kind: ItemKind; title: string; dueAt: string | null; endsAt: string | null; allDay: boolean }[];
 }
 
 export interface Week {
@@ -66,6 +66,8 @@ export class ScheduleService {
           kind: item.kind,
           title: item.title,
           dueAt: normalizeDate(item.dueAt),
+          endsAt: normalizeDate(item.endsAt),
+          allDay: item.allDay,
         });
       }
       return data.items.length;

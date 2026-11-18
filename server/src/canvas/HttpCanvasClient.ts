@@ -65,7 +65,7 @@ export class HttpCanvasClient implements CanvasClient {
       for (const e of rows) {
         const match = /^course_(.+)$/.exec(String(e.context_code ?? ""));
         if (!match) continue;
-        events.push({ id: String(e.id), courseId: match[1], title: String(e.title ?? "Event"), startAt: e.start_at ?? null });
+        events.push({ id: String(e.id), courseId: match[1], title: String(e.title ?? "Event"), startAt: e.start_at ?? null, endAt: e.end_at ?? null, allDay: e.all_day === true });
       }
     }
     return events;

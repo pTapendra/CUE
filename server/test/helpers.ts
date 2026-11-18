@@ -24,7 +24,7 @@ export function fakeCanvas() {
       { id: "4", courseId: "102", name: "Old homework", dueAt: "2026-09-01T22:00:00Z", isQuiz: false },
       { id: "5", courseId: "102", name: "Reading notes", dueAt: null, isQuiz: false },
     ],
-    events: [{ id: "900", courseId: "102", title: "Final exam (Room 210)", startAt: "2026-12-10T15:00:00Z" }],
+    events: [{ id: "900", courseId: "102", title: "Final exam (Room 210)", startAt: "2026-12-10T15:00:00Z", endAt: "2026-12-10T17:00:00Z", allDay: false }],
   });
 }
 

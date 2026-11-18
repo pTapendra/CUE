@@ -103,6 +103,18 @@ describe("UC1: retrieve schedule data", () => {
     expect(after.items[0].status).toBe("in_progress");
   });
 
+  it("keeps an event's end time and all-day flag", async () => {
+    const { newStudent, canvas } = setup();
+    const s = await newStudent();
+    canvas.data.events.push({ id: "901", courseId: "101", title: "No class", startAt: "2026-11-26T06:00:00Z", endAt: "2026-11-27T06:00:00Z", allDay: true });
+    await s.put("/api/canvas/connection", CANVAS).expect(200);
+    const preview = (await s.post("/api/canvas/sync").expect(200)).body;
+    await s.post("/api/canvas/sync/confirm", { syncId: preview.syncId, accept: ["event:901"] }).expect(200);
+
+    const week = (await s.get("/api/schedule/week?from=2026-11-23T00:00:00Z").expect(200)).body;
+    expect(week.items.find((i: { title: string }) => i.title === "No class")).toMatchObject({ allDay: true, endsAt: "2026-11-27T06:00:00.000Z" });
+  });
+
   it("keeps the last synced data and asks to reconnect when Canvas rejects the token", async () => {
     const { canvas, newStudent } = setup();
     const s = await newStudent();
