@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { Item, Shortfall } from '../api/types';
+import type { Item, Shortfall, StudyBlock } from '../api/types';
 import { dayLabel, rangeLabel, timeLabel } from '../dates';
 import { Button, ErrorBanner } from '../ui/components';
 import { useTheme } from '../ui/theme';
 import { DAYS_PER_PAGE, useWeek } from '../viewmodels/useWeek';
+import { BlockSheet } from './BlockSheet';
 import { ItemEditor, STATUSES } from './ItemEditor';
 import { TimeGrid } from './TimeGrid';
 
@@ -12,6 +13,7 @@ export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; o
   const t = useTheme();
   const vm = useWeek();
   const [editing, setEditing] = useState<Item | null | 'new'>(null);
+  const [openBlock, setOpenBlock] = useState<StudyBlock | null>(null);
   const suggested = vm.suggestedCount;
   const hasBanners = !!vm.error || vm.undated.length > 0 || vm.shortfalls.length > 0 || suggested > 0;
 
@@ -65,8 +67,7 @@ export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; o
           range={vm.range}
           blocks={vm.blocks}
           items={vm.items}
-          // Blocks have no sheet to open yet, so tapping one does nothing.
-          onBlock={() => {}}
+          onBlock={setOpenBlock}
           onItem={setEditing}
           refreshControl={<RefreshControl refreshing={vm.loading} onRefresh={vm.reload} />}
         />
@@ -82,6 +83,19 @@ export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; o
         <Button title="⚙" variant="secondary" onPress={onCanvasSettings} />
       </View>
 
+      {openBlock ? (
+        <BlockSheet
+          block={openBlock}
+          studyHours={studyHoursFor(openBlock, vm.items)}
+          error={vm.error}
+          onAccept={() => vm.acceptBlock(openBlock.id)}
+          onReject={() => vm.rejectBlock(openBlock.id)}
+          onMove={(text) => vm.moveBlock(openBlock.id, text)}
+          onStudyHours={(h) => vm.setStudyHours(openBlock.itemId, h)}
+          onClose={() => setOpenBlock(null)}
+        />
+      ) : null}
+
       {editing !== null ? (
         <ItemEditor
           key={editing === 'new' ? 'new' : editing.id}
@@ -96,6 +110,12 @@ export function WeekScreen({ onSync, onCanvasSettings }: { onSync: () => void; o
       ) : null}
     </View>
   );
+}
+
+/** Hours of study the block's item needs; the block's own total when the item is not loaded or has no custom amount. */
+function studyHoursFor(block: StudyBlock, items: Item[]): number {
+  const minutes = items.find((i) => i.id === block.itemId)?.studyMinutes;
+  return minutes == null ? block.total : minutes / 60;
 }
 
 /** "DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours." */

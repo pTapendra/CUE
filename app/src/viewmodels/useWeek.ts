@@ -41,7 +41,7 @@ export function useWeek(today: Date = new Date()) {
     load();
   }, [load]);
 
-  /** Runs a change, then reloads the week. Returns false and shows the error if it fails. */
+  /** Runs a change, then reloads the week. If it fails, reloads anyway and then shows the error; returns false. */
   async function mutate(action: () => Promise<unknown>): Promise<boolean> {
     setError(null);
     try {
@@ -49,6 +49,8 @@ export function useWeek(today: Date = new Date()) {
       await load();
       return true;
     } catch (err) {
+      // load() clears the error, so show this one once the reload has finished.
+      await load();
       setError(friendlyMessage(err));
       return false;
     }

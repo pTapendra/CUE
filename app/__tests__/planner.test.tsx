@@ -4,7 +4,7 @@ import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { StudyBlock } from '../src/api/types';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, press, texts } from '../test-support/ui';
+import { flush, press, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -78,4 +78,66 @@ it('accepts all suggestions on screen', async () => {
   // The week reloads: the block is accepted, so nothing is left to suggest.
   expect(texts(root)).toContain('Stats midterm');
   expect(texts(root)).not.toContain('1 suggested block');
+});
+
+describe('block sheet', () => {
+  async function openSheet() {
+    const opened = await openWeek();
+    await press(opened.root, 'Stats midterm');
+    return opened;
+  }
+
+  it('accepts a block from its sheet', async () => {
+    const { server, root } = await openSheet();
+    expect(texts(root)).toContain('Study: Stats midterm');
+
+    await press(root, 'Accept');
+    await flush();
+
+    expect(server.state.calls.some((c) => c.method === 'POST' && c.path === '/api/blocks/block-1/accept')).toBe(true);
+    expect(texts(root)).not.toContain('Study: Stats midterm');
+  });
+
+  it('rejects a block from its sheet', async () => {
+    const { server, root } = await openSheet();
+
+    await press(root, 'Not this time');
+    await flush();
+
+    expect(server.state.calls.some((c) => c.method === 'POST' && c.path === '/api/blocks/block-1/reject')).toBe(true);
+  });
+
+  it('moves a block to a typed time', async () => {
+    const { server, root } = await openSheet();
+
+    await press(root, 'Move to another time');
+    await type(root, 'YYYY-MM-DD HH:mm', '2026-11-04 20:00');
+    await press(root, 'Move here');
+    await flush();
+
+    const move = server.state.calls.find((c) => c.method === 'POST' && c.path === '/api/blocks/block-1/move');
+    expect(move!.body).toEqual({ startsAt: new Date(2026, 10, 4, 20, 0).toISOString() });
+  });
+
+  it('changes how much study the exam needs', async () => {
+    const { server, root } = await openSheet();
+    expect(texts(root)).toContain('Study time for this exam');
+
+    await press(root, '+');
+    await flush();
+
+    const patch = server.state.calls.find((c) => c.method === 'PATCH' && c.path === '/api/items/item-stats');
+    expect(patch!.body).toEqual({ studyMinutes: 420 });
+  });
+
+  it('shows a message and refreshes when the block is already gone', async () => {
+    const { server, root } = await openSheet();
+    server.state.blocks = [];
+
+    await press(root, 'Not this time');
+    await flush();
+
+    expect(texts(root)).toContain('nope');
+    expect(texts(root)).not.toContain('Stats midterm');
+  });
 });
