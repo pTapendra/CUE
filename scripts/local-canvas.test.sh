@@ -385,6 +385,41 @@ test_start_with_drive_unplugged_does_not_start_docker() {
   assert_false "Docker Desktop not opened" test -e "$T/open-called"
 }
 
+# The whole start command, with Docker, ngrok and curl stubbed: it starts only
+# Canvas's web container, prints the ngrok address, and Ctrl+C stops ngrok.
+test_start_with_ngrok_end_to_end() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  mkdir -p "$T/canvas"
+  settings_save "$T/canvas" ""
+  printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  stub docker 'echo "docker $*" >>"$T/docker.log"; exit 0'
+  stub pgrep 'exit 1'
+  stub ngrok 'case "$1" in
+  config) echo "Valid configuration file at $T/ngrok.yml" ;;
+  http) echo $$ >"$T/ngrok.pid"; exec sleep 300 ;;
+esac'
+  stub curl 'case "$*" in
+  *api/tunnels*) printf "{\"tunnels\":[{\"public_url\":\"https://my-name.ngrok-free.dev\"}]}" ;;
+  *) printf 200 ;;
+esac'
+  printf 'y\n' | bash "$SCRIPT" start >"$T/out" 2>&1 &
+  local pid=$! i
+  for i in $(seq 1 50); do
+    grep -q "Keep this window open" "$T/out" 2>/dev/null && break
+    sleep 0.2
+  done
+  assert_contains "prints the address" "https://my-name.ngrok-free.dev" "$(cat "$T/out")"
+  assert_contains "starts only Canvas's web container" "docker compose up -d web" "$(cat "$T/docker.log")"
+  assert_contains "allows the address" "my-name.ngrok-free.dev" "$(cat "$T/canvas/docker-compose.cue-ngrok.yml")"
+  # A background job ignores SIGINT, so send TERM, which the same trap handles
+  # (in a terminal, Ctrl+C sends INT to the script in the foreground).
+  kill -TERM "$pid" 2>/dev/null
+  wait "$pid"
+  assert_eq "Ctrl+C exits cleanly" "0" "$?"
+  assert_false "ngrok stopped" kill -0 "$(cat "$T/ngrok.pid")" 2>/dev/null
+  assert_contains "says Canvas is off the internet" "off the internet" "$(cat "$T/out")"
+}
+
 # --- runner ----------------------------------------------------------------
 # A test's stderr (prompts, warnings) is shown only when the test fails.
 

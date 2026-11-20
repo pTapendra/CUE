@@ -579,7 +579,10 @@ cmd_start() {
   ensure_docker_app || exit 1
   wait_for_docker 300 || exit 1
   say "Starting Canvas..."
-  (cd "$CANVAS_DIR" && docker compose up -d) || die "Couldn't start Canvas's containers."
+  # Only the web container (Docker starts the database and Redis with it), as
+  # Canvas's own setup does. The rest, like webpack's file watcher, is for
+  # working on Canvas itself and costs a lot of CPU.
+  (cd "$CANVAS_DIR" && docker compose up -d web) || die "Couldn't start Canvas's containers."
   if ask_yes_no "Make Canvas reachable from a phone through ngrok?"; then
     expose_with_ngrok
   else
