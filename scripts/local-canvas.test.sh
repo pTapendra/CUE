@@ -263,6 +263,14 @@ test_mount_disk_image_prints_mount_point() {
   assert_eq "mount point" "/Volumes/Cue Canvas" "$(mount_disk_image "$T/CueCanvas.sparsebundle")"
 }
 
+test_disk_image_for_finds_the_image_holding_a_folder() {
+  stub hdiutil 'printf "framework       : 671.140.2\n================================================\nimage-path      : /Volumes/My SSD/CanvasDev.sparsebundle\nimage-type      : sparse bundle disk image\n/dev/disk4\tGUID_partition_scheme\t\n/dev/disk5s1\t41504653-0000-11AA-AA11-00306543ECAC\t/Volumes/CanvasDev\n================================================\nimage-path      : /Users/me/Other.dmg\n/dev/disk6s1\tApple_HFS\t/Volumes/Other\n"'
+  assert_eq "folder inside" "/Volumes/My SSD/CanvasDev.sparsebundle" "$(disk_image_for /Volumes/CanvasDev/canvas-lms)"
+  assert_eq "second image" "/Users/me/Other.dmg" "$(disk_image_for /Volumes/Other)"
+  assert_eq "similar name" "" "$(disk_image_for /Volumes/CanvasDevX/canvas-lms)"
+  assert_eq "not on an image" "" "$(disk_image_for "$HOME/canvas-lms")"
+}
+
 test_canvas_installed() {
   mkdir -p "$T/empty"
   assert_false "empty folder" canvas_installed "$T/empty"

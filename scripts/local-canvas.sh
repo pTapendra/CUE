@@ -244,6 +244,18 @@ mount_disk_image() { # image
   printf '%s\n' "$mount"
 }
 
+# The mounted disk image that holds <dir>, or nothing. Lets setup remember an
+# image for a Canvas that was put on one before this script existed.
+disk_image_for() { # dir
+  hdiutil info 2>/dev/null | awk -F '\t' -v dir="$1" '
+    /^image-path[[:space:]]*: / { image = $0; sub(/^image-path[[:space:]]*: /, "", image); next }
+    $NF ~ /^\/Volumes\// {
+      m = $NF
+      if (dir == m || index(dir, m "/") == 1) { print image; exit }
+    }
+  '
+}
+
 # --- install -----------------------------------------------------------------
 
 # True when <dir> holds Canvas at the pinned version.
@@ -509,6 +521,7 @@ cmd_setup() {
     if [ -n "$IMAGE" ]; then mount_disk_image "$IMAGE" >/dev/null || exit 1; fi
   fi
   DIR="$(ask_value "Where should Canvas go?" "$DIR")"
+  [ -n "$IMAGE" ] || IMAGE="$(disk_image_for "$DIR")"
 
   if canvas_installed "$DIR"; then
     say "Canvas is already downloaded in $DIR."
