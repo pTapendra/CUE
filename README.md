@@ -113,7 +113,9 @@ scripts/local-canvas.sh stop
 
 A free ngrok account allows one tunnel at a time. While it runs, anyone with the address can reach your Canvas login page, so give the Canvas admin a strong password. The first time a phone opens the address, ngrok shows a warning page; tap **Visit Site**.
 
-If setup put Canvas on an external drive, plug the drive in before starting Docker Desktop: Docker keeps its disk there.
+If setup put Canvas on an external drive, Docker keeps its disk there too, inside a disk image that has to be mounted before Docker starts. Turn off **Start Docker Desktop when you sign in** (Docker Desktop → Settings → General), plug the drive in, and use `scripts/local-canvas.sh start`: it mounts the disk image first, then starts Docker. If Docker Desktop did start without it, `start` says so; quit Docker Desktop and run `start` again.
+
+`start` with ngrok writes `docker-compose.cue-ngrok.yml` in the Canvas folder so Canvas accepts the ngrok address. To undo that, delete the file; the next `start` or `stop` tidies Canvas's `.env` to match.
 
 To use it with Cue, log in to Canvas, start a course (Dashboard → **Start a New Course**, so you're enrolled), add assignments and calendar events, and create a token under **Account → Settings → New Access Token**. In Cue, connect with the ngrok address. Without ngrok, use `http://canvas.docker` and start Cue's server with `CUE_ALLOW_INSECURE_CANVAS=1`; that only works while Cue's server runs on the same Mac.
 

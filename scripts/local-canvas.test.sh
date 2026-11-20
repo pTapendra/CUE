@@ -385,15 +385,11 @@ test_start_with_drive_unplugged_does_not_start_docker() {
   assert_false "Docker Desktop not opened" test -e "$T/open-called"
 }
 
-# The whole start command, with Docker, ngrok and curl stubbed: it starts only
-# Canvas's web container, prints the ngrok address, and Ctrl+C stops ngrok.
-test_start_with_ngrok_end_to_end() {
-  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
-  mkdir -p "$T/canvas"
-  settings_save "$T/canvas" ""
-  printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
-  stub docker 'echo "docker $*" >>"$T/docker.log"; exit 0'
+# Stubs for running start with ngrok: no other ngrok, nothing else on port
+# 8080, an ngrok that sleeps (and records its pid), and a Canvas that answers.
+stub_ngrok_world() {
   stub pgrep 'exit 1'
+  stub lsof 'exit 0'
   stub ngrok 'case "$1" in
   config) echo "Valid configuration file at $T/ngrok.yml" ;;
   http) echo $$ >"$T/ngrok.pid"; exec sleep 300 ;;
@@ -402,6 +398,17 @@ esac'
   *api/tunnels*) printf "{\"tunnels\":[{\"public_url\":\"https://my-name.ngrok-free.dev\"}]}" ;;
   *) printf 200 ;;
 esac'
+}
+
+# The whole start command, with Docker, ngrok and curl stubbed: it starts only
+# Canvas's web container, prints the ngrok address, and Ctrl+C stops ngrok.
+test_start_with_ngrok_end_to_end() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  mkdir -p "$T/canvas"
+  settings_save "$T/canvas" ""
+  printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  stub docker 'echo "docker $*" >>"$T/docker.log"; exit 0'
+  stub_ngrok_world
   printf 'y\n' | bash "$SCRIPT" start >"$T/out" 2>&1 &
   local pid=$! i
   for i in $(seq 1 50); do
@@ -418,6 +425,123 @@ esac'
   assert_eq "Ctrl+C exits cleanly" "0" "$?"
   assert_false "ngrok stopped" kill -0 "$(cat "$T/ngrok.pid")" 2>/dev/null
   assert_contains "says Canvas is off the internet" "off the internet" "$(cat "$T/out")"
+}
+
+test_start_stops_ngrok_when_canvas_fails_to_restart() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  mkdir -p "$T/canvas"
+  settings_save "$T/canvas" ""
+  printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  stub docker 'case "$*" in *"--no-deps web"*) exit 1 ;; *) exit 0 ;; esac'
+  stub_ngrok_world
+  printf 'y\n' | bash "$SCRIPT" start >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "says why" "Couldn't restart Canvas's web container" "$(cat "$T/out")"
+  assert_true "ngrok had started" test -s "$T/ngrok.pid"
+  assert_false "ngrok stopped" kill -0 "$(cat "$T/ngrok.pid")" 2>/dev/null
+}
+
+# --- review fixes: drive, Docker's disk, port, folder, existing checkout ---
+
+test_setup_with_drive_unplugged_does_not_start_docker() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  settings_save "/Volumes/Gone/canvas-lms" "/Volumes/Gone/CueCanvas.sparsebundle"
+  DOCKER_APP="$T"
+  stub brew 'exit 0'
+  stub git 'exit 0'
+  stub ngrok 'exit 0'
+  stub docker 'echo "$*" >>"$T/docker.log"; exit 0'
+  stub open 'touch "$T/open-called"'
+  (cmd_setup) </dev/null >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "says to plug it in" "Plug in" "$(cat "$T/out")"
+  case "$(cat "$T/docker.log" 2>/dev/null)" in *info*) assert_eq "Docker not asked to run" "no docker info" "docker info called" ;; esac
+  assert_false "Docker Desktop not opened" test -e "$T/open-called"
+}
+
+# Canvas on a disk image whose mount holds Docker's disk too, as setup arranges.
+external_drive_world() { # where-docker-disk-is
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  mkdir -p "$T/CueCanvas.sparsebundle" "$T/mnt/canvas-lms" "$T/mnt/DockerDesktop"
+  settings_save "$T/mnt/canvas-lms" "$T/CueCanvas.sparsebundle"
+  DOCKER_APP="$T"
+  stub hdiutil "printf '/dev/disk5\tGUID_partition_scheme\t\n/dev/disk5s1\t41504653\t$T/mnt\n'"
+  stub lsof "printf 'p1\nn$1\n'"
+  stub docker 'echo "$*" >>"$T/docker.log"; exit 0'
+}
+
+test_start_refuses_when_dockers_disk_is_not_on_the_drive() {
+  external_drive_world "$HOME/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw"
+  (cmd_start) </dev/null >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "says what to do" "Quit Docker Desktop" "$(cat "$T/out")"
+  case "$(cat "$T/docker.log")" in *compose*) assert_eq "Canvas not started" "no compose" "compose called" ;; esac
+}
+
+test_start_with_dockers_disk_on_the_drive() {
+  external_drive_world "$T/mnt/DockerDesktop/Docker.raw"
+  (cmd_start) </dev/null >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  assert_contains "starts Canvas" "compose up -d web" "$(cat "$T/docker.log")"
+}
+
+test_port_user_names_a_program_other_than_docker() {
+  stub lsof 'printf "p321\ncnode\n"'
+  assert_eq "node" "node" "$(port_user 8080)"
+  stub lsof 'printf "p1\nccom.docker.backend\n"'
+  assert_eq "Docker itself" "" "$(port_user 8080)"
+  stub lsof 'exit 1'
+  assert_eq "free" "" "$(port_user 8080)"
+}
+
+test_start_with_ngrok_refuses_when_port_8080_is_taken() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  mkdir -p "$T/canvas"
+  settings_save "$T/canvas" ""
+  printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  stub docker 'exit 0'
+  stub_ngrok_world
+  stub lsof 'printf "p321\ncnode\n"'
+  # If ngrok is started anyway, record it and stop at once rather than hang.
+  stub ngrok 'case "$1" in config) echo "Valid configuration file at $T/ngrok.yml" ;; http) echo $$ >"$T/ngrok.pid"; exit 1 ;; esac'
+  printf 'y\n' | bash "$SCRIPT" start >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "names the port and program" "Port 8080 is in use by node" "$(cat "$T/out")"
+  assert_false "ngrok not started" test -e "$T/ngrok.pid"
+}
+
+test_deleted_ngrok_compose_file_is_dropped_from_env() {
+  printf 'COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.cue-ngrok.yml\nOTHER=1\n' >"$T/.env"
+  drop_missing_ngrok_compose "$T"
+  assert_eq "dropped" "COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml
+OTHER=1" "$(cat "$T/.env")"
+  include_compose_file "$T/.env" docker-compose.cue-ngrok.yml
+  touch "$T/docker-compose.cue-ngrok.yml"
+  drop_missing_ngrok_compose "$T"
+  assert_contains "kept while the file exists" ":docker-compose.cue-ngrok.yml" "$(cat "$T/.env")"
+}
+
+test_ngrok_compose_header_explains_the_undo() {
+  write_ngrok_compose "$T" "x.ngrok-free.dev"
+  assert_contains "mentions .env" "COMPOSE_FILE" "$(cat "$T/docker-compose.cue-ngrok.yml")"
+}
+
+test_ask_folder_wants_a_full_path() {
+  local got
+  got="$(printf 'canvas-lms\n/abs/canvas-lms\n' | ask_folder "Where?" "$HOME/canvas-lms" 2>"$T/err")"
+  assert_eq "second answer" "/abs/canvas-lms" "$got"
+  assert_contains "explains" "full path" "$(cat "$T/err")"
+  assert_eq "default" "$HOME/canvas-lms" "$(ask_folder "Where?" "$HOME/canvas-lms" </dev/null 2>/dev/null)"
+}
+
+test_fetch_canvas_leaves_another_checkout_alone() {
+  mkdir -p "$T/repo"
+  /usr/bin/git -C "$T/repo" init -q
+  /usr/bin/git -C "$T/repo" remote add origin https://example.com/someone/other.git
+  fetch_canvas "$T/repo" >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "says why" "different" "$(cat "$T/out")"
+  assert_eq "origin untouched" "https://example.com/someone/other.git" "$(/usr/bin/git -C "$T/repo" remote get-url origin)"
 }
 
 # --- runner ----------------------------------------------------------------

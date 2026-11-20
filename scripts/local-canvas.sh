@@ -44,6 +44,21 @@ ask_value() {
   printf '%s\n' "$answer"
 }
 
+# Like ask_value, but keeps asking until the answer is a full path, so a folder
+# never ends up relative to wherever the script happened to be run from.
+ask_folder() { # question default
+  local answer
+  while :; do
+    answer="$(ask_value "$1" "$2")"
+    case "$answer" in /*)
+      printf '%s\n' "$answer"
+      return 0
+      ;;
+    esac
+    say "Please enter a full path, like $2 or ~/canvas-lms." >&2
+  done
+}
+
 wait_for_enter() { # message
   local ignored
   printf '%s ' "$1" >&2
@@ -236,7 +251,7 @@ mount_disk_image() { # image
     warn "Can't find the disk image $image. Is its drive plugged in?"
     return 1
   fi
-  mount="$(hdiutil attach "$image" | awk -F '\t' '$NF ~ /^\/Volumes\// { print $NF }' | tail -n 1)"
+  mount="$(hdiutil attach "$image" | awk -F '\t' 'NF >= 3 && $NF ~ /^\// { print $NF }' | tail -n 1)"
   if [ -z "$mount" ]; then
     warn "Couldn't mount $image."
     return 1
@@ -266,14 +281,22 @@ canvas_installed() { # dir
 # Downloads Canvas at the pinned version into <dir>.
 fetch_canvas() { # dir
   local dir="$1"
-  if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ] && [ ! -d "$dir/.git" ]; then
+  if [ -d "$dir/.git" ]; then
+    # Only carry on with a download this script started and didn't finish;
+    # never repoint or reset someone's own checkout.
+    if [ "$(git -C "$dir" remote get-url origin 2>/dev/null)" != "$CANVAS_REPO" ] ||
+      git -C "$dir" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+      warn "$dir already holds a different git checkout. Choose an empty or new folder."
+      return 1
+    fi
+  elif [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
     warn "$dir already has other files in it. Choose an empty or new folder."
     return 1
   fi
   mkdir -p "$dir" || return 1
   git -C "$dir" init -q || return 1
-  git -C "$dir" remote remove origin 2>/dev/null
-  git -C "$dir" remote add origin "$CANVAS_REPO" || return 1
+  git -C "$dir" remote get-url origin >/dev/null 2>&1 ||
+    git -C "$dir" remote add origin "$CANVAS_REPO" || return 1
   say "Downloading Canvas (version ${CANVAS_COMMIT:0:8})..."
   git -C "$dir" fetch --depth 1 origin "$CANVAS_COMMIT" || return 1
   git -C "$dir" checkout -q -B master FETCH_HEAD
@@ -323,7 +346,10 @@ use_external_drive() {
   say "  1. Open Settings (the gear icon) > Resources > Advanced."
   say "  2. Set \"Disk image location\" to: $mount/DockerDesktop"
   say "  3. Set \"Disk usage limit\" to 200 GB."
-  say "  4. Click \"Apply & restart\"."
+  say "  4. In Settings > General, turn off \"Start Docker Desktop when you sign in\"."
+  say "     Docker must not start before the drive is mounted; from now on start"
+  say "     Canvas with scripts/local-canvas.sh start, which mounts it first."
+  say "  5. Click \"Apply & restart\"."
   say "Docker then copies its current disk to the drive, which can take a while."
   say "Don't unplug the drive or quit Docker while it does."
   wait_for_enter "Press Enter once you've clicked Apply & restart."
@@ -364,7 +390,8 @@ ngrok_url_from_json() {
 write_ngrok_compose() { # canvas_dir host
   cat >"$1/$NGROK_COMPOSE_FILE" <<EOF
 # Written by Cue's scripts/local-canvas.sh so a phone can reach this Canvas
-# through ngrok. Rewritten each time; delete it to undo.
+# through ngrok. Rewritten on every start with ngrok. To undo, delete this
+# file; the next start or stop also takes it out of COMPOSE_FILE in .env.
 services:
   web:
     environment:
@@ -393,6 +420,40 @@ include_compose_file() { # env_file name
     { print }
   ' "$env" >"$tmp" && cat "$tmp" >"$env"
   rm -f "$tmp"
+}
+
+# If the ngrok compose file was deleted, takes it out of COMPOSE_FILE too:
+# docker compose fails on every command when a listed file is missing.
+drop_missing_ngrok_compose() { # canvas_dir
+  local env="$1/.env" tmp
+  [ -f "$1/$NGROK_COMPOSE_FILE" ] && return 0
+  [ -f "$env" ] || return 0
+  grep -q "^COMPOSE_FILE=.*$NGROK_COMPOSE_FILE" "$env" || return 0
+  tmp="$(mktemp)"
+  awk -v name="$NGROK_COMPOSE_FILE" '
+    /^COMPOSE_FILE=/ {
+      n = split(substr($0, 14), parts, ":")
+      out = ""
+      for (i = 1; i <= n; i++) if (parts[i] != name) out = out (out == "" ? "" : ":") parts[i]
+      print "COMPOSE_FILE=" out
+      next
+    }
+    { print }
+  ' "$env" >"$tmp" && cat "$tmp" >"$env"
+  rm -f "$tmp"
+}
+
+# The program, other than Docker, listening on <port> on this Mac; nothing if
+# the port is free or Docker (Canvas itself) holds it.
+port_user() { # port
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN -Fc 2>/dev/null | sed -n 's/^c//p' | grep -v '^com\.docker' | head -n 1
+}
+
+require_free_port() {
+  local user
+  user="$(port_user "$CANVAS_PORT")"
+  [ -z "$user" ] ||
+    die "Port $CANVAS_PORT is in use by $user. Canvas needs it for ngrok: quit $user, then run start again."
 }
 
 # Starts ngrok in the background, forwarding to Canvas. Sets NGROK_PID,
@@ -463,6 +524,7 @@ ensure_ngrok_ready() {
 # Exposes Canvas through ngrok, then waits until ngrok ends or Ctrl+C.
 expose_with_ngrok() {
   ensure_ngrok_ready || die "ngrok isn't ready, so Canvas stays on this Mac only (http://canvas.docker)."
+  require_free_port
   # ngrok runs in the background, where Ctrl+C doesn't reach it: stop it
   # whenever this script ends, however it ends, so Canvas never stays exposed.
   trap stop_ngrok EXIT
@@ -508,19 +570,22 @@ cmd_setup() {
   [ "$missing" -eq 0 ] || die "Install what's missing (see above), then run setup again."
   ensure_tool ngrok "--cask ngrok" "ngrok is only needed to reach Canvas from a phone. You can install it later from https://ngrok.com/download" ||
     say "Carrying on without ngrok."
+
+  DIR="$HOME/canvas-lms"
+  IMAGE=""
+  DISK_IMAGE=""
+  if settings_load; then
+    DIR="$CANVAS_DIR"
+    IMAGE="$DISK_IMAGE"
+  fi
+  mount_recorded_image # before Docker starts: its disk may be on that image
   wait_for_docker 300 || exit 1
+  check_docker_disk_on_image "$DISK_MOUNT"
   if ! check_docker_memory; then
     ask_yes_no "Continue anyway?" || exit 1
   fi
 
-  DIR="$HOME/canvas-lms"
-  IMAGE=""
-  if settings_load; then
-    DIR="$CANVAS_DIR"
-    IMAGE="$DISK_IMAGE"
-    if [ -n "$IMAGE" ]; then mount_disk_image "$IMAGE" >/dev/null || exit 1; fi
-  fi
-  DIR="$(ask_value "Where should Canvas go?" "$DIR")"
+  DIR="$(ask_folder "Where should Canvas go?" "$DIR")"
   [ -n "$IMAGE" ] || IMAGE="$(disk_image_for "$DIR")"
 
   if canvas_installed "$DIR"; then
@@ -564,20 +629,43 @@ cmd_setup() {
   say "From now on, start it with: scripts/local-canvas.sh start"
 }
 
+# Mounts the disk image named in the settings, if any, and sets DISK_MOUNT.
+# Dies when its drive isn't plugged in, before anything starts Docker.
+mount_recorded_image() {
+  DISK_MOUNT=""
+  [ -n "$DISK_IMAGE" ] || return 0
+  DISK_MOUNT="$(mount_disk_image "$DISK_IMAGE")" ||
+    die "Plug in the drive that holds $DISK_IMAGE, then try again. Docker keeps its disk there too, so don't start Docker without it."
+}
+
+# With setup's external-drive layout (Docker's disk in <mount>/DockerDesktop),
+# Docker must be using that disk. If Docker Desktop started before the drive
+# was mounted (at login, say) it isn't, and Canvas would seem to be missing.
+check_docker_disk_on_image() { # mount
+  local mount="$1" disk
+  [ -n "$mount" ] && [ -d "$mount/DockerDesktop" ] || return 0
+  disk="$(docker_disk_path)"
+  [ -n "$disk" ] || return 0 # can't tell; carry on
+  case "$disk" in "$mount"/*) return 0 ;; esac
+  warn "Docker Desktop is using the disk at $disk, not the one on your drive ($mount/DockerDesktop). It probably started before the drive was mounted."
+  die "Quit Docker Desktop (whale icon in the menu bar > Quit Docker Desktop), then run this again: it mounts the drive before starting Docker."
+}
+
 # Loads the settings and mounts the disk image, without touching Docker.
 find_canvas() {
   settings_load || die "Canvas isn't set up on this Mac yet. Run: scripts/local-canvas.sh setup"
-  if [ -n "$DISK_IMAGE" ]; then
-    mount_disk_image "$DISK_IMAGE" >/dev/null ||
-      die "Plug in the drive that holds $DISK_IMAGE, then try again. Docker keeps its disk there too, so don't start Docker without it."
-  fi
+  mount_recorded_image
   [ -d "$CANVAS_DIR" ] || die "Can't find Canvas in $CANVAS_DIR. Run: scripts/local-canvas.sh setup"
+  drop_missing_ngrok_compose "$CANVAS_DIR"
 }
 
 cmd_start() {
   find_canvas
   ensure_docker_app || exit 1
   wait_for_docker 300 || exit 1
+  check_docker_disk_on_image "$DISK_MOUNT"
+  # A compose file from an earlier ngrok run publishes the port on every start.
+  [ -f "$CANVAS_DIR/$NGROK_COMPOSE_FILE" ] && require_free_port
   say "Starting Canvas..."
   # Only the web container (Docker starts the database and Redis with it), as
   # Canvas's own setup does. The rest, like webpack's file watcher, is for
