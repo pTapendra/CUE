@@ -223,6 +223,55 @@ test_check_docker_memory() {
   assert_true "8 GB set is enough" check_docker_memory
 }
 
+# --- disk space and install ------------------------------------------------
+
+is_whole_number() { case "$1" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac }
+
+test_free_gb_is_a_whole_number() {
+  assert_true "startup disk" is_whole_number "$(free_gb /)"
+  assert_true "folder not made yet" is_whole_number "$(free_gb "$HOME/cue-not-made-yet/canvas-lms")"
+}
+
+test_docker_disk_path_handles_spaces() {
+  stub lsof 'printf "p123\nfcwd\nn/\np456\nf12\nn/Volumes/My Drive/DockerDesktop/Docker.raw\n"'
+  assert_eq "path" "/Volumes/My Drive/DockerDesktop/Docker.raw" "$(docker_disk_path)"
+  stub lsof 'printf "p123\nn/\n"'
+  assert_eq "not found" "" "$(docker_disk_path)"
+}
+
+test_docker_room_gb_reads_dockers_own_free_space() {
+  stub docker 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\noverlay 214357476 54834844 148601112 27%% /\n"'
+  assert_eq "free GB" "141" "$(docker_room_gb)"
+}
+
+test_list_external_drives_skips_startup_disk_and_our_image() {
+  mkdir -p "$T/vols/My SSD" "$T/vols/CueCanvas" "$T/vols/Other"
+  ln -s / "$T/vols/Macintosh HD"
+  assert_eq "drives" "$T/vols/My SSD
+$T/vols/Other" "$(list_external_drives "$T/vols")"
+}
+
+test_mount_disk_image_missing_image_names_it() {
+  mount_disk_image "$T/gone/CueCanvas.sparsebundle" >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "names the image" "$T/gone/CueCanvas.sparsebundle" "$(cat "$T/out")"
+}
+
+test_mount_disk_image_prints_mount_point() {
+  mkdir -p "$T/CueCanvas.sparsebundle"
+  stub hdiutil 'printf "/dev/disk5          \tGUID_partition_scheme          \t\n/dev/disk5s1        \t41504653-0000-11AA-AA11-0030654\t/Volumes/Cue Canvas\n"'
+  assert_eq "mount point" "/Volumes/Cue Canvas" "$(mount_disk_image "$T/CueCanvas.sparsebundle")"
+}
+
+test_canvas_installed() {
+  mkdir -p "$T/empty"
+  assert_false "empty folder" canvas_installed "$T/empty"
+  stub git "echo $CANVAS_COMMIT"
+  assert_true "pinned commit" canvas_installed "$T/empty"
+  stub git 'echo 0000000000000000000000000000000000000000'
+  assert_false "other commit" canvas_installed "$T/empty"
+}
+
 # --- runner ----------------------------------------------------------------
 # A test's stderr (prompts, warnings) is shown only when the test fails.
 
