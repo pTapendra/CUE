@@ -272,6 +272,111 @@ test_canvas_installed() {
   assert_false "other commit" canvas_installed "$T/empty"
 }
 
+# --- start, stop, ngrok ----------------------------------------------------
+
+test_ngrok_url_from_json() {
+  local json='{"tunnels":[{"name":"command_line","public_url":"https://name.ngrok-free.dev","proto":"https","config":{"addr":"http://127.0.0.1:8080"}}],"uri":"/api/tunnels"}'
+  assert_eq "url" "https://name.ngrok-free.dev" "$(printf '%s' "$json" | ngrok_url_from_json)"
+  assert_eq "spaced json" "https://a.ngrok-free.dev" "$(printf '{"tunnels": [{"public_url": "https://a.ngrok-free.dev"}]}' | ngrok_url_from_json)"
+  assert_eq "no tunnel" "" "$(printf '{"tunnels":[]}' | ngrok_url_from_json)"
+}
+
+test_write_ngrok_compose_replaces_the_old_address() {
+  write_ngrok_compose "$T" "old-name.ngrok-free.dev"
+  write_ngrok_compose "$T" "new-name.ngrok-free.dev"
+  local f
+  f="$(cat "$T/docker-compose.cue-ngrok.yml")"
+  assert_contains "allowed host" "ADDITIONAL_ALLOWED_HOSTS: new-name.ngrok-free.dev" "$f"
+  assert_contains "port for this Mac only" '"127.0.0.1:8080:80"' "$f"
+  assert_contains "web service" "  web:" "$f"
+  case "$f" in *old-name*) assert_eq "old address gone" "gone" "still there" ;; esac
+}
+
+test_include_compose_file_appends_once() {
+  printf 'COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml\nOTHER=1\n' >"$T/.env"
+  include_compose_file "$T/.env" docker-compose.cue-ngrok.yml
+  include_compose_file "$T/.env" docker-compose.cue-ngrok.yml
+  assert_eq "env" "COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.cue-ngrok.yml
+OTHER=1" "$(cat "$T/.env")"
+}
+
+test_include_compose_file_adds_the_line_when_missing() {
+  printf 'OTHER=1\n' >"$T/.env"
+  include_compose_file "$T/.env" docker-compose.cue-ngrok.yml
+  assert_eq "env" "OTHER=1
+COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.cue-ngrok.yml" "$(cat "$T/.env")"
+  include_compose_file "$T/none.env" docker-compose.cue-ngrok.yml
+  assert_eq "new file" "COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.cue-ngrok.yml" "$(cat "$T/none.env")"
+}
+
+test_ngrok_has_token() {
+  printf 'version: "3"\nagent:\n    authtoken: 2abcDEF_secret\n' >"$T/with.yml"
+  printf 'version: "3"\nagent: {}\n' >"$T/without.yml"
+  assert_true "with token" ngrok_has_token "$T/with.yml"
+  assert_false "without token" ngrok_has_token "$T/without.yml"
+  assert_false "no file" ngrok_has_token "$T/missing.yml"
+}
+
+test_start_ngrok_reports_ngrok_failing_at_once() {
+  stub pgrep 'exit 1'
+  stub curl 'exit 7'
+  stub ngrok 'echo "ERROR:  Your account is limited to 1 simultaneous ngrok agent sessions. ERR_NGROK_108"; exit 1'
+  SECONDS=0
+  start_ngrok >"$T/out" 2>&1
+  local code=$? elapsed=$SECONDS
+  assert_eq "status" "1" "$code"
+  assert_true "quick" test "$elapsed" -le 5
+  assert_contains "shows ngrok's message" "ERR_NGROK_108" "$(cat "$T/out")"
+}
+
+test_start_ngrok_refuses_when_ngrok_already_runs() {
+  stub pgrep 'exit 0'
+  stub ngrok 'touch "$T/started"'
+  start_ngrok >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "says why" "already running" "$(cat "$T/out")"
+  assert_false "did not start another" test -e "$T/started"
+}
+
+test_start_ngrok_reads_the_address() {
+  stub pgrep 'exit 1'
+  stub ngrok 'sleep 30'
+  stub curl 'printf "{\"tunnels\":[{\"public_url\":\"https://my-name.ngrok-free.dev\"}]}"'
+  start_ngrok >"$T/out" 2>&1
+  local code=$?
+  kill "$NGROK_PID" 2>/dev/null
+  assert_eq "status" "0" "$code"
+  assert_eq "address" "https://my-name.ngrok-free.dev" "$NGROK_URL"
+}
+
+test_wait_for_canvas() {
+  stub curl 'printf 200'
+  assert_true "answers" wait_for_canvas "https://x.ngrok-free.dev" 4
+  stub curl 'printf 502'
+  wait_for_canvas "https://x.ngrok-free.dev" 2 >/dev/null 2>&1
+  assert_eq "gives up" "1" "$?"
+}
+
+test_start_without_setup_says_to_run_setup() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/none.conf"
+  (cmd_start) >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "says what to do" "scripts/local-canvas.sh setup" "$(cat "$T/out")"
+}
+
+test_start_with_drive_unplugged_does_not_start_docker() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  settings_save "/Volumes/Gone/canvas-lms" "/Volumes/Gone/CueCanvas.sparsebundle"
+  stub docker 'touch "$T/docker-called"; exit 1'
+  stub open 'touch "$T/open-called"'
+  (cmd_start) >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "names the image" "/Volumes/Gone/CueCanvas.sparsebundle" "$(cat "$T/out")"
+  assert_contains "says to plug it in" "Plug in" "$(cat "$T/out")"
+  assert_false "Docker not touched" test -e "$T/docker-called"
+  assert_false "Docker Desktop not opened" test -e "$T/open-called"
+}
+
 # --- runner ----------------------------------------------------------------
 # A test's stderr (prompts, warnings) is shown only when the test fails.
 

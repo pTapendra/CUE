@@ -325,6 +325,165 @@ use_external_drive() {
   esac
 }
 
+# --- ngrok -------------------------------------------------------------------
+
+NGROK_COMPOSE_FILE="docker-compose.cue-ngrok.yml"
+CANVAS_PORT=8080
+
+ngrok_config_path() {
+  local path
+  path="$(ngrok config check 2>&1 | sed -n 's/.*configuration file at //p' | head -n 1)"
+  printf '%s\n' "${path:-$HOME/Library/Application Support/ngrok/ngrok.yml}"
+}
+
+# True when the ngrok config file has an authtoken.
+ngrok_has_token() { # config_path
+  [ -f "$1" ] || return 1
+  grep -Eq '^[[:space:]]*authtoken:[[:space:]]*[^[:space:]]' "$1"
+}
+
+# Reads ngrok's /api/tunnels JSON on stdin; prints the first https address.
+ngrok_url_from_json() {
+  grep -o '"public_url": *"https://[^"]*"' | head -n 1 | sed 's/.*"\(https:[^"]*\)"$/\1/'
+}
+
+# Canvas settings that let ngrok's address through: Canvas accepts the
+# address, and its web server is published on 127.0.0.1 only, for ngrok.
+write_ngrok_compose() { # canvas_dir host
+  cat >"$1/$NGROK_COMPOSE_FILE" <<EOF
+# Written by Cue's scripts/local-canvas.sh so a phone can reach this Canvas
+# through ngrok. Rewritten each time; delete it to undo.
+services:
+  web:
+    environment:
+      ADDITIONAL_ALLOWED_HOSTS: $2
+    ports:
+      - "127.0.0.1:$CANVAS_PORT:80"
+EOF
+}
+
+# Adds <name> to COMPOSE_FILE in Canvas's .env, once, so every docker compose
+# command in the Canvas folder uses it.
+include_compose_file() { # env_file name
+  local env="$1" name="$2" default="docker-compose.yml:docker-compose.override.yml" tmp
+  if [ ! -f "$env" ] || ! grep -q '^COMPOSE_FILE=' "$env"; then
+    printf 'COMPOSE_FILE=%s:%s\n' "$default" "$name" >>"$env"
+    return
+  fi
+  tmp="$(mktemp)"
+  awk -v name="$name" '
+    /^COMPOSE_FILE=/ {
+      n = split(substr($0, 14), parts, ":")
+      for (i = 1; i <= n; i++) if (parts[i] == name) { print; next }
+      print $0 ":" name
+      next
+    }
+    { print }
+  ' "$env" >"$tmp" && cat "$tmp" >"$env"
+  rm -f "$tmp"
+}
+
+# Starts ngrok in the background, forwarding to Canvas. Sets NGROK_PID,
+# NGROK_URL and NGROK_LOG. Fails with ngrok's own message if it stops.
+start_ngrok() {
+  local waited=0
+  NGROK_URL=""
+  if pgrep -x ngrok >/dev/null 2>&1; then
+    warn "ngrok is already running. A free ngrok account allows one at a time: stop the other one (Ctrl+C in its window), then run start again."
+    return 1
+  fi
+  NGROK_LOG="$(mktemp)"
+  ngrok http "127.0.0.1:$CANVAS_PORT" --log stdout --log-format logfmt >"$NGROK_LOG" 2>&1 &
+  NGROK_PID=$!
+  while [ "$waited" -lt 20 ]; do
+    if ! kill -0 "$NGROK_PID" 2>/dev/null; then
+      warn "ngrok stopped. What it said:"
+      tail -n 5 "$NGROK_LOG" >&2
+      return 1
+    fi
+    NGROK_URL="$(curl -s -m 2 "http://127.0.0.1:4040/api/tunnels" 2>/dev/null | ngrok_url_from_json)"
+    [ -n "$NGROK_URL" ] && return 0
+    sleep 1
+    waited=$((waited + 1))
+  done
+  warn "ngrok didn't report an address within 20 seconds. What it said:"
+  tail -n 5 "$NGROK_LOG" >&2
+  stop_ngrok
+  return 1
+}
+
+stop_ngrok() {
+  [ -n "${NGROK_PID:-}" ] && kill "$NGROK_PID" 2>/dev/null
+  NGROK_PID=""
+}
+
+# Waits up to <seconds> (default 300) for Canvas to answer at <url>.
+wait_for_canvas() { # url [seconds]
+  local url="$1" limit="${2:-300}" waited=0
+  while [ "$waited" -lt "$limit" ]; do
+    [ "$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$url/health_check" 2>/dev/null)" = "200" ] && return 0
+    sleep 2
+    waited=$((waited + 2))
+  done
+  warn "Canvas didn't answer at $url within ${limit} seconds."
+  return 1
+}
+
+# Makes sure ngrok is installed and has the user's authtoken. The token is
+# read without showing it and is never printed.
+ensure_ngrok_ready() {
+  local token=""
+  if ! ngrok --version >/dev/null 2>&1; then ensure_brew; fi
+  ensure_tool ngrok "--cask ngrok" "Install ngrok from https://ngrok.com/download, then run start again." || return 1
+  ngrok_has_token "$(ngrok_config_path)" && return 0
+  say "ngrok needs your own account's authtoken (a free account is enough)."
+  say "Log in at https://dashboard.ngrok.com and copy it from \"Your Authtoken\"."
+  printf 'Paste your authtoken (it will not be shown): ' >&2
+  IFS= read -rs token || true
+  printf '\n' >&2
+  [ -n "$token" ] || return 1
+  ngrok config add-authtoken "$token" >/dev/null || {
+    warn "ngrok didn't accept that token."
+    return 1
+  }
+}
+
+# Exposes Canvas through ngrok, then waits until ngrok ends or Ctrl+C.
+expose_with_ngrok() {
+  ensure_ngrok_ready || die "ngrok isn't ready, so Canvas stays on this Mac only (http://canvas.docker)."
+  # ngrok runs in the background, where Ctrl+C doesn't reach it: stop it
+  # whenever this script ends, however it ends, so Canvas never stays exposed.
+  trap stop_ngrok EXIT
+  trap 'exit 130' INT TERM
+  start_ngrok || exit 1
+  local host="${NGROK_URL#https://}"
+  write_ngrok_compose "$CANVAS_DIR" "$host"
+  include_compose_file "$CANVAS_DIR/.env" "$NGROK_COMPOSE_FILE"
+  say "Letting Canvas accept $NGROK_URL ..."
+  if ! (cd "$CANVAS_DIR" && docker compose up -d --no-deps web); then
+    stop_ngrok
+    die "Couldn't restart Canvas's web container."
+  fi
+  say "Waiting for Canvas to answer there (a minute or two after a restart)..."
+  if ! wait_for_canvas "$NGROK_URL"; then
+    stop_ngrok
+    die "Canvas isn't answering through ngrok. Check http://canvas.docker on this Mac, then run start again."
+  fi
+  trap 'stop_ngrok; say ""; say "ngrok stopped: Canvas is off the internet, and still running on this Mac (http://canvas.docker)."; exit 0' INT TERM
+  say ""
+  say "Canvas is reachable from your phone at:"
+  say ""
+  say "    $NGROK_URL"
+  say ""
+  say "In Cue, open Canvas connection and enter that address. The first time a phone"
+  say "opens it, ngrok shows a warning page: tap \"Visit Site\"."
+  say "Keep this window open. Press Ctrl+C to take Canvas off the internet."
+  wait "$NGROK_PID"
+  warn "ngrok stopped by itself. What it said:"
+  tail -n 5 "$NGROK_LOG" >&2
+  exit 1
+}
+
 # --- commands ----------------------------------------------------------------
 
 cmd_setup() {
@@ -390,6 +549,40 @@ cmd_setup() {
   say ""
   say "Canvas is installed. On this Mac it's at http://canvas.docker"
   say "From now on, start it with: scripts/local-canvas.sh start"
+}
+
+# Loads the settings and mounts the disk image, without touching Docker.
+find_canvas() {
+  settings_load || die "Canvas isn't set up on this Mac yet. Run: scripts/local-canvas.sh setup"
+  if [ -n "$DISK_IMAGE" ]; then
+    mount_disk_image "$DISK_IMAGE" >/dev/null ||
+      die "Plug in the drive that holds $DISK_IMAGE, then try again. Docker keeps its disk there too, so don't start Docker without it."
+  fi
+  [ -d "$CANVAS_DIR" ] || die "Can't find Canvas in $CANVAS_DIR. Run: scripts/local-canvas.sh setup"
+}
+
+cmd_start() {
+  find_canvas
+  ensure_docker_app || exit 1
+  wait_for_docker 300 || exit 1
+  say "Starting Canvas..."
+  (cd "$CANVAS_DIR" && docker compose up -d) || die "Couldn't start Canvas's containers."
+  if ask_yes_no "Make Canvas reachable from a phone through ngrok?"; then
+    expose_with_ngrok
+  else
+    say "Canvas is running at http://canvas.docker (this Mac only)."
+    say "Stop it with: scripts/local-canvas.sh stop"
+  fi
+}
+
+cmd_stop() {
+  find_canvas
+  if ! docker info >/dev/null 2>&1; then
+    say "Docker isn't running, so Canvas isn't either."
+    return 0
+  fi
+  (cd "$CANVAS_DIR" && docker compose stop) || die "Couldn't stop Canvas's containers."
+  say "Canvas stopped."
 }
 
 # --- command line ------------------------------------------------------------
