@@ -141,23 +141,110 @@ test_refuses_to_run_as_root() {
   assert_contains "message" "root" "$out"
 }
 
+# --- tools -----------------------------------------------------------------
+
+# Runs ensure_tool with the given stdin; sets CODE and OUT.
+run_ensure_tool() { # answer args...
+  local answer="$1"
+  shift
+  ensure_tool "$@" <<<"$answer" >"$T/out" 2>&1
+  CODE=$?
+  OUT="$(cat "$T/out")"
+}
+
+test_ensure_tool_present_asks_nothing() {
+  stub cue-tool 'exit 0'
+  stub brew 'echo "$*" >>"$T/brew.log"'
+  run_ensure_tool "" cue-tool "--cask cue-tool" "Install cue-tool by hand."
+  assert_eq "status" "0" "$CODE"
+  assert_eq "no output" "" "$OUT"
+  assert_false "brew not called" test -e "$T/brew.log"
+}
+
+test_ensure_tool_missing_and_declined_prints_help() {
+  stub brew 'echo "$*" >>"$T/brew.log"'
+  run_ensure_tool "n" cue-missing-tool "--cask cue-missing-tool" "Install cue-missing-tool from example.com."
+  assert_eq "status" "1" "$CODE"
+  assert_contains "asked" "Install cue-missing-tool with Homebrew" "$OUT"
+  assert_contains "help" "Install cue-missing-tool from example.com." "$OUT"
+  assert_false "brew not called" test -e "$T/brew.log"
+}
+
+test_ensure_tool_missing_and_accepted_installs_with_brew() {
+  stub brew 'echo "$*" >>"$T/brew.log"
+printf "#!/bin/bash\nexit 0\n" >"$T/bin/cue-missing-tool"
+chmod +x "$T/bin/cue-missing-tool"'
+  run_ensure_tool "y" cue-missing-tool "--cask cue-missing-tool" "help"
+  assert_eq "status" "0" "$CODE"
+  assert_eq "brew args" "install --cask cue-missing-tool" "$(cat "$T/brew.log")"
+}
+
+test_ensure_tool_install_failure_prints_help() {
+  stub brew 'exit 1'
+  run_ensure_tool "y" cue-missing-tool "cue-missing-tool" "Install it from example.com."
+  assert_eq "status" "1" "$CODE"
+  assert_contains "help" "Install it from example.com." "$OUT"
+}
+
+test_ensure_tool_without_brew_prints_help_without_asking() {
+  mkdir -p "$T/bin"
+  PATH="$T/bin:/usr/bin:/bin"
+  run_ensure_tool "y" cue-missing-tool "cue-missing-tool" "Install it from example.com."
+  assert_eq "status" "1" "$CODE"
+  assert_contains "help" "Install it from example.com." "$OUT"
+  case "$OUT" in *"with Homebrew"*) assert_eq "did not ask" "no question" "asked about Homebrew" ;; esac
+}
+
+test_wait_for_docker_gives_up_after_the_limit() {
+  stub docker 'exit 1'
+  stub open 'touch "$T/opened"'
+  SECONDS=0
+  wait_for_docker 2 >"$T/out" 2>&1
+  local code=$? elapsed=$SECONDS
+  assert_eq "status" "1" "$code"
+  assert_true "opened Docker Desktop" test -e "$T/opened"
+  assert_true "bounded wait" test "$elapsed" -le 6
+  assert_contains "message" "Docker did not start" "$(cat "$T/out")"
+}
+
+test_wait_for_docker_returns_at_once_when_running() {
+  stub docker 'exit 0'
+  stub open 'touch "$T/opened"'
+  assert_true "running" wait_for_docker 2
+  assert_false "did not open" test -e "$T/opened"
+}
+
+test_check_docker_memory() {
+  stub docker 'echo 4294967296'
+  check_docker_memory 2>"$T/err"
+  assert_eq "4 GB is too little" "1" "$?"
+  assert_contains "says how much" "8 GB" "$(cat "$T/err")"
+  stub docker 'echo 8573517824'
+  assert_true "8 GB set is enough" check_docker_memory
+}
+
 # --- runner ----------------------------------------------------------------
+# A test's stderr (prompts, warnings) is shown only when the test fails.
 
 passed=0
 failed=0
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
+  log="$(mktemp)"
   if (
     T="$(mktemp -d)"
+    export T
     trap 'rm -rf "$T"' EXIT
     FAILED=0
     "$t"
     exit "$FAILED"
-  ); then
+  ) 2>"$log"; then
     passed=$((passed + 1))
   else
     echo "FAILED: $t"
+    sed 's/^/  stderr: /' "$log"
     failed=$((failed + 1))
   fi
+  rm -f "$log"
 done
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]
