@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme, DefaultTheme, NavigationContainer, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { type Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { CourseScreen } from '../screens/courses/CourseScreen';
+import { CoursesScreen } from '../screens/courses/CoursesScreen';
 import { TokenConnectScreen } from '../screens/connect/TokenConnectScreen';
 import { ReviewScreen } from '../screens/review/ReviewScreen';
 import { ScheduleScreen } from '../screens/schedule/ScheduleScreen';
@@ -13,7 +15,7 @@ import { StudyTimesScreen } from '../screens/StudyTimesScreen';
 import { TodayScreen } from '../screens/today/TodayScreen';
 import { WelcomeScreen } from '../screens/welcome/WelcomeScreen';
 import type { IoniconName } from '../ui/kit';
-import { space, type, useTokens } from '../ui/tokens';
+import { useTokens } from '../ui/tokens';
 import { backToTabs } from './actions';
 import { type Startup, StartupContext, useStartup } from './startup';
 import type { RootScreenProps, RootStackParamList, TabParamList, TabScreenProps } from './types';
@@ -59,6 +61,7 @@ export function RootNavigator({ initialRouteName, startup }: { initialRouteName:
         <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen name="Tabs" component={TabsNavigator} />
+          <Stack.Screen name="Course" component={CourseRoute} />
           <Stack.Screen name="StudyTimes" component={StudyTimesRoute} />
           <Stack.Group screenOptions={{ presentation: 'fullScreenModal' }}>
             <Stack.Screen name="Review" component={ReviewRoute} />
@@ -90,7 +93,7 @@ function TabsNavigator() {
     >
       <Tab.Screen name="Today" component={TodayTab} />
       <Tab.Screen name="Schedule" component={ScheduleTab} />
-      <Tab.Screen name="Courses" component={CoursesPlaceholder} />
+      <Tab.Screen name="Courses" component={CoursesTab} />
     </Tab.Navigator>
   );
 }
@@ -111,20 +114,18 @@ function ScheduleTab(props: TabScreenProps<'Schedule'>) {
   );
 }
 
-function CoursesPlaceholder() {
-  return <Placeholder title="Courses" text="Your courses will show here soon." />;
-}
-
-function Placeholder({ title, text }: { title: string; text: string }) {
-  const { colors } = useTokens();
+function CoursesTab(props: TabScreenProps<'Courses'>) {
   return (
     <Page edges={TAB_EDGES}>
-      <View style={styles.placeholder}>
-        <Text accessibilityRole="header" style={[type.largeTitle, { color: colors.text }]}>
-          {title}
-        </Text>
-        <Text style={[type.body, { color: colors.text2 }]}>{text}</Text>
-      </View>
+      <CoursesScreen {...props} />
+    </Page>
+  );
+}
+
+function CourseRoute(props: RootScreenProps<'Course'>) {
+  return (
+    <Page>
+      <CourseScreen {...props} />
     </Page>
   );
 }
@@ -174,5 +175,4 @@ function Page({ edges, children }: { edges?: Edge[]; children: React.ReactNode }
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  placeholder: { padding: space.lg, gap: space.sm },
 });
