@@ -16,7 +16,7 @@ The app talks only to the server. Only the server talks to Canvas, and only with
 - **Retrieve schedule data (UC1).** Connect a Canvas account with Log in with Canvas (or with a personal access token when the server has no login settings), read courses, assignment deadlines and calendar events, and review them before anything is saved. Exams are recognised by their titles (exam, midterm, final, test). An exam with no date in Canvas is flagged so the student can add the date with a date picker.
 - **View and edit the schedule (UC2).** The Schedule tab shows a time grid of one day, three days or a week (**Day**, **3 days**, **Week**; the arrows page by that many days, and the locate button returns to today). Items without a date appear under **No date** on Today. Students can add items by hand (including exams Canvas does not list), edit them, delete them, and set one of four statuses: Not started, In progress, Done, Postponed.
 - **Study planner.** Students set their study times (which hours of each weekday they can study, in their own time zone) and a daily limit, and give each item an amount of study time (an exam defaults to 6 hours, an assignment to 2). Cue suggests study blocks that fit inside the study times, before the due date, and shows them on the Schedule grid next to events and deadlines. A student can accept, move or reject each block, or accept all suggestions on screen at once. Where the time does not fit, the app says how much is missing.
-- **Privacy.** Each installed app gets an anonymous account. No name or email is collected. The Canvas token is encrypted (AES-256-GCM) on the server and never stored on the phone.
+- **Privacy.** Each Canvas user has one Cue account, and logging in with Canvas puts a phone on it. A phone that has not logged in uses an unlinked account of its own. Cue keeps a keyed hash of the Canvas address and user ID to tell accounts apart, never the name, email or raw ID. The Canvas token is encrypted (AES-256-GCM) on the server and never stored on the phone.
 
 Not built yet: start reminders, notes and slides, quizzes, weak topics.
 
@@ -38,13 +38,13 @@ Create a secret key once and put it in `.env`:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-Without `CUE_SECRET_KEY` the server makes a temporary key, and saved Canvas tokens stop working after a restart.
+Without `CUE_SECRET_KEY` the server makes a temporary key, and saved Canvas tokens stop working after a restart. Changing the key also unlinks accounts from their Canvas logins, so the same students get new accounts when they log in again.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | `3000` | Port to listen on |
 | `CUE_DB_FILE` | `cue.db` | SQLite database file |
-| `CUE_SECRET_KEY` | (temporary) | 32 bytes, base64. Encrypts Canvas tokens |
+| `CUE_SECRET_KEY` | (temporary) | 32 bytes, base64. Encrypts Canvas tokens and keys the hash that links accounts to Canvas logins |
 | `CUE_ALLOW_INSECURE_CANVAS` | off | Set to `1` to allow `http://` or local Canvas addresses during development |
 | `CUE_CANVAS_URL` | (off) | The Canvas address phones use. Set with the next two to turn on **Log in with Canvas** |
 | `CUE_CANVAS_CLIENT_ID` | (off) | The developer key's ID |
@@ -159,7 +159,7 @@ The structure follows the P2 design document.
 ```
 server/src/
   api/app.ts                     API layer: routes, validation, errors
-  accounts/                      anonymous device accounts
+  accounts/                      accounts, devices and Canvas logins
   canvas/CanvasClient.ts         adapter interface (read-only)
   canvas/HttpCanvasClient.ts     real Canvas REST client
   canvas/FakeCanvasClient.ts     in-memory Canvas for tests
@@ -189,12 +189,13 @@ All `/api` routes except `POST /api/devices` need `Authorization: Bearer <device
 
 | Method and path | Purpose |
 | --- | --- |
-| `POST /api/devices` | Create an anonymous account; returns `deviceToken` |
-| `DELETE /api/account` | Delete the account and all its data |
-| `GET /api/canvas/connection` | Connection status |
-| `PUT /api/canvas/connection` | Save `{ baseUrl, token }` after checking it with Canvas |
+| `POST /api/devices` | Create an unlinked account; returns `deviceToken` |
+| `DELETE /api/device` | Log out: this phone forgets its account (204). The account, its other phones and its Canvas connection stay. 409 `account_not_linked` for an unlinked account |
+| `DELETE /api/account` | Delete the account and all its data, and log it out of every phone |
+| `GET /api/canvas/connection` | Connection status: `connected`, `linked` and the rest |
+| `PUT /api/canvas/connection` | Save `{ baseUrl, token }` after checking it with Canvas; replies with the connection status, plus a new `deviceToken` when the phone switched accounts |
 | `POST /api/canvas/login` | Start a Canvas login: returns `{ authorizeUrl, state }` |
-| `POST /api/canvas/login/finish` | Save `{ code, state }` after Canvas approves; returns the connection status |
+| `POST /api/canvas/login/finish` | Save `{ code, state }` after Canvas approves; returns the connection status, plus a new `deviceToken` when the phone switched accounts |
 | `DELETE /api/canvas/connection` | Forget the Canvas token |
 | `POST /api/canvas/sync` | Read Canvas and return items to confirm (stores nothing) |
 | `POST /api/canvas/sync/confirm` | Save `{ syncId, accept: [keys], dates?: { key: ISO date } }` |

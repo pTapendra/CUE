@@ -236,3 +236,42 @@ describe("a Canvas login opens that student's own account", () => {
     expect(db.prepare("SELECT canvas_identity FROM students").get()).toEqual({ canvas_identity: null });
   });
 });
+
+describe("log out", () => {
+  it("log out forgets only this phone", async () => {
+    const { newStudent } = world();
+    const phone1 = await newStudent();
+    await logIn(phone1, "maya");
+    const phone2 = await newStudent();
+    await logIn(phone2, "maya");
+
+    await phone1.del("/api/device").expect(204);
+    await phone1.get("/api/canvas/connection").expect(401);
+    const status = (await phone2.get("/api/canvas/connection").expect(200)).body;
+    expect(status).toMatchObject({ connected: true, linked: true });
+  });
+
+  it("an unlinked account can't log out", async () => {
+    const { newStudent } = world();
+    const phone = await newStudent();
+    const res = await phone.del("/api/device");
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("account_not_linked");
+    await phone.get("/api/canvas/connection").expect(200);
+  });
+
+  it("log out then log in again brings the data back and leaves no empty account", async () => {
+    const { db, newStudent } = world();
+    const phone = await newStudent();
+    await logIn(phone, "maya");
+    await phone.post("/api/items", work("Read chapter 4")).expect(201);
+    const before = count(db, "students");
+
+    await phone.del("/api/device").expect(204);
+    const fresh = await newStudent();
+    const body = await logIn(fresh, "maya");
+    expect(body.deviceToken).toEqual(expect.any(String));
+    expect(await titles(fresh)).toEqual(["Read chapter 4"]);
+    expect(count(db, "students")).toBe(before);
+  });
+});

@@ -17,6 +17,13 @@ export interface LinkResult {
   movedItems: number;
 }
 
+/** The account isn't linked to a Canvas login, so there is nothing to log out of. */
+export class AccountNotLinkedError extends Error {
+  constructor() {
+    super("This account isn't logged in with Canvas");
+  }
+}
+
 /** Cue accounts: a Canvas login decides which account a phone uses. */
 export class AccountService {
   constructor(
@@ -38,6 +45,12 @@ export class AccountService {
 
   isLinked(studentId: string): boolean {
     return this.repo.identityOf(studentId) != null;
+  }
+
+  /** Forgets this phone only; the account, its other phones and its Canvas connection stay. */
+  logout(studentId: string, deviceToken: string): void {
+    if (!this.isLinked(studentId)) throw new AccountNotLinkedError();
+    this.repo.removeDevice(deviceToken);
   }
 
   /** A keyed hash: the database alone can't be matched against Canvas user IDs. */

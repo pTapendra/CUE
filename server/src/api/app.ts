@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import type { AccountService, CurrentDevice } from "../accounts/AccountService.js";
+import { AccountNotLinkedError, type AccountService, type CurrentDevice } from "../accounts/AccountService.js";
 import { CanvasLoginRefusedError } from "../canvas/CanvasLogin.js";
 import { CanvasAuthError, CanvasUnavailableError } from "../canvas/CanvasClient.js";
 import {
@@ -127,6 +127,12 @@ export function createApp(s: Services) {
   const linkedReply = (r: { studentId: string; deviceToken: string | null }) => ({
     ...s.canvasReader.status(r.studentId),
     ...(r.deviceToken ? { deviceToken: r.deviceToken } : {}),
+  });
+
+  // Log out: this phone forgets its account; the account and its Canvas connection stay.
+  api.delete("/device", (req, res) => {
+    s.accounts.logout(sid(req), (req as Authed).deviceToken);
+    res.status(204).end();
   });
 
   api.delete("/account", async (req, res) => {
@@ -260,6 +266,7 @@ function describe(err: unknown): [number, string, string] {
   if (err instanceof NotFoundError) return [404, "not_found", err.message];
   if (err instanceof BlockMoveError) return [409, "block_move_invalid", err.message];
   if (err instanceof InvalidCanvasUrlError) return [400, "invalid_canvas_url", err.message];
+  if (err instanceof AccountNotLinkedError) return [409, "account_not_linked", err.message];
   if (err instanceof CanvasNotConnectedError) return [409, "canvas_not_connected", err.message];
   if (err instanceof CanvasAuthError) return [409, "canvas_token_rejected", "Canvas no longer accepts Cue's access. Connect again."];
   if (err instanceof LoginExpiredError) return [409, "login_expired", err.message];
