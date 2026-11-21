@@ -135,6 +135,97 @@ describe('ApiClient', () => {
     expect(store.map.get('cue.deviceToken')).toBe('device-1');
   });
 
+  it('a 401 that arrives before the switch reply keeps the token the login adopts', async () => {
+    // The server commits the switch, so a request sent with the old token gets a 401 before the login's
+    // reply arrives; the switch reply then lands while the 401 recovery is still making a fresh account.
+    const store = memoryStore();
+    await store.setItem('cue.deviceToken', 'old');
+    const valid = new Set(['old']);
+    const created: string[] = [];
+    const calls: { path: string; auth: string | null }[] = [];
+    let answerLogin!: () => void;
+    const loginAnswered = new Promise<void>((resolve) => (answerLogin = resolve));
+    let answerDevices!: () => void;
+    const devicesAnswered = new Promise<void>((resolve) => (answerDevices = resolve));
+    let devicesAsked!: () => void;
+    const freshAccountAsked = new Promise<void>((resolve) => (devicesAsked = resolve));
+    const reply = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body }) as Response;
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      const auth = (init?.headers as Record<string, string>).Authorization?.slice('Bearer '.length) ?? null;
+      calls.push({ path, auth });
+      if (path === '/api/devices') {
+        devicesAsked();
+        await devicesAnswered;
+        const token = `fresh-${created.length + 1}`;
+        created.push(token);
+        valid.add(token);
+        return reply(201, { deviceToken: token });
+      }
+      if (!auth || !valid.has(auth)) return reply(401, { error: 'unauthorized', message: 'x' });
+      if (path === '/api/canvas/login/finish') {
+        valid.delete('old'); // the switch commits
+        valid.add('switched');
+        await loginAnswered;
+        return reply(200, {
+          connected: true,
+          baseUrl: 'https://canvas.test',
+          lastSyncedAt: null,
+          loginAvailable: true,
+          linked: true,
+          deviceToken: 'switched',
+        });
+      }
+      return reply(200, { items: [], undated: [], blocks: [], shortfalls: [] });
+    }) as unknown as typeof fetch;
+
+    const api = new ApiClient('http://cue.test', store, fetchImpl);
+    await api.ensureAccount();
+    const login = api.finishCanvasLogin('good-code', 's1');
+    await Promise.resolve();
+    const stale = api.getOverview(); // sent with the old token after the commit: a 401
+    await freshAccountAsked; // the 401 recovery is making a fresh account
+    answerLogin(); // the switch reply lands first
+    expect((await login).switched).toBe(true);
+    answerDevices(); // the fresh account's reply lands last
+    await stale;
+
+    expect(store.map.get('cue.deviceToken')).toBe('switched');
+    expect(created.length).toBeLessThanOrEqual(1);
+    await api.getOverview();
+    const overview = calls.filter((c) => c.path === '/api/schedule/overview').map((c) => c.auth);
+    expect(overview).toEqual(['old', 'switched', 'switched']);
+  });
+
+  it('requests made together before there is a token share one new account', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await Promise.all([api.ensureAccount(), api.ensureAccount(), api.getConnection(), api.getOverview()]);
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+    const others = server.state.calls.filter((c) => c.path !== '/api/devices');
+    expect(others.map((c) => c.auth)).toEqual(['Bearer device-1', 'Bearer device-1']);
+  });
+
+  it('two requests that get a 401 with the current token start one fresh account', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    await store.setItem('cue.deviceToken', 'unknown-token');
+    const unknown = (async (url: string, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>).Authorization;
+      if (auth === 'Bearer unknown-token') {
+        return { ok: false, status: 401, json: async () => ({ error: 'unauthorized', message: 'x' }) } as Response;
+      }
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const api = new ApiClient('http://cue.test', store, unknown);
+    await api.ensureAccount();
+    await Promise.all([api.getConnection(), api.getOverview()]);
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+  });
+
   it('logout forgets the token on 204 and on 401, and keeps it on 500', async () => {
     const server = fakeServer();
     server.state.linked = true;

@@ -66,6 +66,13 @@ export function friendlyMessage(err: unknown): string {
  */
 export class ApiClient {
   private token: string | null = null;
+  /**
+   * Counts changes of the device token: a login adopting one, the phone forgetting its own, a new account.
+   * Work that started before a change doesn't overwrite the token after it.
+   */
+  private generation = 0;
+  /** The `ensureAccount` running now, shared by everyone who asks during the same generation. */
+  private loading: { generation: number; done: Promise<void> } | null = null;
 
   constructor(
     private readonly baseUrl: string,
@@ -74,12 +81,30 @@ export class ApiClient {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  /** Loads the device token, creating an anonymous account on first launch. */
-  async ensureAccount(): Promise<void> {
-    this.token = await this.store.getItem(TOKEN_KEY);
-    if (this.token) return;
+  /**
+   * Loads the device token, creating an anonymous account on first launch. Callers at the same time share
+   * one request. If the token changes meanwhile (a login adopted one), that token stays and the result is dropped.
+   */
+  ensureAccount(): Promise<void> {
+    if (this.loading?.generation !== this.generation) {
+      const generation = this.generation;
+      const done = this.loadOrCreate(generation).finally(() => {
+        if (this.loading?.done === done) this.loading = null;
+      });
+      this.loading = { generation, done };
+    }
+    return this.loading.done;
+  }
+
+  private async loadOrCreate(generation: number): Promise<void> {
+    const stored = await this.store.getItem(TOKEN_KEY);
+    if (this.generation !== generation) return;
+    this.token = stored;
+    if (stored) return;
     const res = await this.raw('POST', '/api/devices', undefined, false);
+    if (this.generation !== generation) return;
     this.token = (res as { deviceToken: string }).deviceToken;
+    this.generation++;
     await this.store.setItem(TOKEN_KEY, this.token);
   }
 
@@ -105,8 +130,9 @@ export class ApiClient {
   private async adopt(reply: ConnectionStatus & { deviceToken?: string }): Promise<ConnectionStatus & { switched: boolean }> {
     const { deviceToken, ...status } = reply;
     if (!deviceToken) return { ...status, switched: false };
-    await this.store.setItem(TOKEN_KEY, deviceToken);
     this.token = deviceToken;
+    this.generation++;
+    await this.store.setItem(TOKEN_KEY, deviceToken);
     return { ...status, switched: true };
   }
 
@@ -155,8 +181,9 @@ export class ApiClient {
 
   /** Forgets the stored device token, so the next `ensureAccount()` creates a new account. */
   async forgetDevice(): Promise<void> {
-    await this.store.removeItem(TOKEN_KEY);
     this.token = null;
+    this.generation++;
+    await this.store.removeItem(TOKEN_KEY);
   }
 
   getPlannerSettings() {
@@ -212,17 +239,14 @@ export class ApiClient {
     try {
       return (await this.raw(method, path, body, true)) as T;
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        // A login switched accounts while this request was in flight: its token is the old one. Retry with the new.
-        if (this.token && this.token !== sentWith) return (await this.raw(method, path, body, true)) as T;
-        // The server no longer knows this device (for example, its database was reset):
-        // start a fresh anonymous account once and retry.
-        await this.store.removeItem(TOKEN_KEY);
-        this.token = null;
-        await this.ensureAccount();
-        return (await this.raw(method, path, body, true)) as T;
-      }
-      throw err;
+      if (!(err instanceof ApiError && err.status === 401)) throw err;
+      // The server no longer knows this device (for example, its database was reset): start a fresh
+      // anonymous account once and retry. But if the token changed since this request was sent (a login
+      // switched accounts, or another request already started over), retry with the current one instead.
+      if (this.token === sentWith) await this.forgetDevice();
+      // A login may adopt a token while the fresh account is made; ensureAccount then keeps that one.
+      if (!this.token) await this.ensureAccount();
+      return (await this.raw(method, path, body, true)) as T;
     }
   }
 
