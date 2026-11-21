@@ -1,11 +1,15 @@
 #!/bin/bash
-# Tests for scripts/local-canvas.sh. Run: bash scripts/local-canvas.test.sh
+# Tests for scripts/local-canvas.sh and scripts/local-canvas-seed.sh.
+# Run: bash scripts/local-canvas.test.sh
 # Each test_* function runs in its own subshell, with a fresh temp folder in $T.
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/local-canvas.sh"
+SEED_SCRIPT="$HERE/local-canvas-seed.sh"
 # shellcheck source=local-canvas.sh
 . "$SCRIPT"
+# shellcheck source=local-canvas-seed.sh
+. "$SEED_SCRIPT"
 
 FAILED=0
 
@@ -746,6 +750,146 @@ exit 1'
   assert_eq "status without a key line" "0" "$?"
   assert_contains "warns without a key line" "Couldn't set up Canvas login for Cue." "$(cat "$T/out")"
   assert_eq "still no login settings" "" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
+}
+
+# --- demo data (local-canvas-seed.sh) ---------------------------------------
+# Every test here points the settings, and so the accounts file, into $T, so
+# the real ~/.config/cue is never touched.
+
+# Settings for a Canvas in $T/canvas, as setup leaves them.
+seed_world() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  mkdir -p "$T/canvas"
+  settings_save "$T/canvas" ""
+}
+
+# What the seed's Ruby prints for the demo data: one line per account, then
+# the number of courses.
+fake_seed_output() {
+  printf 'CUE_ACCOUNT\tteacher\t%s\t%s\t%s\t%s\t%s\n' \
+    "Elena Marsh" elena.marsh@faculty.cue-demo.test elena-cue2026 1 "CS 4350" \
+    "David Okafor" david.okafor@faculty.cue-demo.test david-cue2026 2 "CS 4513" \
+    "Priya Raman" priya.raman@faculty.cue-demo.test priya-cue2026 3 "STAT 3303"
+  printf 'CUE_ACCOUNT\tstudent\t%s\t%s\t%s\t%s\t%s\n' \
+    "Maya Thompson" maya.thompson@students.cue-demo.test maya-cue2026 4 "CS 4350; CS 4513; STAT 3303" \
+    "Liam Novak" liam.novak@students.cue-demo.test liam-cue2026 5 "CS 4350; CS 4513" \
+    "Aisha Bello" aisha.bello@students.cue-demo.test aisha-cue2026 6 "CS 4350; STAT 3303" \
+    "Diego Alvarez" diego.alvarez@students.cue-demo.test diego-cue2026 7 "CS 4513; STAT 3303" \
+    "Hannah Schmidt" hannah.schmidt@students.cue-demo.test hannah-cue2026 8 "CS 4350; CS 4513; STAT 3303" \
+    "Wei Chen" wei.chen@students.cue-demo.test wei-cue2026 9 "CS 4350; STAT 3303"
+  printf 'CUE_COURSES\t3\n'
+}
+
+test_seed_accounts_file_sits_next_to_the_settings() {
+  seed_world
+  stub docker 'exit 0'
+  assert_eq "path" "$T/local-canvas-accounts.csv" "$(seed_accounts_file)"
+}
+
+test_mac_time_zone_reads_the_macs_zone() {
+  stub readlink 'echo /var/db/timezone/zoneinfo/America/Chicago'
+  assert_eq "zone" "America/Chicago" "$(mac_time_zone)"
+  stub readlink 'exit 1'
+  assert_eq "unknown" "UTC" "$(mac_time_zone)"
+}
+
+test_write_accounts_file_writes_csv_with_mode_600() {
+  seed_world
+  stub docker 'exit 0'
+  local file="$T/local-canvas-accounts.csv"
+  printf 'CUE_ACCOUNT\tteacher\tElena Marsh\telena.marsh@faculty.cue-demo.test\telena-cue2026\t7\tCS 4350\nRails says hello\nCUE_ACCOUNT\tstudent\tMaya Thompson\tmaya.thompson@students.cue-demo.test\tmaya-cue2026\t12\tCS 4350; CS 4513\n' |
+    write_accounts_file "$file"
+  assert_eq "status" "0" "$?"
+  assert_eq "file" "role,name,email,password,canvas_user_id,courses
+teacher,Elena Marsh,elena.marsh@faculty.cue-demo.test,elena-cue2026,7,CS 4350
+student,Maya Thompson,maya.thompson@students.cue-demo.test,maya-cue2026,12,CS 4350; CS 4513" "$(cat "$file")"
+  assert_eq "only this user can read it" "600" "$(stat -f %Lp "$file")"
+}
+
+test_write_accounts_file_creates_the_file_private_from_the_start() {
+  seed_world
+  stub mktemp 'umask >"$T/umask"; exec /usr/bin/mktemp "$@"'
+  printf 'CUE_ACCOUNT\tteacher\tElena Marsh\te@faculty.cue-demo.test\telena-cue2026\t7\tCS 4350\n' |
+    write_accounts_file "$T/local-canvas-accounts.csv"
+  assert_eq "created under umask 077" "0077" "$(cat "$T/umask")"
+}
+
+test_write_accounts_file_without_accounts_keeps_the_old_file() {
+  seed_world
+  stub docker 'exit 0'
+  printf 'old\n' >"$T/local-canvas-accounts.csv"
+  printf 'Rails says hello\nCUE_COURSES\t3\n' | write_accounts_file "$T/local-canvas-accounts.csv"
+  assert_eq "status" "1" "$?"
+  assert_eq "old content kept" "old" "$(cat "$T/local-canvas-accounts.csv")"
+}
+
+test_seed_says_to_start_canvas_when_it_isnt_running() {
+  seed_world
+  stub docker 'echo "docker $*" >>"$T/docker.log"'
+  bash "$SEED_SCRIPT" >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "says what to do" "Canvas isn't running. Start it with: scripts/local-canvas.sh start" "$(cat "$T/out")"
+  assert_contains "asked Docker" "docker compose ps --status running --services" "$(cat "$T/docker.log")"
+  case "$(cat "$T/docker.log")" in *"compose exec"*) assert_eq "Ruby not run" "not run" "run" ;; esac
+  assert_false "no accounts file" test -e "$T/local-canvas-accounts.csv"
+}
+
+test_seed_end_to_end_writes_the_file_and_summary() {
+  seed_world
+  fake_seed_output >"$T/seed.out"
+  stub docker 'echo "$PWD: docker $*" >>"$T/docker.log"
+case "$*" in
+  "compose ps"*) printf "postgres\nredis\nweb\n" ;;
+  "compose exec"*) echo "some Rails noise"; cat "$T/seed.out" ;;
+esac'
+  bash "$SEED_SCRIPT" >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  local out log file="$T/local-canvas-accounts.csv"
+  out="$(cat "$T/out")"
+  log="$(cat "$T/docker.log")"
+  assert_contains "says what it does" "Adding demo courses and accounts (about a minute)..." "$out"
+  assert_contains "summary" "Demo data ready: 3 courses, 3 teachers, 6 students." "$out"
+  assert_contains "file path" "Accounts and passwords: $file" "$out"
+  assert_eq "header and nine accounts" "10" "$(wc -l <"$file" | tr -d ' ')"
+  assert_eq "header" "role,name,email,password,canvas_user_id,courses" "$(head -n 1 "$file")"
+  assert_eq "only this user can read it" "600" "$(stat -f %Lp "$file")"
+  assert_contains "runs in the Canvas folder" "$T/canvas: docker compose exec -T" "$log"
+  assert_contains "passes the Mac's time zone" "-e CUE_SEED_TZ=" "$log"
+  assert_contains "runs rails in the web container" "web bundle exec rails runner" "$log"
+  assert_contains "passes the seed's Ruby" "cue-demo-term" "$log"
+  case "$out" in *"Rails noise"*) assert_eq "Canvas's other output hidden" "hidden" "shown" ;; esac
+}
+
+test_seed_failure_keeps_the_old_file_and_shows_canvas_error() {
+  seed_world
+  printf 'old\n' >"$T/local-canvas-accounts.csv"
+  printf '%s\n' "RuntimeError: maya.thompson@students.cue-demo.test already belongs to a Canvas user the seed didn't create" \
+    "from /app/x.rb:1" >"$T/seed.err"
+  stub docker 'case "$*" in
+  "compose ps"*) echo web ;;
+  "compose exec"*) cat "$T/seed.err" >&2; exit 1 ;;
+esac'
+  bash "$SEED_SCRIPT" >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  local out
+  out="$(cat "$T/out")"
+  assert_contains "warns" "Canvas couldn't add the demo data. What it said:" "$out"
+  assert_contains "shows Canvas's message" "maya.thompson@students.cue-demo.test already belongs to a Canvas user the seed didn't create" "$out"
+  case "$out" in *"from /app/x.rb:1"*) assert_eq "backtrace hidden" "hidden" "shown" ;; esac
+  case "$out" in *"Demo data ready"*) assert_eq "no summary" "absent" "present" ;; esac
+  assert_eq "old file kept" "old" "$(cat "$T/local-canvas-accounts.csv")"
+}
+
+test_seed_ruby_follows_the_rules() {
+  local ruby needle
+  ruby="$(cat "$HERE/local-canvas-seed.rb")"
+  for needle in cue-demo-term -cue2026 students.cue-demo.test faculty.cue-demo.test CUE_SEED_TZ CUE_ACCOUNT \
+    "already belongs to a Canvas user the seed didn't create"; do
+    assert_contains "has $needle" "$needle" "$ruby"
+  done
+  # The word Cue never uses for a stretch of work, in any case. Written as a
+  # pattern so that this file doesn't contain the word either.
+  assert_false "never uses the word" grep -qi 'spr[i]nt' "$HERE/local-canvas-seed.rb"
 }
 
 # --- runner ----------------------------------------------------------------
