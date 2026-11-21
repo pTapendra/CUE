@@ -135,3 +135,114 @@ it('lets a student skip Canvas and add an exam by hand', async () => {
     tree!.unmount();
   });
 });
+
+describe('Log in with Canvas', () => {
+  const authorizeUrl = 'https://canvas.test/login/oauth2/auth?client_id=1&state=s1';
+  const codeUrl = 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1';
+
+  async function openLogin() {
+    const server = fakeServer();
+    server.state.loginAvailable = true;
+    const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    let tree: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = ReactTestRenderer.create(<App client={client} />);
+    });
+    await flush();
+    const root = tree!.root;
+    await press(root, 'Log in with Canvas');
+    await flush();
+    const webView = () => root.findByType('WebView' as any);
+    return { server, tree: tree!, root, webView };
+  }
+
+  it('logs in with Canvas and goes to the review screen', async () => {
+    const server = fakeServer();
+    server.state.loginAvailable = true;
+    const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    let tree: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = ReactTestRenderer.create(<App client={client} />);
+    });
+    await flush();
+    const root = tree!.root;
+    expect(texts(root)).toContain('Log in with Canvas');
+    expect(root.findAll((n) => n.props.placeholder === 'Paste your token')).toHaveLength(0);
+    expect(root.findAll((n) => n.props.placeholder === 'yourschool.instructure.com')).toHaveLength(0);
+
+    await press(root, 'Log in with Canvas');
+    await flush();
+    const web = root.findByType('WebView' as any);
+    expect(web.props.source.uri).toBe(authorizeUrl);
+    expect(web.props.incognito).toBe(true);
+    expect(web.props.onShouldStartLoadWithRequest({ url: authorizeUrl })).toBe(true);
+    let allowed = true;
+    await act(async () => {
+      allowed = web.props.onShouldStartLoadWithRequest({ url: codeUrl });
+    });
+    expect(allowed).toBe(false);
+    await flush();
+    expect(texts(root)).toContain('Check what Cue found');
+    const finish = server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/login/finish');
+    expect(finish).toHaveLength(1);
+    expect(finish[0].body).toEqual({ code: 'good-code', state: 's1' });
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it('finishes once when both web view callbacks report the return address', async () => {
+    const { server, tree, webView } = await openLogin();
+    await act(async () => {
+      webView().props.onNavigationStateChange({ url: codeUrl });
+      webView().props.onShouldStartLoadWithRequest({ url: codeUrl });
+    });
+    await flush();
+    const finish = server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/login/finish');
+    expect(finish).toHaveLength(1);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('denying Cue returns to Connect with a message', async () => {
+    const { root, tree } = await openLogin();
+    await act(async () => {
+      root.findByType('WebView' as any).props.onShouldStartLoadWithRequest({
+        url: 'https://canvas.test/login/oauth2/auth?error=access_denied&state=s1',
+      });
+    });
+    await flush();
+    expect(texts(root)).toContain("You didn't allow Cue to read Canvas.");
+    expect(root.findAllByType('WebView' as any)).toHaveLength(0);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('Cancel closes the login without a message', async () => {
+    const { root, tree } = await openLogin();
+    expect(isDisabled(root, 'Cancel')).toBe(false);
+    await press(root, 'Cancel');
+    await flush();
+    expect(root.findAllByType('WebView' as any)).toHaveLength(0);
+    expect(texts(root)).toContain('Log in with Canvas');
+    expect(texts(root)).not.toContain("You didn't allow Cue to read Canvas.");
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('disables Cancel while the login is being finished', async () => {
+    const { root, tree, webView } = await openLogin();
+    act(() => {
+      webView().props.onShouldStartLoadWithRequest({ url: codeUrl });
+    });
+    // The finish call has started but not settled yet.
+    expect(isDisabled(root, 'Cancel')).toBe(true);
+    await flush();
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+});

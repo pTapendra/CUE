@@ -31,6 +31,7 @@ function Root({ api }: { api: ApiClient }) {
   const scheme = useColorScheme();
   const [screen, setScreen] = useState<Screen>('loading');
   const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
+  const [loginAvailable, setLoginAvailable] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -43,6 +44,7 @@ function Root({ api }: { api: ApiClient }) {
         const status = await api.getConnection();
         if (cancelled) return;
         setCanvasUrl(status.baseUrl);
+        setLoginAvailable(status.loginAvailable);
         setScreen(status.connected ? 'week' : 'connect');
       } catch (err) {
         if (!cancelled) setStartError(friendlyMessage(err));
@@ -65,7 +67,7 @@ function Root({ api }: { api: ApiClient }) {
                 title="Try again"
                 onPress={() => {
                   setStartError(null);
-                  setAttempt((a) => a + 1);
+                  setAttempt(a => a + 1);
                 }}
               />
             </>
@@ -75,9 +77,16 @@ function Root({ api }: { api: ApiClient }) {
         </View>
       ) : null}
       {screen === 'connect' ? (
-        <ConnectScreen initialUrl={canvasUrl} onConnected={() => setScreen('review')} onSkip={() => setScreen('week')} />
+        <ConnectScreen
+          initialUrl={canvasUrl}
+          loginAvailable={loginAvailable}
+          onConnected={() => setScreen('review')}
+          onSkip={() => setScreen('week')}
+        />
       ) : null}
-      {screen === 'review' ? <ReviewScreen onDone={() => setScreen('week')} onCancel={() => setScreen('week')} /> : null}
+      {screen === 'review' ? (
+        <ReviewScreen onDone={() => setScreen('week')} onCancel={() => setScreen('week')} />
+      ) : null}
       {screen === 'week' ? (
         <WeekScreen
           onSync={() => setScreen('review')}
@@ -94,5 +103,10 @@ function Root({ api }: { api: ApiClient }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
 });

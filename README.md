@@ -88,7 +88,13 @@ npm run native:android      # build and run with the Android SDK
 
 From then on it is a normal React Native project with native folders. To commit those folders and edit them by hand, remove `/ios` and `/android` from `app/.gitignore`.
 
-### Getting a Canvas token
+### Connecting Canvas
+
+When the server has Canvas login settings, the Connect screen has one button. Tap **Log in with Canvas**, log in to Canvas inside Cue, then tap **Authorize**. Cue only reads your courses and deadlines. Tap **Cancel** to go back without connecting.
+
+Without login settings on the server, the Connect screen asks for a token instead.
+
+#### Getting a Canvas token
 
 The Canvas mobile app cannot create tokens, but the Canvas website can, including in a phone's browser. On the Connect screen:
 
