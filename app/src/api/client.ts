@@ -5,6 +5,7 @@ import type {
   Item,
   ItemInput,
   ItemStatus,
+  Overview,
   PlannerSettings,
   SyncPreview,
   Week,
@@ -113,6 +114,23 @@ export class ApiClient {
   getWeek(from: Date, to: Date) {
     const range = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
     return this.call<Week>('GET', `/api/schedule/week?${range}`);
+  }
+
+  /** Everything the overview screens show: about 30 days back to 200 days ahead, plus undated items. */
+  getOverview() {
+    return this.call<Overview>('GET', '/api/schedule/overview');
+  }
+
+  /** Deletes the account on the server, then forgets the device token. A failure keeps the token. */
+  async deleteAccount(): Promise<void> {
+    await this.call<void>('DELETE', '/api/account');
+    await this.forgetDevice();
+  }
+
+  /** Forgets the stored device token, so the next `ensureAccount()` creates a new account. */
+  async forgetDevice(): Promise<void> {
+    await this.store.removeItem(TOKEN_KEY);
+    this.token = null;
   }
 
   getPlannerSettings() {

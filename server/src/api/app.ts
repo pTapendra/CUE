@@ -181,6 +181,11 @@ export function createApp(s: Services) {
     res.json({ ...week, shortfalls: s.planner.shortfalls(sid(req)) });
   });
 
+  api.get("/schedule/overview", (req, res) => {
+    s.planner.replanIfNewDay(sid(req));
+    res.json({ ...s.schedule.getOverview(sid(req), s.schedule.now()), shortfalls: s.planner.shortfalls(sid(req)) });
+  });
+
   // --- Planner (UC2) ---
   api.get("/planner/settings", (req, res) => {
     res.json(s.planner.getSettings(sid(req)));

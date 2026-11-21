@@ -31,6 +31,13 @@ export interface Week {
   shortfalls: Shortfall[];
 }
 
+export interface Overview {
+  items: Item[];
+  undated: Item[];
+  blocks: StudyBlock[];
+  shortfalls: Shortfall[];
+}
+
 export interface StudyBlock {
   id: string;
   itemId: string;

@@ -187,6 +187,7 @@ All `/api` routes except `POST /api/devices` need `Authorization: Bearer <device
 | `POST /api/canvas/sync/confirm` | Save `{ syncId, accept: [keys], dates?: { key: ISO date } }` |
 | `GET /api/courses` · `POST /api/courses` | List or add courses |
 | `GET /api/schedule/week?from=<ISO date>&to=<ISO date>` | Items due from `from` up to `to` (or, without `to`, in the `days=<n>` days from `from`, default 7), plus undated items, the study `blocks` in that range (accepted, and proposed ones that have not started; each carries its item's `itemStudyMinutes`) and any `shortfalls` |
+| `GET /api/schedule/overview` | Read-only. Items due from 30 days back to 200 days ahead, every undated item, the study `blocks` that have not ended within 200 days and any `shortfalls`: what the app's Today, Schedule and Courses screens show |
 | `GET /api/planner/settings` · `PUT /api/planner/settings` | Read or save the time zone, daily limit and study times; a save needs all seven weekdays, each with `enabled`, `start` and `end` |
 | `POST /api/blocks/accept` | Accept every proposed block that starts in `{ from, to }` and has not started yet; returns `{ accepted }` |
 | `POST /api/blocks/:id/accept` · `POST /api/blocks/:id/reject` | Accept or reject one block (204) |

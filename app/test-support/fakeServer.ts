@@ -11,6 +11,8 @@ export function fakeServer() {
     /** The Canvas address the login screen opens. */
     loginUrl: 'https://canvas.test',
     /** When set, the next syncs fail with this error (a successful login clears it). */
+    /** When set, DELETE /api/account fails with a 500. */
+    deleteFails: false,
     syncError: null as { status: number; error: string } | null,
     items: [] as Item[],
     blocks: [] as StudyBlock[],
@@ -96,6 +98,16 @@ export function fakeServer() {
           shortfalls: state.shortfalls,
         },
       };
+    },
+    'GET /api/schedule/overview': () => ({
+      status: 200,
+      body: { items: state.items.filter((i) => i.dueAt), undated: state.items.filter((i) => !i.dueAt), blocks: state.blocks, shortfalls: state.shortfalls },
+    }),
+    'DELETE /api/account': () => {
+      if (state.deleteFails) return { status: 500, body: { error: 'server_error', message: 'x' } };
+      state.connected = false;
+      state.items = [];
+      return { status: 204 };
     },
     'GET /api/planner/settings': () => ({ status: 200, body: state.settings }),
     'PUT /api/planner/settings': (b) => {

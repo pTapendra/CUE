@@ -99,6 +99,49 @@ describe('ApiClient', () => {
     expect(week.to).toBe('2026-11-20T06:00:00.000Z');
   });
 
+  it('getOverview calls GET /api/schedule/overview', async () => {
+    const server = fakeServer();
+    const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    const overview = await api.getOverview();
+    expect(server.state.calls.at(-1)).toMatchObject({ method: 'GET', path: '/api/schedule/overview' });
+    expect(overview).toEqual({ items: [], undated: [], blocks: [], shortfalls: [] });
+  });
+
+  it('deleteAccount forgets the device token only after the server agrees', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await api.getConnection();
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+
+    server.state.deleteFails = true;
+    await expect(api.deleteAccount()).rejects.toBeInstanceOf(ApiError);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+
+    const offline = (async () => {
+      throw new TypeError('Network request failed');
+    }) as unknown as typeof fetch;
+    const lost = new ApiClient('http://cue.test', store, offline);
+    await expect(lost.deleteAccount()).rejects.toBeInstanceOf(TypeError);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+
+    server.state.deleteFails = false;
+    await api.deleteAccount();
+    expect(server.state.calls.at(-1)).toMatchObject({ method: 'DELETE', path: '/api/account' });
+    expect(store.map.has('cue.deviceToken')).toBe(false);
+    await api.ensureAccount();
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(2);
+  });
+
+  it('forgetDevice removes the stored device token', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await api.getConnection();
+    await api.forgetDevice();
+    expect(store.map.has('cue.deviceToken')).toBe(false);
+  });
+
   it('explains a refused move', () => {
     expect(friendlyMessage(new ApiError(409, 'block_move_invalid', 'Pick a time before the deadline.'))).toBe(
       'Pick a time before the deadline.',
