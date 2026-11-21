@@ -1,5 +1,6 @@
 import { AccountRepository } from "./accounts/AccountRepository.js";
 import { createApp } from "./api/app.js";
+import { HttpCanvasLogin } from "./canvas/HttpCanvasLogin.js";
 import { HttpCanvasClient } from "./canvas/HttpCanvasClient.js";
 import { CanvasReaderRepository } from "./canvasReader/CanvasReaderRepository.js";
 import { CanvasReaderService } from "./canvasReader/CanvasReaderService.js";
@@ -31,7 +32,11 @@ const canvasReader = new CanvasReaderService(
   new CanvasReaderRepository(db),
   schedule,
   (baseUrl, token) => new HttpCanvasClient(baseUrl, token),
-  { secretKey: config.secretKey, allowInsecureUrls: process.env.CUE_ALLOW_INSECURE_CANVAS === "1" },
+  {
+    secretKey: config.secretKey,
+    allowInsecureUrls: process.env.CUE_ALLOW_INSECURE_CANVAS === "1",
+    login: config.canvasLogin ? new HttpCanvasLogin(config.canvasLogin) : null,
+  },
 );
 
 const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule, planner });

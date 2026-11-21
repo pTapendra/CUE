@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import request from "supertest";
 import { AccountRepository } from "../src/accounts/AccountRepository.js";
 import { createApp } from "../src/api/app.js";
+import { FakeCanvasLogin } from "../src/canvas/FakeCanvasLogin.js";
 import { FakeCanvasClient } from "../src/canvas/FakeCanvasClient.js";
 import { CanvasReaderRepository } from "../src/canvasReader/CanvasReaderRepository.js";
 import { CanvasReaderService } from "../src/canvasReader/CanvasReaderService.js";
@@ -32,11 +33,13 @@ export function fakeCanvas() {
 }
 
 /** A test server whose clock starts at NOW; `setClock` moves it. */
-export function setup() {
+export function setup(opts: { login?: boolean } = {}) {
   let clock = NOW;
   const now = () => clock;
   const db = openDb(":memory:");
   const canvas = fakeCanvas();
+  const login = new FakeCanvasLogin();
+  const deadTokens = new Set<string>();
   const tokensSeen: string[] = [];
   const schedule = new ScheduleService(new ScheduleRepository(db), {
     defaultStudyMinutes: PLANNER_DEFAULTS.studyMinutes,
@@ -50,9 +53,12 @@ export function setup() {
     schedule,
     (_url, token) => {
       tokensSeen.push(token);
-      return canvas;
+      if (!deadTokens.has(token)) return canvas;
+      const dead = new FakeCanvasClient(canvas.data);
+      dead.rejectToken = true;
+      return dead;
     },
-    { secretKey: randomBytes(32), now },
+    { secretKey: randomBytes(32), now, login: opts.login === false ? null : login },
   );
   const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule, planner });
 
@@ -72,7 +78,7 @@ export function setup() {
     clock = d;
   };
 
-  return { app, db, canvas, tokensSeen, newStudent, setClock };
+  return { app, db, canvas, login, deadTokens, tokensSeen, newStudent, setClock };
 }
 
 export const CANVAS = { baseUrl: "https://school.instructure.com/", token: "canvas-token-1234567890" };

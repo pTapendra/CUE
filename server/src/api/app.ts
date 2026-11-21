@@ -1,10 +1,13 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import type { AccountRepository } from "../accounts/AccountRepository.js";
+import { CanvasLoginRefusedError } from "../canvas/CanvasLogin.js";
 import { CanvasAuthError, CanvasUnavailableError } from "../canvas/CanvasClient.js";
 import {
   CanvasNotConnectedError,
   InvalidCanvasUrlError,
+  LoginExpiredError,
+  LoginUnavailableError,
   SyncExpiredError,
   type CanvasReaderService,
 } from "../canvasReader/CanvasReaderService.js";
@@ -42,6 +45,7 @@ const kind = z.enum(["assignment", "exam", "event"]);
 
 const schemas = {
   connect: z.object({ baseUrl: z.string().min(1).max(200), token: z.string().min(10).max(500) }),
+  finishLogin: z.object({ code: z.string().min(1).max(2000), state: z.string().min(1).max(200) }),
   confirm: z.object({
     syncId: z.string().uuid(),
     accept: z.array(z.string().max(100)).max(2000),
@@ -131,6 +135,16 @@ export function createApp(s: Services) {
   api.put("/canvas/connection", async (req, res) => {
     const body = schemas.connect.parse(req.body);
     await s.canvasReader.connect(sid(req), body.baseUrl, body.token);
+    res.json(s.canvasReader.status(sid(req)));
+  });
+
+  api.post("/canvas/login", (req, res) => {
+    res.json(s.canvasReader.startLogin(sid(req)));
+  });
+
+  api.post("/canvas/login/finish", async (req, res) => {
+    const body = schemas.finishLogin.parse(req.body);
+    await s.canvasReader.finishLogin(sid(req), body.code, body.state);
     res.json(s.canvasReader.status(sid(req)));
   });
 
@@ -237,6 +251,9 @@ function describe(err: unknown): [number, string, string] {
   if (err instanceof InvalidCanvasUrlError) return [400, "invalid_canvas_url", err.message];
   if (err instanceof CanvasNotConnectedError) return [409, "canvas_not_connected", err.message];
   if (err instanceof CanvasAuthError) return [409, "canvas_token_rejected", "Canvas rejected the token. Please reconnect."];
+  if (err instanceof LoginExpiredError) return [409, "login_expired", err.message];
+  if (err instanceof CanvasLoginRefusedError) return [409, "canvas_login_failed", "Canvas did not complete the login"];
+  if (err instanceof LoginUnavailableError) return [404, "login_unavailable", err.message];
   if (err instanceof SyncExpiredError) return [409, "sync_expired", err.message];
   if (err instanceof CanvasUnavailableError) return [502, "canvas_unavailable", err.message];
   return [500, "server_error", "Something went wrong"];

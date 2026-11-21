@@ -1,4 +1,6 @@
+import { randomBytes } from "node:crypto";
 import type { CanvasClientFactory } from "../canvas/CanvasClient.js";
+import type { CanvasLogin } from "../canvas/CanvasLogin.js";
 import { decrypt, encrypt } from "../crypto.js";
 import type { ScheduleService } from "../schedule/ScheduleService.js";
 import type { CanvasReaderRepository } from "./CanvasReaderRepository.js";
@@ -25,20 +27,38 @@ export class InvalidCanvasUrlError extends Error {
   }
 }
 
+export class LoginExpiredError extends Error {
+  constructor() {
+    super("The login took too long; please try again");
+    this.name = "LoginExpiredError";
+  }
+}
+
+export class LoginUnavailableError extends Error {
+  constructor() {
+    super("Canvas login is not set up on this server");
+    this.name = "LoginUnavailableError";
+  }
+}
+
 const EXAM_WORDS = /\b(exam|midterm|mid-term|final|test)\b/i;
 const DAY = 24 * 60 * 60 * 1000;
 const PREVIEW_TTL = 30 * 60 * 1000;
+const LOGIN_TTL = 10 * 60 * 1000;
 
 export interface CanvasReaderOptions {
   secretKey: Buffer;
   /** Allows http:// and local addresses, for development against a local fake Canvas. */
   allowInsecureUrls?: boolean;
+  /** Logging in with Canvas; null or absent when the server has no login settings. */
+  login?: CanvasLogin | null;
   now?: () => Date;
 }
 
 /** Canvas Reader (UC1): read-only sync that the student confirms before anything is stored. */
 export class CanvasReaderService {
   private readonly now: () => Date;
+  private readonly login: CanvasLogin | null;
 
   constructor(
     private readonly repo: CanvasReaderRepository,
@@ -47,11 +67,40 @@ export class CanvasReaderService {
     private readonly opts: CanvasReaderOptions,
   ) {
     this.now = opts.now ?? (() => new Date());
+    this.login = opts.login ?? null;
+    if (this.login) this.checkUrl(this.login.canvasUrl);
   }
 
   status(studentId: string) {
     const c = this.repo.getConnection(studentId);
-    return { connected: c != null, baseUrl: c?.baseUrl ?? null, lastSyncedAt: c?.lastSyncedAt ?? null };
+    return { connected: c != null, baseUrl: c?.baseUrl ?? null, lastSyncedAt: c?.lastSyncedAt ?? null,
+      loginAvailable: this.login != null,
+    };
+  }
+
+  /** Starts a login: a single-use state, kept in the database, and Canvas's authorize address. */
+  startLogin(studentId: string): { authorizeUrl: string; state: string } {
+    if (!this.login) throw new LoginUnavailableError();
+    const state = randomBytes(32).toString("base64url");
+    this.repo.saveLoginState(studentId, state, LOGIN_TTL);
+    return { authorizeUrl: this.login.authorizeUrl(state), state };
+  }
+
+  /** Exchanges the code, checks the access token with one read, then stores both tokens sealed. */
+  async finishLogin(studentId: string, code: string, state: string): Promise<void> {
+    if (!this.login) throw new LoginUnavailableError();
+    if (!this.repo.takeLoginState(studentId, state)) throw new LoginExpiredError();
+    const tokens = await this.login.exchangeCode(code);
+    await this.makeClient(this.login.canvasUrl, tokens.accessToken).listCourses();
+    const key = this.opts.secretKey;
+    const accessExpiresAt =
+      tokens.expiresInSeconds == null ? null : new Date(this.now().getTime() + tokens.expiresInSeconds * 1000).toISOString();
+    this.repo.saveConnection(
+      studentId,
+      this.login.canvasUrl,
+      encrypt(tokens.accessToken, key),
+      tokens.refreshToken ? { refreshSealed: encrypt(tokens.refreshToken, key), accessExpiresAt } : null,
+    );
   }
 
   /** Checks the token with one read before storing it, encrypted. */

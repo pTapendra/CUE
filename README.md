@@ -46,6 +46,9 @@ Without `CUE_SECRET_KEY` the server makes a temporary key, and saved Canvas toke
 | `CUE_DB_FILE` | `cue.db` | SQLite database file |
 | `CUE_SECRET_KEY` | (temporary) | 32 bytes, base64. Encrypts Canvas tokens |
 | `CUE_ALLOW_INSECURE_CANVAS` | off | Set to `1` to allow `http://` or local Canvas addresses during development |
+| `CUE_CANVAS_URL` | (off) | The Canvas address phones use. Set with the next two to turn on **Log in with Canvas** |
+| `CUE_CANVAS_CLIENT_ID` | (off) | The developer key's ID |
+| `CUE_CANVAS_CLIENT_SECRET` | (off) | The developer key's secret. Never sent to the app |
 
 The server reads `server/.env` on start when the file exists.
 
@@ -158,6 +161,8 @@ All `/api` routes except `POST /api/devices` need `Authorization: Bearer <device
 | `DELETE /api/account` | Delete the account and all its data |
 | `GET /api/canvas/connection` | Connection status |
 | `PUT /api/canvas/connection` | Save `{ baseUrl, token }` after checking it with Canvas |
+| `POST /api/canvas/login` | Start a Canvas login: returns `{ authorizeUrl, state }` |
+| `POST /api/canvas/login/finish` | Save `{ code, state }` after Canvas approves; returns the connection status |
 | `DELETE /api/canvas/connection` | Forget the Canvas token |
 | `POST /api/canvas/sync` | Read Canvas and return items to confirm (stores nothing) |
 | `POST /api/canvas/sync/confirm` | Save `{ syncId, accept: [keys], dates?: { key: ISO date } }` |
