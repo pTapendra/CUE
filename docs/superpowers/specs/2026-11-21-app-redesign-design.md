@@ -245,7 +245,7 @@ All view models, API calls and rules stay unless a screen needs a new derived va
 - **Server tests** for `GET /api/schedule/overview`: its range, undated items, blocks that haven't ended, other students' data excluded, and nothing changed.
 - **New logic tests:**
   - Up next selection: accepted, then suggested, then plan prompt, then hidden.
-  - Due soon: the window, the order, done items excluded, undated exams included.
+  - Due soon: the window, the order, done items excluded. No date: undated items, exams first.
   - Course progress and next item.
   - Course colours: a stable assignment, wrapping after 6.
   - The study times summary.
