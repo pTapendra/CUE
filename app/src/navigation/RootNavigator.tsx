@@ -6,7 +6,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer, type Theme } from '@react
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { type Edge, SafeAreaView } from 'react-native-safe-area-context';
 import { TokenConnectScreen } from '../screens/connect/TokenConnectScreen';
-import { ReviewScreen } from '../screens/ReviewScreen';
+import { ReviewScreen } from '../screens/review/ReviewScreen';
 import { SettingsMenu } from '../screens/SettingsMenu';
 import { StudyTimesScreen } from '../screens/StudyTimesScreen';
 import { WeekScreen } from '../screens/WeekScreen';

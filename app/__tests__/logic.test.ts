@@ -37,9 +37,12 @@ describe('dates', () => {
 });
 
 describe('view model helpers', () => {
-  it('sends typed dates only for accepted items', () => {
-    const dates = buildDates({ x: '2026-11-06 10:00', y: '2026-11-07 10:00', z: '' }, new Set(['x', 'z']));
-    expect(Object.keys(dates)).toEqual(['x']);
+  it('sends picked dates only for accepted items, and none that were cleared', () => {
+    const dates = buildDates(
+      { x: '2026-11-06T10:00:00.000Z', y: '2026-11-07T10:00:00.000Z', z: null },
+      new Set(['x', 'z']),
+    );
+    expect(dates).toEqual({ x: '2026-11-06T10:00:00.000Z' });
   });
 
   it('adds https:// to a bare Canvas address', () => {

@@ -34,7 +34,8 @@ export function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>) {
   const api = useApi();
   const { colors } = useTokens();
   const { loginAvailable } = useStartup();
-  const login = useCanvasLogin(() => navigation.navigate('Review'));
+  // Replaces Welcome, so Android's back button from Review can't return to it.
+  const login = useCanvasLogin(() => navigation.replace('Review'));
 
   async function skip() {
     // Only the next launch reads the flag: if the phone can't keep it, Welcome just shows again then.

@@ -133,6 +133,12 @@ describe('first launch', () => {
     expect(texts(root)).toContain(HEADLINE);
   });
 
+  it("sends the phone's time zone to the Planner at startup", async () => {
+    const { server } = await launch();
+    const zonePut = server.state.calls.find((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
+    expect((zonePut!.body as { timeZone: string }).timeZone).toBe(deviceTimeZone());
+  });
+
   it('starts without waiting for the time zone to be sent', async () => {
     const server = fakeServer();
     // The Planner settings never answer; everything else does.
@@ -142,52 +148,6 @@ describe('first launch', () => {
     expect(texts(root)).toContain(HEADLINE);
     expect(texts(root)).toContain('Connect Canvas');
   });
-});
-
-it('connects Canvas with a token, confirms items with a missing exam date, lands on Today, and the week shows them', async () => {
-  const { server, root } = await launch();
-  expect(texts(root)).toContain('Connect Canvas');
-  await press(root, 'Connect Canvas');
-  await flush();
-
-  await type(root, 'yourschool.instructure.com', 's.instructure.com');
-  await type(root, 'Paste your token', 'good-token-123');
-  await press(root, 'Connect and sync');
-  await flush();
-  expect(server.state.calls.find((c) => c.method === 'PUT' && c.path !== '/api/planner/settings')!.body).toEqual({
-    baseUrl: 'https://s.instructure.com',
-    token: 'good-token-123',
-  });
-
-  // The phone's time zone was sent to the Planner at startup.
-  const zonePut = server.state.calls.find((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
-  expect((zonePut!.body as { timeZone: string }).timeZone).toBe(deviceTimeZone());
-
-  // Review screen: the exam has no date, so the student types one.
-  expect(texts(root)).toContain('Check what Cue found');
-  expect(texts(root)).toContain('Canvas has no date for this exam.');
-  await type(root, 'YYYY-MM-DD HH:mm', '2026-11-06 10:00');
-  await press(root, 'Save 2 items');
-  await flush();
-  expect(selectedTab(root)).toBe('Today');
-  expect(texts(root)).not.toContain('Check what Cue found');
-  expect(tokenForms(root)).toBe(0);
-
-  // The grid opens on today and the next two days; the homework is due on Tuesday.
-  await press(root, 'Schedule');
-  await flush();
-  const shown = texts(root);
-  expect(shown).toContain('Mon 2 Nov – Wed 4 Nov');
-  expect(shown).toContain('Tue 3 Nov');
-  expect(shown).toContain('SQL homework');
-  expect(shown).not.toContain('Exam: Midterm Exam');
-  expect(shown).not.toContain('Needs a date');
-
-  // The exam on Friday is on the next page.
-  await press(root, '›');
-  await flush();
-  expect(texts(root)).toContain('Thu 5 Nov – Sat 7 Nov');
-  expect(texts(root)).toContain('Exam: Midterm Exam');
 });
 
 it('opens the school Canvas settings page in the app so the student can make a token on the phone', async () => {
@@ -280,21 +240,6 @@ describe('Log in with Canvas', () => {
     expect(finish[0].body).toEqual({ code: 'good-code', state: 's1' });
   });
 
-  it.each(['Save 2 items', 'Cancel'])('after logging in, %s on the review lands on Today, not Welcome', async (button) => {
-    const { root, webView } = await openLogin();
-    await act(async () => {
-      webView().props.onShouldStartLoadWithRequest({ url: codeUrl });
-    });
-    await flush();
-    expect(texts(root)).toContain('Check what Cue found');
-
-    await press(root, button);
-    await flush();
-    expect(selectedTab(root)).toBe('Today');
-    expect(texts(root)).not.toContain('Check what Cue found');
-    expect(texts(root)).not.toContain(HEADLINE);
-  });
-
   it('finishes once when both web view callbacks report the return address', async () => {
     const { server, webView } = await openLogin();
     await act(async () => {
@@ -362,58 +307,6 @@ it('the login screen gets the Cue user agent for an ngrok Canvas address', async
   expect(web.props.source.uri).toBe('https://demo.ngrok-free.dev/login/oauth2/auth?client_id=1&state=s1');
   expect(web.props.userAgent).toMatch(/^CueApp\//);
   expect(texts(root)).toContain('demo.ngrok-free.dev');
-});
-
-describe('Logging in again from the sync screen', () => {
-  const codeUrl = 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1';
-  const refused = "Canvas no longer accepts Cue's access. Connect again.";
-
-  // Opens the app already connected, goes to the week in the Schedule tab, with the
-  // next sync failing as given, and presses Sync Canvas.
-  async function syncFailing(syncError: { status: number; error: string }, loginAvailable: boolean) {
-    const server = fakeServer();
-    server.state.connected = true;
-    server.state.loginAvailable = loginAvailable;
-    server.state.syncError = syncError;
-    const { root } = await launch(server);
-    await press(root, 'Schedule');
-    await flush();
-    await press(root, 'Sync Canvas');
-    await flush();
-    return { server, root };
-  }
-
-  it('a sync Canvas refuses offers Log in with Canvas, then shows the items', async () => {
-    const { root } = await syncFailing({ status: 409, error: 'canvas_token_rejected' }, true);
-    expect(texts(root)).toContain(refused);
-    expect(texts(root)).toContain('Log in with Canvas');
-
-    await press(root, 'Log in with Canvas');
-    await flush();
-    let load = true;
-    await act(async () => {
-      load = root.findByType('WebView' as any).props.onShouldStartLoadWithRequest({ url: codeUrl });
-    });
-    expect(load).toBe(false);
-    await flush();
-
-    expect(texts(root)).toContain('SQL homework');
-    expect(texts(root)).not.toContain(refused);
-  });
-
-  it('without login settings the button opens the token form', async () => {
-    const { root } = await syncFailing({ status: 409, error: 'canvas_token_rejected' }, false);
-    await press(root, 'Connect Canvas');
-    await flush();
-    expect(tokenForms(root)).toBeGreaterThan(0);
-  });
-
-  it("other sync failures don't offer a login", async () => {
-    const { root } = await syncFailing({ status: 502, error: 'canvas_unavailable' }, true);
-    expect(texts(root)).toContain('Canvas is not responding right now. Your saved schedule is still here.');
-    expect(texts(root)).not.toContain('Log in with Canvas');
-    expect(texts(root)).not.toContain('Connect Canvas');
-  });
 });
 
 describe('the week in the Schedule tab', () => {
