@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import { ApiProvider } from '../src/api/ApiContext';
-import { readLoginReturn } from '../src/viewmodels/canvasLogin';
+import { loginUserAgent, readLoginReturn } from '../src/viewmodels/canvasLogin';
 import { useCanvasLogin } from '../src/viewmodels/useCanvasLogin';
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item, StudyBlock, StudyWindow } from '../src/api/types';
@@ -393,5 +393,25 @@ describe('Canvas login', () => {
     expect(hook().authorizeUrl).toBeNull();
     expect(hook().error).toBeNull();
     expect(onConnected).not.toHaveBeenCalled();
+  });
+});
+
+describe('loginUserAgent', () => {
+  const ngrok = 'https://demo.ngrok-free.dev/login/oauth2/auth?client_id=1&state=s1';
+
+  it('gives ngrok addresses a Cue user agent, so ngrok skips its warning page', () => {
+    expect(loginUserAgent(ngrok, 'ios')).toBe(
+      'CueApp/0.1 (iPhone; CPU iPhone OS like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+    );
+    expect(loginUserAgent(ngrok, 'android')).toBe('CueApp/0.1 (Linux; Android) AppleWebKit/537.36 (KHTML, like Gecko) Mobile');
+    expect(loginUserAgent('https://x.ngrok-free.app/login/oauth2/auth', 'ios')).toMatch(/^CueApp\//);
+    expect(loginUserAgent('https://x.ngrok.io/login/oauth2/auth', 'ios')).toMatch(/^CueApp\//);
+  });
+
+  it('leaves every other address with the default user agent', () => {
+    expect(loginUserAgent('https://canvas.test/login/oauth2/auth', 'ios')).toBeUndefined();
+    expect(loginUserAgent('https://school.instructure.com/login/oauth2/auth', 'android')).toBeUndefined();
+    expect(loginUserAgent('https://ngrok-free.dev.evil.test/login/oauth2/auth', 'ios')).toBeUndefined();
+    expect(loginUserAgent('not a url', 'ios')).toBeUndefined();
   });
 });

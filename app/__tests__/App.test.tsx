@@ -261,6 +261,27 @@ describe('Log in with Canvas', () => {
   });
 });
 
+it('the login screen gets the Cue user agent for an ngrok Canvas address', async () => {
+  const server = fakeServer();
+  server.state.loginAvailable = true;
+  server.state.loginUrl = 'https://demo.ngrok-free.dev';
+  const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    tree = ReactTestRenderer.create(<App client={client} />);
+  });
+  await flush();
+  const root = tree!.root;
+  await press(root, 'Log in with Canvas');
+  await flush();
+  const web = root.findByType('WebView' as any);
+  expect(web.props.source.uri).toBe('https://demo.ngrok-free.dev/login/oauth2/auth?client_id=1&state=s1');
+  expect(web.props.userAgent).toMatch(/^CueApp\//);
+  await act(async () => {
+    tree!.unmount();
+  });
+});
+
 describe('Logging in again from the sync screen', () => {
   const codeUrl = 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1';
   const refused = "Canvas no longer accepts Cue's access. Connect again.";

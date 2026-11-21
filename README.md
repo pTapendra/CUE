@@ -126,7 +126,7 @@ scripts/local-canvas.sh stop
 
 The script writes the `server/.env` of the checkout it runs from, which suits running Cue's server on the same Mac as Canvas. For a Cue server on another computer, copy the three `CUE_CANVAS_*` lines from that file into its `server/.env` by hand; the script never prints them. If setting up login fails, `start` says so and carries on; students can still connect with a token.
 
-A free ngrok account allows one tunnel at a time. While it runs, anyone with the address can reach your Canvas login page, so give the Canvas admin a strong password. The first time a phone opens the address, ngrok shows a warning page; tap **Visit Site**. Inside Cue's private login screen it may appear on each login; tap **Visit Site** there too.
+A free ngrok account allows one tunnel at a time. While it runs, anyone with the address can reach your Canvas login page, so give the Canvas admin a strong password. The first time a phone's browser opens the address, ngrok shows a warning page; tap **Visit Site**. Cue's own login screen skips that page.
 
 If setup put Canvas on an external drive, Docker keeps its disk there too, inside a disk image that has to be mounted before Docker starts. Turn off **Start Docker Desktop when you sign in** (Docker Desktop → Settings → General), plug the drive in, and use `scripts/local-canvas.sh start`: it mounts the disk image first, then starts Docker. If Docker Desktop did start without it, `start` says so; quit Docker Desktop and run `start` again.
 

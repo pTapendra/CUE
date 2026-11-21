@@ -432,7 +432,7 @@ exit 0'
   assert_contains "sets up login before showing the address" "Restart Cue's server" "${out%%Canvas is reachable*}"
   assert_eq "login settings written" "https://my-name.ngrok-free.dev" "$(env_get "$T/server.env" CUE_CANVAS_URL)"
   assert_contains "tells students how to connect" 'with "Log in with Canvas"' "$out"
-  assert_contains "explains ngrok's warning in the login screen" "may appear on each login" "$out"
+  assert_contains "says the login screen skips ngrok's warning" "Cue's login screen skips ngrok's warning page" "$out"
   case "$out" in *s3cr*) assert_eq "secret not printed" "hidden" "printed" ;; esac
   # A background job ignores SIGINT, so send TERM, which the same trap handles
   # (in a terminal, Ctrl+C sends INT to the script in the foreground).

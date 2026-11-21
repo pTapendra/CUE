@@ -553,8 +553,8 @@ expose_with_ngrok() {
   say ""
   if [ "$CUE_LOGIN_READY" = "1" ]; then
     say "Students connect from Cue's Connect screen with \"Log in with Canvas\"."
-    say "The first time a phone opens Canvas, ngrok shows a warning page: tap \"Visit Site\"."
-    say "Inside Cue's login screen it may appear on each login: tap \"Visit Site\" there too."
+    say "Cue's login screen skips ngrok's warning page. In a phone's browser, ngrok shows it"
+    say "the first time: tap \"Visit Site\"."
   else
     say "In Cue, open Canvas connection and enter that address. Students connect with an"
     say "access token. The first time a phone opens it, ngrok shows a warning page: tap \"Visit Site\"."

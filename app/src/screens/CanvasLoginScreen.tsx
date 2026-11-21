@@ -1,9 +1,10 @@
 import React from 'react';
-import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../ui/components';
 import { useTheme } from '../ui/theme';
+import { loginUserAgent } from '../viewmodels/canvasLogin';
 
 /** Canvas's own login and Authorize pages in a full-screen web view. Nothing is injected and no page content is read. */
 export function CanvasLoginScreen({
@@ -30,6 +31,7 @@ export function CanvasLoginScreen({
           <View style={styles.root}>
             <WebView
               source={{ uri: authorizeUrl }}
+              userAgent={loginUserAgent(authorizeUrl, Platform.OS)}
               incognito
               onShouldStartLoadWithRequest={r => onNavigate(r.url)}
               onNavigationStateChange={s => {

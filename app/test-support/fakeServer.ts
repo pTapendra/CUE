@@ -8,6 +8,8 @@ export function fakeServer() {
   const state = {
     connected: false,
     loginAvailable: false,
+    /** The Canvas address the login screen opens. */
+    loginUrl: 'https://canvas.test',
     /** When set, the next syncs fail with this error (a successful login clears it). */
     syncError: null as { status: number; error: string } | null,
     items: [] as Item[],
@@ -46,7 +48,7 @@ export function fakeServer() {
     },
     'POST /api/canvas/login': () => ({
       status: 200,
-      body: { authorizeUrl: 'https://canvas.test/login/oauth2/auth?client_id=1&state=s1', state: 's1' },
+      body: { authorizeUrl: `${state.loginUrl}/login/oauth2/auth?client_id=1&state=s1`, state: 's1' },
     }),
     'POST /api/canvas/login/finish': (b) => {
       if (b.code !== 'good-code') return { status: 409, body: { error: 'canvas_login_failed', message: 'x' } };
