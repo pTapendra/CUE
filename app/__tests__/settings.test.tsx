@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet, Text } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
@@ -8,7 +8,7 @@ import { deviceTimeZone } from '../src/timeZone';
 import { lightColors } from '../src/ui/tokens';
 import { studyTimesSummary } from '../src/viewmodels/useStudyTimes';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, press, styleOf, tap, texts } from '../test-support/ui';
+import { flush, isDisabled, press, styleOf, tap, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -46,12 +46,12 @@ const statsBlock: StudyBlock = {
 const HEADLINE = 'Know what to study, and when.';
 
 /** Opens Settings from the gear on Today. */
-async function openSettings({ connected = true, loginAvailable = false } = {}) {
+async function openSettings({ connected = true, loginAvailable = false, synced = true } = {}) {
   const server = fakeServer();
   server.state.connected = connected;
   server.state.loginAvailable = loginAvailable;
   server.state.blocks = [{ ...statsBlock }];
-  server.state.lastSyncedAt = new Date(2026, 10, 2, 8, 48).toISOString();
+  server.state.lastSyncedAt = synced ? new Date(2026, 10, 2, 8, 48).toISOString() : null;
   const store = memoryStore();
   if (!connected) store.map.set('cue.skippedCanvas', '1');
   const client = new ApiClient('http://cue.test', store, server.fetchImpl);
@@ -123,6 +123,12 @@ describe('Settings', () => {
         'Delete all my data',
       ]),
     );
+  });
+
+  it('says Connected · read-only before the first sync', async () => {
+    const { root } = await openSettings({ synced: false });
+    expect(texts(root)).toContain('Connected · read-only');
+    expect(texts(root).some((t) => t.includes('never'))).toBe(false);
   });
 
   it('shows the study times summary', async () => {
@@ -368,6 +374,52 @@ describe('Study times', () => {
     await press(root, 'Save');
     await flush();
     expect(lastPut(server).body.dailyLimitMinutes).toBe(240);
+  });
+
+  it('shows a failed load with Try again, which loads again so the student can save', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    let fail = false;
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      if (fail && new URL(url).pathname === '/api/planner/settings') throw new TypeError('Network request failed');
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const client = new ApiClient('http://cue.test', memoryStore(), fetchImpl);
+    await act(async () => {
+      tree = ReactTestRenderer.create(<App client={client} />);
+    });
+    await flush();
+    const root = tree!.root;
+    await tap(root, 'Settings');
+    await flush();
+    fail = true;
+    await press(root, 'Study times');
+    await flush();
+
+    const message = 'Cannot reach the Cue server. Check your connection and try again.';
+    expect(texts(root)).toContain(message);
+    expect(isDisabled(root, 'Save')).toBe(true);
+    fail = false;
+    await press(root, 'Try again');
+    await flush();
+    expect(texts(root)).not.toContain(message);
+    expect(texts(root)).toContain('Daily limit');
+    expect(isDisabled(root, 'Save')).toBe(false);
+
+    // A failed save keeps the student's changes: no Try again, which would load over them.
+    fail = true;
+    await press(root, 'Save');
+    await flush();
+    expect(texts(root)).toContain(message);
+    expect(texts(root)).not.toContain('Try again');
+  });
+
+  it("lets the day names grow with the phone's text size", async () => {
+    const { root } = await openStudyTimes();
+    const monday = root.find((n) => n.type === Text && n.props.children === 'Mon');
+    const style = StyleSheet.flatten(monday.props.style);
+    expect(style.width).toBeUndefined();
+    expect(style.minWidth).toBeGreaterThan(0);
   });
 
   it('refuses to save a window shorter than an hour', async () => {

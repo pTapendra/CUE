@@ -108,7 +108,12 @@ export function CourseScreen({ navigation, route }: RootScreenProps<'Course'>) {
                           <Text style={[type.bodyStrong, { color: colors.text2 }]}>{exam.title}</Text>
                           <Tag label="Exam" tone="exam" />
                         </View>
-                        <Pressable accessibilityRole="button" onPress={() => setEditing(exam)} style={styles.dateButton}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={dateButtonLabel(exam)}
+                          onPress={() => setEditing(exam)}
+                          style={styles.dateButton}
+                        >
                           <Text style={[type.body, { color: colors.text3 }]}>
                             {exam.dueAt ? dayLabel(new Date(exam.dueAt)) : 'No date'}
                           </Text>
@@ -152,6 +157,7 @@ export function CourseScreen({ navigation, route }: RootScreenProps<'Course'>) {
           visible
           item={editing}
           courses={courses}
+          error={message}
           onClose={() => setEditing(null)}
           onSave={(input) => actions.saveItem(editing.id, input)}
           onStatus={(status) => actions.setStatus(editing.id, status)}
@@ -160,6 +166,11 @@ export function CourseScreen({ navigation, route }: RootScreenProps<'Course'>) {
       ) : null}
     </View>
   );
+}
+
+/** What a screen reader says for an exam's date button, which opens the exam to change its date. */
+function dateButtonLabel(exam: Item): string {
+  return `${exam.dueAt ? 'Change' : 'Add'} date for ${exam.title}`;
 }
 
 function ExamCard({
@@ -182,7 +193,12 @@ function ExamCard({
           <Text style={[type.bodyStrong, { color: colors.text }]}>{exam.title}</Text>
           <Tag label="Exam" tone="exam" />
         </View>
-        <Pressable accessibilityRole="button" onPress={onEdit} style={styles.dateButton}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={dateButtonLabel(exam)}
+          onPress={onEdit}
+          style={styles.dateButton}
+        >
           <Text style={[type.bodyStrong, { color: exam.dueAt ? colors.text2 : colors.accent }]}>
             {exam.dueAt ? dayLabel(new Date(exam.dueAt)) : 'Add date'}
           </Text>

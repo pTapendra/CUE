@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { StudyBlock } from '../../api/types';
 import { dayLabel, timeLabel } from '../../dates';
 import { Button, DateTimeField, ErrorBanner, Stepper, Tag } from '../../ui/kit';
@@ -57,58 +58,65 @@ export function BlockSheet({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: colors.bg, borderColor: colors.line }]}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          <View style={[styles.grab, { backgroundColor: colors.line }]} />
-          {error ? <ErrorBanner message={error} /> : null}
-          <Text style={[type.title, { color: colors.text }]}>{`Study: ${block.itemTitle}`}</Text>
-          {block.courseName ? <Text style={[type.bodyStrong, { color: colors.text2 }]}>{block.courseName}</Text> : null}
-          <Text style={[type.body, { color: colors.text2 }]}>
-            {`${dayLabel(start)} · ${timeLabel(start)}–${timeLabel(end)}`}
-          </Text>
-          <Tag label={block.state === 'proposed' ? 'Suggested' : 'Accepted'} tone={block.state === 'proposed' ? 'warn' : 'ok'} />
-          {due ? (
+      {/* A Modal is a native view tree of its own, out of reach of the app's provider: without its own, Android
+          (edge to edge) draws the sheet's last row under the navigation bar. The backdrop still dims it all. */}
+      <SafeAreaProvider>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.backdrop} onPress={onClose} />
+        <SafeAreaView
+          edges={['bottom', 'left', 'right']}
+          style={[styles.sheet, { backgroundColor: colors.bg, borderColor: colors.line }]}
+        >
+          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+            <View style={[styles.grab, { backgroundColor: colors.line }]} />
+            {error ? <ErrorBanner message={error} /> : null}
+            <Text style={[type.title, { color: colors.text }]}>{`Study: ${block.itemTitle}`}</Text>
+            {block.courseName ? <Text style={[type.bodyStrong, { color: colors.text2 }]}>{block.courseName}</Text> : null}
             <Text style={[type.body, { color: colors.text2 }]}>
-              {`Block ${block.index} of ${block.total} before the ${exam ? 'exam' : 'deadline'} on ${dayLabel(due)}, ${timeLabel(due)}.`}
+              {`${dayLabel(start)} · ${timeLabel(start)}–${timeLabel(end)}`}
             </Text>
-          ) : null}
-          {block.clash ? (
-            <Text style={[type.bodyStrong, { color: colors.danger }]}>
-              {`Clashes with ${block.clash.title} ${timeLabel(new Date(block.clash.startsAt))}–${timeLabel(new Date(block.clash.endsAt))}.`}
-            </Text>
-          ) : null}
+            <Tag label={block.state === 'proposed' ? 'Suggested' : 'Accepted'} tone={block.state === 'proposed' ? 'warn' : 'ok'} />
+            {due ? (
+              <Text style={[type.body, { color: colors.text2 }]}>
+                {`Block ${block.index} of ${block.total} before the ${exam ? 'exam' : 'deadline'} on ${dayLabel(due)}, ${timeLabel(due)}.`}
+              </Text>
+            ) : null}
+            {block.clash ? (
+              <Text style={[type.bodyStrong, { color: colors.danger }]}>
+                {`Clashes with ${block.clash.title} ${timeLabel(new Date(block.clash.startsAt))}–${timeLabel(new Date(block.clash.endsAt))}.`}
+              </Text>
+            ) : null}
 
-          {block.state === 'proposed' ? <Button title="Accept" busy={busy} onPress={() => run(onAccept)} /> : null}
-          <Button title="Move" variant="secondary" onPress={() => setMoving((m) => !m)} />
-          {moving ? (
-            <View style={styles.move}>
-              <DateTimeField label="New start" mode="datetime" value={newStart} clearLabel="Pick a time" onChange={setNewStart} />
-              <Button
-                title="Move here"
-                busy={busy}
-                disabled={!newStart}
-                onPress={() => newStart && run(() => onMove(newStart))}
+            {block.state === 'proposed' ? <Button title="Accept" busy={busy} onPress={() => run(onAccept)} /> : null}
+            <Button title="Move" variant="secondary" onPress={() => setMoving((m) => !m)} />
+            {moving ? (
+              <View style={styles.move}>
+                <DateTimeField label="New start" mode="datetime" value={newStart} clearLabel="Pick a time" onChange={setNewStart} />
+                <Button
+                  title="Move here"
+                  busy={busy}
+                  disabled={!newStart}
+                  onPress={() => newStart && run(() => onMove(newStart))}
+                />
+              </View>
+            ) : null}
+            <Button title="Not this time" variant="secondary" busy={busy} onPress={() => run(onReject)} />
+
+            <View style={[styles.hoursRow, { borderColor: colors.line }]}>
+              <Text style={[type.body, styles.hoursLabel, { color: colors.text }]}>
+                {`This needs ${studyHours} ${studyHours === 1 ? 'hour' : 'hours'} of study`}
+              </Text>
+              <Stepper
+                label="Study time"
+                value={`${studyHours} h`}
+                onMinus={() => step(-1)}
+                onPlus={() => step(1)}
+                minusDisabled={studyHours <= 0}
+                plusDisabled={studyHours >= MAX_HOURS}
               />
             </View>
-          ) : null}
-          <Button title="Not this time" variant="secondary" busy={busy} onPress={() => run(onReject)} />
-
-          <View style={[styles.hoursRow, { borderColor: colors.line }]}>
-            <Text style={[type.body, styles.hoursLabel, { color: colors.text }]}>
-              {`This needs ${studyHours} ${studyHours === 1 ? 'hour' : 'hours'} of study`}
-            </Text>
-            <Stepper
-              label="Study time"
-              value={`${studyHours} h`}
-              onMinus={() => step(-1)}
-              onPlus={() => step(1)}
-              minusDisabled={studyHours <= 0}
-              plusDisabled={studyHours >= MAX_HOURS}
-            />
-          </View>
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }

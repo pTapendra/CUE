@@ -6,7 +6,7 @@ import { useApi } from '../../api/ApiContext';
 import { showReviewAfterConnect } from '../../navigation/actions';
 import { useStartup } from '../../navigation/startup';
 import type { RootScreenProps } from '../../navigation/types';
-import { setSkippedCanvas } from '../../prefs';
+import { setOnboarded } from '../../prefs';
 import { Button, ErrorBanner, type IoniconName } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
 import { useCanvasLogin } from '../../viewmodels/useCanvasLogin';
@@ -40,7 +40,7 @@ export function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>) {
 
   async function skip() {
     // Only the next launch reads the flag: if the phone can't keep it, Welcome just shows again then.
-    await setSkippedCanvas(api.store, true).catch(() => {});
+    await setOnboarded(api.store, true).catch(() => {});
     navigation.reset({ index: 0, routes: [{ name: 'Tabs', params: { screen: 'Today' } }] });
   }
 

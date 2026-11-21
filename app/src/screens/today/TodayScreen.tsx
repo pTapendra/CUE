@@ -234,6 +234,7 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
           visible
           item={editing === 'new' ? null : editing}
           courses={vm.courses}
+          error={vm.error}
           onClose={() => setEditing(null)}
           onSave={(input) => vm.saveItem(editing === 'new' ? null : editing.id, input)}
           onStatus={(status) => (editing === 'new' ? Promise.resolve(false) : vm.setStatus(editing.id, status))}

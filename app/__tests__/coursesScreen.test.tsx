@@ -216,6 +216,18 @@ describe('A course', () => {
     expect(textColor(root, 'Mock exam')).toBe(lightColors.text);
   });
 
+  it("names each exam's date button for a screen reader", async () => {
+    const { root } = await openStatistics();
+    const labelled = (label: string) => onScreen(root, (n) => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function');
+    expect(labelled('Change date for Old quiz')).toHaveLength(1);
+    expect(labelled('Add date for Final exam')).toHaveLength(1);
+
+    await tap(root, 'Change date for Stats midterm');
+    expect(texts(root)).toContain('Edit item');
+    const title = root.find((n) => n.props.accessibilityLabel === 'Title' && typeof n.props.onChangeText === 'function');
+    expect(title.props.value).toBe('Stats midterm');
+  });
+
   it("View in Schedule opens Schedule on the exam's first block", async () => {
     const { root } = await openStatistics();
     await press(root, 'View in Schedule');

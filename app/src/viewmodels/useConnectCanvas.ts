@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as WebBrowser from 'expo-web-browser';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
+import { setOnboarded } from '../prefs';
 
 /** View model for the Connect Canvas screen. */
 export function useConnectCanvas(initialUrl = '') {
@@ -31,6 +32,8 @@ export function useConnectCanvas(initialUrl = '') {
     setError(null);
     try {
       await api.connectCanvas(normalizeUrl(baseUrl), token.trim());
+      // Connected once: Welcome doesn't show again, even after a disconnect (see useCanvasLogin).
+      await setOnboarded(api.store, true).catch(() => {});
       setToken('');
       return true;
     } catch (err) {

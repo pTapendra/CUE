@@ -7,7 +7,7 @@ import { ApiClient, friendlyMessage } from './src/api/client';
 import { SERVER_URL } from './src/config';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import type { Startup } from './src/navigation/startup';
-import { getSkippedCanvas } from './src/prefs';
+import { getOnboarded } from './src/prefs';
 import { syncTimeZone } from './src/timeZone';
 import { Button, ToastProvider } from './src/ui/kit';
 import { space, type, useTokens } from './src/ui/tokens';
@@ -39,11 +39,11 @@ function Root({ api }: { api: ApiClient }) {
       try {
         await api.ensureAccount();
         syncTimeZone(api); // not awaited: a slow server never holds up startup (and it never fails)
-        const [status, skipped] = await Promise.all([api.getConnection(), getSkippedCanvas(api.store)]);
+        const [status, onboarded] = await Promise.all([api.getConnection(), getOnboarded(api.store)]);
         if (cancelled) return;
         setStarted({
-          // Welcome until the student connects Canvas or skips it.
-          initialRoute: status.connected || skipped ? 'Tabs' : 'Welcome',
+          // Welcome until the student connects Canvas or skips it (once; disconnecting later doesn't bring it back).
+          initialRoute: status.connected || onboarded ? 'Tabs' : 'Welcome',
           startup: { loginAvailable: status.loginAvailable, canvasUrl: status.baseUrl },
         });
       } catch (err) {

@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Alert } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import * as WebBrowser from 'expo-web-browser';
 import App from '../App';
@@ -317,6 +317,55 @@ it('the login screen gets the Cue user agent for an ngrok Canvas address', async
   expect(web.props.source.uri).toBe('https://demo.ngrok-free.dev/login/oauth2/auth?client_id=1&state=s1');
   expect(web.props.userAgent).toMatch(/^CueApp\//);
   expect(texts(root)).toContain('demo.ngrok-free.dev');
+});
+
+describe('after Canvas has been connected once', () => {
+  const codeUrl = 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1';
+
+  it.each([
+    ['the token form', false],
+    ['Log in with Canvas', true],
+  ])('connecting with %s, then disconnecting, still starts on the tabs, not Welcome', async (_how, loginAvailable) => {
+    const server = fakeServer();
+    server.state.loginAvailable = loginAvailable;
+    const { root, store } = await launch(server);
+    if (loginAvailable) {
+      await press(root, 'Log in with Canvas');
+      await flush();
+      await act(async () => {
+        root.findByType('WebView' as never).props.onShouldStartLoadWithRequest({ url: codeUrl });
+      });
+    } else {
+      await press(root, 'Connect Canvas');
+      await flush();
+      await type(root, 'yourschool.instructure.com', 's.instructure.com');
+      await type(root, 'Paste your token', 'good-token-123');
+      await press(root, 'Connect and sync');
+    }
+    await flush();
+    await press(root, 'Cancel'); // nothing saved from the review
+    await flush();
+    expect(selectedTab(root)).toBe('Today');
+
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await tap(root, 'Settings');
+    await flush();
+    await press(root, 'Disconnect Canvas');
+    const buttons = alert.mock.calls.at(-1)![2] as { text: string; onPress?: () => void }[];
+    await act(async () => {
+      await buttons.find((b) => b.text === 'Disconnect')!.onPress?.();
+    });
+    await flush();
+    alert.mockRestore();
+    expect(server.state.connected).toBe(false);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+    const restarted = await launch(server, store);
+    expect(selectedTab(restarted.root)).toBe('Today');
+    expect(texts(restarted.root)).not.toContain(HEADLINE);
+  });
 });
 
 describe('Settings, from the gear on Today', () => {

@@ -8,7 +8,7 @@ import {
   lightCourses,
   lightUnknown,
 } from '../src/ui/tokens';
-import { getSkippedCanvas, setSkippedCanvas } from '../src/prefs';
+import { getOnboarded, setOnboarded } from '../src/prefs';
 import type { Course } from '../src/api/types';
 
 const modes = [
@@ -31,8 +31,11 @@ describe.each(modes)('%s tokens', (_name, c, courses, unknown) => {
       ['onAccent on accentPressed', c.onAccent, c.accentPressed],
       ['accent on tint', c.accent, c.accentTint],
       ['exam on tint', c.exam, c.examTint],
+      ['exam on bg2', c.exam, c.bg2], // "Canvas has no date for this exam" on Check what Cue found's rows
       ['ok', c.ok, c.bg],
+      ['ok on tint', c.ok, c.okTint], // the Connected and In progress tags
       ['warn', c.warn, c.bg],
+      ['warn on bg2', c.warn, c.bg2], // the Suggested tag
       ['danger', c.danger, c.bg],
       ['danger on tint', c.danger, c.dangerTint],
       ['danger on dangerPressed', c.danger, c.dangerPressed],
@@ -107,7 +110,7 @@ describe('courseColorFor', () => {
   });
 });
 
-it('skipped Canvas is remembered', async () => {
+it('being past Welcome is remembered', async () => {
   const data = new Map<string, string>();
   const store = {
     getItem: async (k: string) => data.get(k) ?? null,
@@ -118,11 +121,11 @@ it('skipped Canvas is remembered', async () => {
       data.delete(k);
     },
   };
-  expect(await getSkippedCanvas(store)).toBe(false);
-  await setSkippedCanvas(store, true);
+  expect(await getOnboarded(store)).toBe(false);
+  await setOnboarded(store, true);
   expect(data.get('cue.skippedCanvas')).toBe('1');
-  expect(await getSkippedCanvas(store)).toBe(true);
-  await setSkippedCanvas(store, false);
-  expect(await getSkippedCanvas(store)).toBe(false);
+  expect(await getOnboarded(store)).toBe(true);
+  await setOnboarded(store, false);
+  expect(await getOnboarded(store)).toBe(false);
   expect(data.has('cue.skippedCanvas')).toBe(false);
 });

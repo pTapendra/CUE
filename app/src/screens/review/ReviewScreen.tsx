@@ -157,12 +157,21 @@ function Row({
   const when = [due ? `${dayLabel(due)} · ${timeLabel(due)}` : null, item.alreadyImported ? 'Already saved' : null]
     .filter(Boolean)
     .join(' · ');
+  // Everything the row shows, for a screen reader: "Midterm, exam, Thu 5 Nov, 09:00, already saved".
+  const spoken = [
+    item.title,
+    exam ? 'exam' : null,
+    due ? `${dayLabel(due)}, ${timeLabel(due)}` : 'no date',
+    item.alreadyImported ? 'already saved' : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
   return (
     <View style={[styles.row, { backgroundColor: colors.bg2 }]}>
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked }}
-        accessibilityLabel={item.title}
+        accessibilityLabel={spoken}
         onPress={onToggle}
         style={styles.rowMain}
       >

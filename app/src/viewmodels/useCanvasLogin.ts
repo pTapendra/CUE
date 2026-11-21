@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useApi } from '../api/ApiContext';
 import { ApiError, friendlyMessage } from '../api/client';
+import { setOnboarded } from '../prefs';
 import { readLoginReturn } from './canvasLogin';
 
 interface Session {
@@ -66,6 +67,9 @@ export function useCanvasLogin(onConnected: () => void) {
     setBusy(true);
     try {
       await api.finishCanvasLogin(code, s.state);
+      // Connected once: Welcome doesn't show again, even after a disconnect. If the phone can't keep
+      // the flag, Welcome just shows again on a launch without Canvas.
+      await setOnboarded(api.store, true).catch(() => {});
       if (mine !== attempt.current) return;
       close(null);
       onConnected();

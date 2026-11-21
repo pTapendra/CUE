@@ -33,7 +33,8 @@ export function StudyTimesScreen({ navigation }: RootScreenProps<'StudyTimes'>) 
           <Text accessibilityRole="header" style={[type.largeTitle, { color: colors.text }]}>
             Study times
           </Text>
-          {vm.error ? <ErrorBanner message={vm.error} /> : null}
+          {/* Try again only for a failed load: after a failed save it would load over the student's changes. */}
+          {vm.error ? <ErrorBanner message={vm.error} onRetry={vm.loadFailed ? vm.reload : undefined} /> : null}
           <Text style={[type.body, { color: colors.text2 }]}>
             Cue only suggests study blocks inside these times, and never on top of your Canvas events.
           </Text>
@@ -110,7 +111,8 @@ const styles = StyleSheet.create({
   body: { padding: space.lg, gap: space.md },
   row: { borderRadius: radius.lg, padding: space.md, gap: space.xs },
   line: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  day: { width: 36 },
+  // Grows with the phone's text size rather than clipping the day's name.
+  day: { minWidth: 36 },
   chips: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.xs, flexWrap: 'wrap' },
   limit: { flex: 1 },
   footer: { padding: space.lg, borderTopWidth: StyleSheet.hairlineWidth },

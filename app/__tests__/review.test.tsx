@@ -95,6 +95,28 @@ describe('Check what Cue found', () => {
     expect(texts(root).some((t) => t.includes('YYYY'))).toBe(false);
   });
 
+  it('reads each item to a screen reader with its Exam tag, its date and whether it is saved', async () => {
+    const { root } = await openReview((server) => {
+      server.state.preview.items.push({
+        key: 'assignment:3',
+        courseName: 'Databases',
+        kind: 'exam',
+        title: 'DB quiz',
+        dueAt: '2026-11-04T15:00:00.000Z',
+        needsDate: false,
+        alreadyImported: true,
+      });
+    });
+    const labels = onScreen(root, (n) => n.props.accessibilityRole === 'checkbox' && typeof n.props.onPress === 'function').map(
+      (n) => n.props.accessibilityLabel,
+    );
+    expect(labels).toEqual([
+      'SQL homework, Tue 3 Nov, 16:00',
+      'DB quiz, exam, Wed 4 Nov, 09:00, already saved',
+      'Midterm Exam, exam, no date',
+    ]);
+  });
+
   it('counts the ticked items in the save button', async () => {
     const { root } = await openReview();
     expect(texts(root)).toContain('Save 2 items');

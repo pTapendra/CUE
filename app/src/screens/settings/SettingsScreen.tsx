@@ -7,7 +7,7 @@ import { useApi } from '../../api/ApiContext';
 import { friendlyMessage } from '../../api/client';
 import type { PlannerSettings } from '../../api/types';
 import type { RootScreenProps } from '../../navigation/types';
-import { setSkippedCanvas } from '../../prefs';
+import { setOnboarded } from '../../prefs';
 import { syncTimeZone } from '../../timeZone';
 import { ErrorBanner, ListRow, ripple, SectionHeader, Tag } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
@@ -75,7 +75,7 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
       return;
     }
     // Only the next launch reads the flag: if the phone can't clear it, Welcome just doesn't show then.
-    await setSkippedCanvas(api.store, false).catch(() => {});
+    await setOnboarded(api.store, false).catch(() => {});
     // A new anonymous account now, told the phone's time zone (without waiting for it): the planner plans
     // nothing for an account without one. If the server can't be reached, the next request makes the
     // account, and the zone goes with the next start or return to the app.
@@ -110,7 +110,7 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
         <Group>
           <ListRow
             title="Canvas"
-            meta={sync.connected ? `Synced ${syncedLabel(sync.lastSyncedAt, new Date())} · read-only` : undefined}
+            meta={sync.connected ? connectedMeta(sync.lastSyncedAt) : undefined}
             leading={
               <View style={[styles.mark, { backgroundColor: colors.accentTint }]}>
                 <Ionicons name="school" size={18} color={colors.accent} />
@@ -153,6 +153,11 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
       <CanvasLoginSheet login={sync.login} />
     </View>
   );
+}
+
+/** "Synced 12 min ago · read-only", or "Connected · read-only" before the first sync. */
+function connectedMeta(lastSyncedAt: string | null): string {
+  return lastSyncedAt ? `Synced ${syncedLabel(lastSyncedAt, new Date())} · read-only` : 'Connected · read-only';
 }
 
 function NotConnected() {

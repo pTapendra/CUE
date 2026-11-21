@@ -11,11 +11,11 @@ export function fakeServer() {
     loginAvailable: false,
     /** The Canvas address the login screen opens. */
     loginUrl: 'https://canvas.test',
-    /** When set, the next syncs fail with this error (a successful login clears it). */
     /** When set, DELETE /api/account fails with a 500. */
     deleteFails: false,
     /** When set, POST /api/devices fails with a 500 (no new account can be made). */
     devicesFail: false,
+    /** When set, the next syncs fail with this error (a successful login clears it). */
     syncError: null as { status: number; error: string } | null,
     /** When Canvas was last synced, as the connection reports it. */
     lastSyncedAt: null as string | null,

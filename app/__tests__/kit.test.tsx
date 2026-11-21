@@ -1,7 +1,9 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import {
+  ADD_BUTTON_CLEARANCE,
   AddButton,
   Button,
   Card,
@@ -183,6 +185,25 @@ describe('Toast', () => {
     await press(r.root, 'Undo');
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(texts(r.root)).not.toContain('Marked done');
+  });
+
+  it('sits above the + button, the tab bar and the home indicator, and is announced', async () => {
+    const announce = AccessibilityInfo.announceForAccessibility as jest.Mock;
+    announce.mockClear();
+    const insets = { top: 47, bottom: 34, left: 0, right: 0 };
+    const r = render(
+      <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets }}>
+        <ToastProvider>
+          <Trigger onAction={jest.fn()} />
+        </ToastProvider>
+      </SafeAreaProvider>,
+    );
+    await press(r.root, 'go');
+
+    const toast = r.root.find((n) => n.props.testID === 'toast' && typeof n.type === 'string');
+    const bottom = Number(StyleSheet.flatten(toast.props.style).bottom);
+    expect(bottom).toBeGreaterThanOrEqual(ADD_BUTTON_CLEARANCE + insets.bottom);
+    expect(announce).toHaveBeenCalledWith('Marked done');
   });
 
   it('hides after 4 seconds', async () => {

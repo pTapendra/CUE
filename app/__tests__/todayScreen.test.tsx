@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
@@ -240,6 +240,22 @@ describe('Today', () => {
     expect(texts(root)).toContain('Cannot reach the Cue server. Check your connection and try again.');
     expect(texts(root)).not.toContain('Marked done');
     expect(server.state.items.find((i) => i.id === 'item-sql')!.status).toBe('in_progress');
+  });
+
+  it('shows a failed save inside the item sheet, which stays open', async () => {
+    const { root } = await openToday(aWeekOfWork, (fetchImpl) =>
+      (async (url: string, init?: RequestInit) => {
+        if (init?.method === 'PATCH') throw new TypeError('Network request failed');
+        return fetchImpl(url, init);
+      }) as unknown as typeof fetch,
+    );
+    await press(root, 'SQL homework');
+    await press(root, 'Save');
+    await flush();
+
+    const sheet = root.findAllByType(Modal).find((m) => texts(m).includes('Edit item'));
+    expect(sheet).toBeDefined();
+    expect(texts(sheet!)).toContain('Cannot reach the Cue server. Check your connection and try again.');
   });
 
   it('tapping a row opens it in the item sheet', async () => {

@@ -83,6 +83,9 @@ export function useStudyTimes(onDone: () => void) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The settings could not be loaded: nothing to save until `reload` works.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,12 +96,24 @@ export function useStudyTimes(onDone: () => void) {
         setRows(MONDAY_FIRST.map((d) => s.windows.find((w) => w.weekday === d)).filter((w): w is StudyWindow => !!w));
         setDailyLimitHours(Math.min(MAX_LIMIT_HOURS, Math.max(MIN_LIMIT_HOURS, Math.round(s.dailyLimitMinutes / 60))));
       })
-      .catch((err) => !cancelled && setError(friendlyMessage(err)))
+      .catch((err) => {
+        if (cancelled) return;
+        setError(friendlyMessage(err));
+        setLoadFailed(true);
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [api]);
+  }, [api, attempt]);
+
+  /** Loads the settings again after a failed load. */
+  function reload() {
+    setError(null);
+    setLoadFailed(false);
+    setLoading(true);
+    setAttempt((a) => a + 1);
+  }
 
   const errors = rows.map(windowError);
   const canSave = !loading && !saving && rows.length > 0 && errors.every((e) => e === null);
@@ -124,5 +139,19 @@ export function useStudyTimes(onDone: () => void) {
     }
   }
 
-  return { rows, errors, dailyLimitHours, timeZone, loading, saving, error, canSave, change, stepLimit, save };
+  return {
+    rows,
+    errors,
+    dailyLimitHours,
+    timeZone,
+    loading,
+    saving,
+    error,
+    loadFailed,
+    reload,
+    canSave,
+    change,
+    stepLimit,
+    save,
+  };
 }

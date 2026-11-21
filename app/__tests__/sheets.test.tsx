@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, Modal } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
@@ -247,6 +248,30 @@ describe('block sheet', () => {
 
     expect(texts(root)).toContain('nope');
     expect(texts(root)).not.toContain('Stats midterm');
+  });
+});
+
+describe('safe areas', () => {
+  // A Modal is a native view tree of its own, out of reach of the app's SafeAreaProvider: without one
+  // inside, Android (edge to edge) draws the title under the status bar and the last row under the
+  // navigation bar.
+  it('the item sheet keeps its content inside the safe area', async () => {
+    const { root } = await openWeek();
+    await tap(root, 'Add');
+    const sheet = root.findAllByType(Modal).find((m) => texts(m).includes('Add item'))!;
+    expect(sheet.findAllByType(SafeAreaProvider)).toHaveLength(1);
+    const area = sheet.findAllByType(SafeAreaView)[0];
+    expect(texts(area)).toEqual(expect.arrayContaining(['Add item', 'Save']));
+  });
+
+  it("the block sheet keeps its last row above the navigation bar", async () => {
+    const { root } = await openWeek();
+    await press(root, 'Stats midterm');
+    const sheet = root.findAllByType(Modal).find((m) => texts(m).includes('Study: Stats midterm'))!;
+    expect(sheet.findAllByType(SafeAreaProvider)).toHaveLength(1);
+    const area = sheet.findAllByType(SafeAreaView)[0];
+    expect(area.props.edges).toEqual(expect.arrayContaining(['bottom']));
+    expect(texts(area)).toEqual(expect.arrayContaining(['Study: Stats midterm', 'Not this time']));
   });
 });
 
