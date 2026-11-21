@@ -16,3 +16,8 @@ jest.mock('@react-native-community/datetimepicker', () => {
     default: (p) => createElement('DateTimePicker', p),
   };
 });
+// The real icon font loads asynchronously, which breaks under jest.
+jest.mock('@expo/vector-icons', () => {
+  const { createElement } = require('react');
+  return { Ionicons: (p) => createElement('Ionicons', p) };
+});
