@@ -62,7 +62,7 @@ describe('first launch', () => {
     expect(shown).toContain(HEADLINE);
     expect(shown).toContain('Log in with Canvas');
     expect(shown).toContain(SKIP);
-    expect(shown).toContain("No name or email needed. Your Canvas access stays on Cue's server, not this phone.");
+    expect(shown).toContain("No name or email needed. Your Canvas login is your Cue account; your Canvas access stays on Cue's server.");
     expect(shown).not.toContain('Connect Canvas');
     expect(selectedTab(root)).toBeUndefined();
   });

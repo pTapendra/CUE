@@ -24,6 +24,7 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
   const [planner, setPlanner] = useState<PlannerSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Again each time Settings is back in view, so Study times' new values show.
   useFocusEffect(
@@ -57,7 +58,7 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
   }
 
   function confirmDelete() {
-    Alert.alert('Delete all your data?', "Your schedule, courses and study plans are removed from Cue. This can't be undone.", [
+    Alert.alert('Delete all your data?', "Your schedule, courses and study plans are removed from Cue, on every phone. This can't be undone.", [
       { text: 'Delete everything', style: 'destructive', onPress: deleteEverything },
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -74,6 +75,32 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
       setDeleting(false);
       return;
     }
+    await startOver();
+  }
+
+  function confirmLogOut() {
+    Alert.alert('Log out of Cue?', 'Your schedule and study plans stay saved. Log in with Canvas to get them back, on this phone or another.', [
+      { text: 'Log out', onPress: logOut },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function logOut() {
+    setError(null);
+    setLoggingOut(true);
+    try {
+      // Forgets the device token (a 401 means the server already has) but leaves the account on the server.
+      await api.logout();
+    } catch (err) {
+      setError(friendlyMessage(err));
+      setLoggingOut(false);
+      return;
+    }
+    await startOver();
+  }
+
+  /** After the account is gone from this phone (deleted, or logged out): a fresh anonymous start at Welcome. */
+  async function startOver() {
     // Only the next launch reads the flag: if the phone can't clear it, Welcome just doesn't show then.
     await setOnboarded(api.store, false).catch(() => {});
     // A new anonymous account now, told the phone's time zone (without waiting for it): the planner plans
@@ -143,6 +170,15 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
           <ListRow title="What Cue keeps" onPress={() => navigation.navigate('WhatCueKeeps')} />
           <Action title="Delete all my data" danger busy={deleting} onPress={confirmDelete} />
         </Group>
+
+        {sync.linked ? (
+          <>
+            <SectionHeader title="Account" />
+            <Group>
+              <Action title="Log out" busy={loggingOut} onPress={confirmLogOut} />
+            </Group>
+          </>
+        ) : null}
 
         <SectionHeader title="About" />
         <Group>

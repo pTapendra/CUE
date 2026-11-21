@@ -5,7 +5,7 @@ import { IconButton } from '../../ui/kit';
 import { space, type, useTokens } from '../../ui/tokens';
 
 const POINTS = [
-  { title: 'No name or email', text: 'Cue never asks who you are. Your phone gets an anonymous account, and that is all Cue knows you by.' },
+  { title: 'No name or email', text: "Cue never asks who you are. When you log in with Canvas, Cue keeps a scrambled code for your Canvas account, so it can find your schedule again. It can't turn that code back into your name." },
   {
     title: 'Canvas access stays on the server',
     text: "When you connect Canvas, the access is encrypted on Cue's server. It is never kept on this phone.",
@@ -13,7 +13,7 @@ const POINTS = [
   { title: 'Cue only reads Canvas', text: 'Cue brings in your courses, assignments and exams. It never changes anything in Canvas.' },
   {
     title: 'You can remove it all',
-    text: 'Delete all my data, in Settings, removes your account and everything Cue holds for you.',
+    text: 'Delete all my data, in Settings, removes your account and everything Cue holds for you, on every phone.',
   },
 ];
 

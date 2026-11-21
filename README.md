@@ -79,7 +79,7 @@ The app has three tabs:
 - **Schedule**: the time grid, with **Accept all** for the suggestions on screen.
 - **Courses**: every course with its progress; a course lists its exams (with the study plan for each) and its work.
 
-**Settings** (the gear on Today) has **Sync now**, **Study times**, **What Cue keeps**, **Disconnect Canvas** (the schedule and study plans stay; Cue stops reading Canvas) and **Delete all my data** (removes the account and everything in it from Cue). Both ask first.
+**Settings** (the gear on Today) has **Sync now**, **Study times**, **What Cue keeps**, **Disconnect Canvas** (the schedule and study plans stay; Cue stops reading Canvas) and **Delete all my data** (removes the account and everything in it from Cue, on every phone). Once you have logged in with Canvas, Settings also has **Log out**: this phone forgets the account, your data stays on Cue's server, and it comes back when you log in with Canvas again, on this phone or another. All three ask first.
 
 Students set their study times from **Settings → Study times** in the app. Until they do, Cue uses the defaults (Monday to Friday 18:00 to 22:00, Saturday and Sunday 10:00 to 16:00, at most 3 hours a day).
 

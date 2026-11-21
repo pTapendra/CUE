@@ -46,15 +46,22 @@ const statsBlock: StudyBlock = {
 const HEADLINE = 'Know what to study, and when.';
 
 /** Opens Settings from the gear on Today. */
-async function openSettings({ connected = true, loginAvailable = false, synced = true } = {}) {
+async function openSettings({ connected = true, loginAvailable = false, synced = true, linked = false, failLogout = false } = {}) {
   const server = fakeServer();
+  server.state.linked = linked;
   server.state.connected = connected;
   server.state.loginAvailable = loginAvailable;
   server.state.blocks = [{ ...statsBlock }];
   server.state.lastSyncedAt = synced ? new Date(2026, 10, 2, 8, 48).toISOString() : null;
   const store = memoryStore();
   if (!connected) store.map.set('cue.skippedCanvas', '1');
-  const client = new ApiClient('http://cue.test', store, server.fetchImpl);
+  const fetchImpl = (async (url: string, init?: RequestInit) => {
+    if (failLogout && init?.method === 'DELETE' && new URL(url).pathname === '/api/device') {
+      return new Response(JSON.stringify({ error: 'server_error', message: 'x' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+    return server.fetchImpl(url, init);
+  }) as unknown as typeof fetch;
+  const client = new ApiClient('http://cue.test', store, fetchImpl);
   await act(async () => {
     tree = ReactTestRenderer.create(<App client={client} />);
   });
@@ -176,9 +183,74 @@ describe('Settings', () => {
     await flush();
     const shown = texts(root).join(' ');
     expect(shown).toContain('No name or email');
+    expect(shown).toContain(
+      "Cue never asks who you are. When you log in with Canvas, Cue keeps a scrambled code for your Canvas account, so it can find your schedule again. It can't turn that code back into your name.",
+    );
     expect(shown).toContain('encrypted on Cue');
     expect(shown).toContain('only reads Canvas');
-    expect(shown).toContain('Delete all my data');
+    expect(shown).toContain('Delete all my data, in Settings, removes your account and everything Cue holds for you, on every phone.');
+  });
+
+  describe('Log out', () => {
+    it('shows Log out only for an account linked to Canvas', async () => {
+      const unlinked = await openSettings({ linked: false });
+      expect(texts(unlinked.root)).not.toContain('Log out');
+      await act(async () => {
+        tree?.unmount();
+      });
+      const { root } = await openSettings({ linked: true });
+      const all = texts(root);
+      expect(all).toContain('Log out');
+      expect(all.indexOf('Log out')).toBeGreaterThan(all.indexOf('Delete all my data'));
+      expect(all.indexOf('Log out')).toBeLessThan(all.indexOf('About'));
+    });
+
+    it('asks first, then returns to Welcome with a new anonymous account', async () => {
+      const { server, store, root } = await openSettings({ linked: true });
+      store.map.set('cue.skippedCanvas', '1');
+      await press(root, 'Log out');
+      expect(alert).toHaveBeenCalledWith(
+        'Log out of Cue?',
+        'Your schedule and study plans stay saved. Log in with Canvas to get them back, on this phone or another.',
+        [expect.objectContaining({ text: 'Log out' }), expect.objectContaining({ text: 'Cancel' })],
+      );
+      expect(calls(server, 'DELETE', '/api/device')).toHaveLength(0);
+
+      await chooseInAlert('Log out');
+      expect(calls(server, 'DELETE', '/api/device')).toHaveLength(1);
+      expect(store.map.get('cue.deviceToken')).toBe('device-2');
+      expect(store.map.has('cue.skippedCanvas')).toBe(false);
+      expect(texts(root)).toContain(HEADLINE);
+    });
+
+    it('treats a 401 as logged out', async () => {
+      const { server, store, root } = await openSettings({ linked: true });
+      server.state.logoutUnauthorized = true;
+      await press(root, 'Log out');
+      await chooseInAlert('Log out');
+      expect(store.map.get('cue.deviceToken')).toBe('device-2');
+      expect(texts(root)).toContain(HEADLINE);
+    });
+
+    it('shows the error and stays when the server fails', async () => {
+      const { store, root } = await openSettings({ linked: true, failLogout: true });
+      await press(root, 'Log out');
+      await chooseInAlert('Log out');
+      expect(root.findAll((n) => n.props.accessibilityRole === 'alert').length).toBeGreaterThan(0);
+      expect(texts(root)).toContain('Log out');
+      expect(texts(root)).not.toContain(HEADLINE);
+      expect(store.map.get('cue.deviceToken')).toBe('device-1');
+      expect(isDisabled(root, 'Log out')).toBe(false);
+    });
+
+    it('Cancel keeps you logged in', async () => {
+      const { server, store, root } = await openSettings({ linked: true });
+      await press(root, 'Log out');
+      await chooseInAlert('Cancel');
+      expect(calls(server, 'DELETE', '/api/device')).toHaveLength(0);
+      expect(store.map.get('cue.deviceToken')).toBe('device-1');
+      expect(texts(root)).toContain('Log out');
+    });
   });
 
   describe('Disconnect Canvas', () => {
@@ -259,7 +331,7 @@ describe('Settings', () => {
       await press(root, 'Delete all my data');
       expect(alert).toHaveBeenCalledWith(
         'Delete all your data?',
-        expect.stringContaining("can't be undone"),
+        "Your schedule, courses and study plans are removed from Cue, on every phone. This can't be undone.",
         expect.arrayContaining([
           expect.objectContaining({ text: 'Delete everything', style: 'destructive' }),
           expect.objectContaining({ text: 'Cancel' }),

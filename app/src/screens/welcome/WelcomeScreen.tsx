@@ -85,7 +85,7 @@ export function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>) {
           )}
           <Button title="Skip for now · add dates by hand" variant="plain" onPress={skip} />
           <Text style={[type.meta, styles.footnote, { color: colors.text2 }]}>
-            No name or email needed. Your Canvas access stays on Cue's server, not this phone.
+            No name or email needed. Your Canvas login is your Cue account; your Canvas access stays on Cue's server.
           </Text>
         </View>
       </ScrollView>
