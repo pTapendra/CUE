@@ -569,10 +569,12 @@ expose_with_ngrok() {
 CUE_SCOPES="url:GET|/api/v1/courses url:GET|/api/v1/courses/:course_id/assignments url:GET|/api/v1/calendar_events"
 
 # Run by rails runner in Canvas's web container. Reuses the key named Cue on the
-# root account (deleted keys don't count), keeps Canvas's default of expiring
-# tokens, and turns the key on for the root account. Prints its id and secret.
+# root account (deleted keys don't count; a deactivated one is made active
+# again), keeps Canvas's default of expiring tokens, and turns the key on for
+# the root account. Prints its id and secret.
 CUE_KEY_RUBY='
 key = DeveloperKey.nondeleted.find_or_initialize_by(name: "Cue", account: Account.default)
+key.workflow_state = "active"
 key.require_scopes = true
 key.scopes = %w['"$CUE_SCOPES"']
 key.save!
@@ -617,14 +619,15 @@ env_set() { # file key value
   return "$status"
 }
 
-# Creates server/.env from server/.env.example if there isn't one, and gives it
-# a CUE_SECRET_KEY (32 random bytes, base64) if it has none, so saved Canvas
-# tokens stay readable after Cue's server restarts.
+# Creates server/.env from server/.env.example if there isn't one, readable by
+# this user only since it holds secrets, and gives it a CUE_SECRET_KEY (32
+# random bytes, base64) if it has none, so saved Canvas tokens stay readable
+# after Cue's server restarts. An existing file's permissions are left alone.
 ensure_server_env() {
   local file key
   file="$(server_env_file)"
   if [ ! -f "$file" ]; then
-    cp "$(repo_dir)/server/.env.example" "$file" || return 1
+    cp "$(repo_dir)/server/.env.example" "$file" && chmod 600 "$file" || return 1
   fi
   [ -n "$(env_get "$file" CUE_SECRET_KEY)" ] && return 0
   key="$(openssl rand -base64 32)" && [ -n "$key" ] || return 1

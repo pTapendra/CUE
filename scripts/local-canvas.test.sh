@@ -610,8 +610,14 @@ test_ensure_server_env_creates_the_file_with_a_secret_key() {
   key="$(env_get "$CUE_SERVER_ENV" CUE_SECRET_KEY)"
   assert_eq "32 bytes" "32" "$(printf '%s' "$key" | base64 -D | wc -c | tr -d ' ')"
   assert_eq "prints nothing" "" "$(cat "$T/out")"
+  assert_eq "only this user can read it" "600" "$(stat -f %Lp "$CUE_SERVER_ENV")"
   ensure_server_env
   assert_eq "keeps an existing key" "$key" "$(env_get "$CUE_SERVER_ENV" CUE_SECRET_KEY)"
+  printf 'PORT=3000\nCUE_SECRET_KEY=\n' >"$T/own.env"
+  chmod 644 "$T/own.env"
+  CUE_SERVER_ENV="$T/own.env" ensure_server_env
+  assert_true "fills in an empty key" test -n "$(env_get "$T/own.env" CUE_SECRET_KEY)"
+  assert_eq "leaves an existing file's mode alone" "644" "$(stat -f %Lp "$T/own.env")"
 }
 
 test_cue_key_known() {
@@ -638,6 +644,7 @@ test_ensure_cue_login_writes_settings_and_never_prints_the_secret() {
   assert_contains "scope: courses" "url:GET|/api/v1/courses " "$log"
   assert_contains "scope: assignments" "url:GET|/api/v1/courses/:course_id/assignments" "$log"
   assert_contains "scope: calendar events" "url:GET|/api/v1/calendar_events" "$log"
+  assert_contains "makes a deactivated key active again" 'key.workflow_state = "active"' "$log"
   assert_contains "says what it does" "Setting up Canvas login for Cue (about a minute)..." "$(cat "$T/out")"
   assert_contains "says to restart" "Restart Cue's server so it picks up Canvas login." "$(cat "$T/out")"
   case "$(cat "$T/out")" in *s3cr*) assert_eq "secret not printed" "hidden" "printed" ;; esac
