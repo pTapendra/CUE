@@ -32,6 +32,23 @@ describe("UC2: view and edit the schedule", () => {
     expect(week.undated.map((i: { title: string }) => i.title)).toEqual(["Exam, date unknown"]);
   });
 
+  it("a page can end at a given instant, so a day when the clocks go back fits", async () => {
+    const { newStudent } = setup();
+    const s = await newStudent();
+    await s.post("/api/items", { title: "Due Mon 23:59", kind: "assignment", dueAt: "2026-11-03T05:59:00Z" }).expect(201);
+
+    // Sat 31 Oct to Mon 2 Nov in Chicago: the clocks go back on Sunday, so these three days last 73 hours.
+    const page = (await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&to=2026-11-03T06:00:00Z").expect(200)).body;
+    expect(page.to).toBe("2026-11-03T06:00:00.000Z");
+    expect(page.items.map((i: { title: string }) => i.title)).toEqual(["Due Mon 23:59"]);
+
+    const byDays = (await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&days=3").expect(200)).body;
+    expect(byDays.to).toBe("2026-11-03T05:00:00.000Z");
+    expect(byDays.items).toEqual([]);
+    await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&to=2026-10-30T05:00:00Z").expect(400);
+    await s.get("/api/schedule/week?from=2026-10-31T05:00:00Z&to=2026-12-31T05:00:00Z").expect(400);
+  });
+
   it("edits an item and sets each of the four statuses", async () => {
     const { newStudent } = setup();
     const s = await newStudent();
@@ -62,6 +79,23 @@ describe("UC2: view and edit the schedule", () => {
     expect(res.body.error).toBe("invalid_request");
     await s.get("/api/schedule/week?from=yesterday").expect(400);
     await s.post("/api/items", { title: "X", kind: "exam", dueAt: null, courseId: "00000000-0000-4000-8000-000000000000" }).expect(404);
+  });
+
+  it("refuses an end that is not after the start", async () => {
+    const { newStudent } = setup();
+    const s = await newStudent();
+    const start = "2026-11-03T15:00:00Z";
+    for (const endsAt of [start, "2026-11-03T14:00:00Z"]) {
+      const res = await s.post("/api/items", { title: "Lab", kind: "event", dueAt: start, endsAt }).expect(400);
+      expect(res.body).toEqual({ error: "invalid_request", message: "endsAt: must be after dueAt" });
+    }
+    const lab = (await s.post("/api/items", { title: "Lab", kind: "event", dueAt: start, endsAt: "2026-11-03T16:00:00Z" }).expect(201)).body;
+
+    // Only the end changes: it is compared with the saved start.
+    await s.patch(`/api/items/${lab.id}`, { endsAt: "2026-11-03T15:00:00Z" }).expect(400);
+    await s.patch(`/api/items/${lab.id}`, { dueAt: "2026-11-03T17:00:00Z", endsAt: "2026-11-03T16:30:00Z" }).expect(400);
+    await s.patch(`/api/items/${lab.id}`, { endsAt: "2026-11-03T15:30:00Z" }).expect(200);
+    await s.patch(`/api/items/${lab.id}`, { endsAt: null }).expect(200);
   });
 
   it("deleting the account removes all of the student's data", async () => {

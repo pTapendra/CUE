@@ -9,6 +9,9 @@ export interface Item {
   kind: ItemKind;
   title: string;
   dueAt: string | null;
+  endsAt: string | null;
+  allDay: boolean;
+  studyMinutes: number | null;
   status: ItemStatus;
 }
 
@@ -24,12 +27,59 @@ export interface Week {
   to: string;
   items: Item[];
   undated: Item[];
+  blocks: StudyBlock[];
+  shortfalls: Shortfall[];
+}
+
+export interface StudyBlock {
+  id: string;
+  itemId: string;
+  itemTitle: string;
+  itemKind: ItemKind;
+  courseName: string | null;
+  itemDueAt: string | null;
+  /** The item's study time in minutes: its own amount, else the default for its kind. */
+  itemStudyMinutes: number;
+  startsAt: string;
+  endsAt: string;
+  state: 'proposed' | 'accepted';
+  index: number;
+  total: number;
+  clash: { title: string; startsAt: string; endsAt: string } | null;
+}
+
+export interface Shortfall {
+  itemId: string;
+  itemTitle: string;
+  dueAt: string;
+  neededMinutes: number;
+  plannedMinutes: number;
+}
+
+export interface StudyWindow {
+  weekday: number;
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+export interface PlannerSettings {
+  timeZone: string | null;
+  dailyLimitMinutes: number;
+  windows: StudyWindow[];
 }
 
 export interface ConnectionStatus {
   connected: boolean;
   baseUrl: string | null;
   lastSyncedAt: string | null;
+  /** True when the server is set up for Log in with Canvas. */
+  loginAvailable: boolean;
+}
+
+export interface CanvasLoginStart {
+  authorizeUrl: string;
+  state: string;
 }
 
 export interface ProposedItem {
@@ -52,4 +102,6 @@ export interface ItemInput {
   kind: ItemKind;
   dueAt: string | null;
   courseId?: string | null;
+  endsAt?: string | null;
+  studyMinutes?: number;
 }

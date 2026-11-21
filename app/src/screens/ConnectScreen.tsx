@@ -1,20 +1,49 @@
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CanvasLoginScreen } from './CanvasLoginScreen';
 import { Button, ErrorBanner, Field } from '../ui/components';
 import { useTheme } from '../ui/theme';
+import { useCanvasLogin } from '../viewmodels/useCanvasLogin';
 import { useConnectCanvas } from '../viewmodels/useConnectCanvas';
 
 export function ConnectScreen({
   initialUrl,
+  loginAvailable,
   onConnected,
   onSkip,
 }: {
   initialUrl?: string | null;
+  loginAvailable: boolean;
   onConnected: () => void;
   onSkip: () => void;
 }) {
   const t = useTheme();
   const vm = useConnectCanvas(initialUrl ?? '');
+  const login = useCanvasLogin(onConnected);
+
+  if (loginAvailable) {
+    return (
+      <ScrollView contentContainerStyle={styles.body}>
+        <Text style={[styles.title, { color: t.text }]}>Connect Canvas</Text>
+        <Text style={{ color: t.muted, lineHeight: 20 }}>
+          Log in with your Canvas account. Cue only reads your courses and deadlines.
+        </Text>
+        <ErrorBanner message={login.error} />
+        <View style={styles.actions}>
+          <Button title="Log in with Canvas" busy={login.busy && !login.authorizeUrl} onPress={login.start} />
+          <Button title="Skip – I'll add dates by hand" variant="secondary" onPress={onSkip} />
+        </View>
+        {login.authorizeUrl ? (
+          <CanvasLoginScreen
+            authorizeUrl={login.authorizeUrl}
+            busy={login.busy}
+            onNavigate={login.onNavigate}
+            onCancel={login.cancel}
+          />
+        ) : null}
+      </ScrollView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

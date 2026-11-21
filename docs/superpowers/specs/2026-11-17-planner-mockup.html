@@ -1,0 +1,213 @@
+<style>
+  .phones { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
+  .ph { width: 300px; height: 610px; border: 10px solid #1e1e2a; border-radius: 38px; background: #F7F7FB;
+        overflow: hidden; display: flex; flex-direction: column; position: relative;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1E1E2A; font-size: 13px; text-align: left; }
+  .ph * { box-sizing: border-box; }
+  .ph-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 10px;
+             border-bottom: 1px solid #E2E2EA; font-weight: 700; font-size: 15px; }
+  .ph-head .arr { color: #5B4BC4; font-size: 22px; line-height: 1; }
+  .ph-body { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .ph-foot { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #E2E2EA; background: #F7F7FB; }
+  .btn { flex: 1; text-align: center; border: 1px solid #5B4BC4; border-radius: 8px; padding: 8px 6px; font-weight: 600; color: #5B4BC4; background: transparent; }
+  .btn.fill { background: #5B4BC4; color: #fff; }
+  .btn.small { flex: 0 0 auto; padding: 5px 10px; font-size: 12px; }
+  .day { background: #fff; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .day h4 { margin: 0; font-size: 14px; }
+  .item { border: 1px solid #E2E2EA; border-left: 4px solid #E2E2EA; border-radius: 8px; padding: 7px 8px; background: #fff; }
+  .item.exam { border-color: #B4235A; }
+  .item.event { background: #F3F3F6; border-left-color: #B9B9C6; }
+  .item b, .blk b { display: block; font-weight: 600; }
+  .sub { color: #6B6B7B; font-size: 11.5px; }
+  .blk { border: 1.5px dashed #5B4BC4; border-radius: 8px; padding: 6px 8px; display: flex; align-items: center; gap: 6px; background: #F1EFFC; }
+  .blk .txt { flex: 1; }
+  .blk.ok { border-style: solid; background: #5B4BC4; color: #fff; }
+  .blk.ok .sub { color: #E4E0FF; }
+  .acts { display: flex; gap: 4px; }
+  .acts span { width: 24px; height: 24px; border-radius: 12px; border: 1px solid #5B4BC4; display: flex; align-items: center;
+               justify-content: center; color: #5B4BC4; background: #fff; font-weight: 700; font-size: 12px; }
+  .warn { background: #FBE8EF; color: #B4235A; border-radius: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.35; }
+  .bar { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 10px; padding: 7px 10px; }
+  .legend { display: flex; gap: 12px; font-size: 11px; color: #6B6B7B; padding: 0 2px; }
+  .legend i { display: inline-block; width: 12px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  /* time grid */
+  .grid-wrap { background: #fff; border-radius: 12px; padding: 8px 8px 10px; }
+  .grid-days { display: grid; grid-template-columns: 36px repeat(3, 1fr); gap: 4px; font-weight: 700; font-size: 12px; text-align: center; }
+  .due-row { display: grid; grid-template-columns: 36px repeat(3, 1fr); gap: 4px; margin: 4px 0 6px; min-height: 22px; }
+  .due { background: #fff; border: 1px solid #1E1E2A; border-left-width: 3px; border-radius: 5px; font-size: 10px; padding: 2px 4px; text-align: left; }
+  .grid { display: grid; grid-template-columns: 36px repeat(3, 1fr); gap: 4px; }
+  .hours { position: relative; height: 200px; font-size: 10px; color: #6B6B7B; }
+  .hours div { position: absolute; right: 2px; transform: translateY(-50%); }
+  .col { position: relative; height: 200px; background: repeating-linear-gradient(#fff 0 49px, #ECECF2 49px 50px); border-radius: 6px; }
+  .g { position: absolute; left: 2px; right: 2px; border-radius: 6px; padding: 3px 4px; font-size: 10px; line-height: 1.2; overflow: hidden; }
+  .g.p { border: 1.5px dashed #5B4BC4; background: #F1EFFC; color: #3d3290; }
+  .g.ok { background: #5B4BC4; color: #fff; }
+  .g.ev { background: #E6E6EC; color: #55556a; }
+  .swipe { text-align: right; font-size: 11px; color: #5B4BC4; margin-top: 6px; }
+  /* settings + sheet */
+  .row { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 10px; padding: 9px 10px; }
+  .tog { width: 34px; height: 20px; border-radius: 10px; background: #5B4BC4; position: relative; }
+  .tog::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 8px; background: #fff; }
+  .tog.off { background: #CFCFDA; }
+  .tog.off::after { right: auto; left: 2px; }
+  .step { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .step span { width: 26px; height: 26px; border: 1px solid #5B4BC4; border-radius: 13px; display: flex; align-items: center; justify-content: center; color: #5B4BC4; }
+  .dim { position: absolute; inset: 0; background: rgba(20,20,30,.45); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 18px 18px 0 0; padding: 14px 16px 18px;
+           display: flex; flex-direction: column; gap: 10px; }
+  .grab { width: 40px; height: 4px; border-radius: 2px; background: #D5D5DE; align-self: center; }
+  .caption { text-align: center; font-size: 13px; margin-top: 10px; color: var(--text-secondary, #666); max-width: 300px; }
+  .caption b { color: var(--text-primary, #222); }
+</style>
+
+<h2>Study blocks in Cue: first look</h2>
+<p class="subtitle">Example week: SQL homework due Wed 11:59 pm, Stats midterm Thu 9 am, DB final next Mon. Study times are weekdays 6–10 pm, and there's a Canvas study group Wed 8–9 pm.</p>
+
+<h3>1. How should the week show study blocks? (click A or B)</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Day list: today's Week screen, with blocks added</h3>
+      <p>Each day card lists its study blocks by time, then its deadlines. Dashed = suggested (tap ✓ or ✕), filled = accepted. Easy to read on a phone; keeps the screen you already have.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Time grid: a calendar, three days at a time</h3>
+      <p>Hours down the side, blocks drawn at their times, deadlines along the top. Shows free time and clashes at a glance, but only three days fit, and it's a new screen to build.</p>
+    </div>
+  </div>
+</div>
+
+<div class="phones" style="margin-top:18px">
+  <!-- A: day list -->
+  <div>
+    <div class="ph">
+      <div class="ph-head"><span class="arr">‹</span><span>30 Nov – 6 Dec</span><span class="arr">›</span></div>
+      <div class="ph-body">
+        <div class="warn"><b>DB final: 5 of 6 hours fit</b> before Mon 7 Dec. Add study times or lower the hours.</div>
+        <div class="bar"><span><b>7 suggested blocks</b></span><span class="btn fill small">Accept all</span></div>
+        <div class="legend"><span><i style="border:1.5px dashed #5B4BC4;background:#F1EFFC"></i>Suggested</span><span><i style="background:#5B4BC4"></i>Accepted</span></div>
+
+        <div class="day">
+          <h4>Mon 30 Nov</h4>
+          <div class="blk"><div class="txt"><b>6–7 pm · Study: SQL homework</b><span class="sub">Databases · 1 of 2</span></div><div class="acts"><span>✓</span><span>✕</span></div></div>
+          <div class="blk ok"><div class="txt"><b>7–8 pm · Study: Stats midterm</b><span class="sub">Statistics · 1 of 6 · Accepted</span></div></div>
+          <div class="blk"><div class="txt"><b>8–9 pm · Study: DB final</b><span class="sub">Databases · 1 of 6</span></div><div class="acts"><span>✓</span><span>✕</span></div></div>
+        </div>
+
+        <div class="day">
+          <h4>Tue 1 Dec · Today</h4>
+          <div class="blk"><div class="txt"><b>6–7 pm · Study: SQL homework</b><span class="sub">Databases · 2 of 2</span></div><div class="acts"><span>✓</span><span>✕</span></div></div>
+          <div class="blk"><div class="txt"><b>7–8 pm · Study: Stats midterm</b><span class="sub">Statistics · 2 of 6</span></div><div class="acts"><span>✓</span><span>✕</span></div></div>
+          <div class="blk"><div class="txt"><b>8–9 pm · Study: DB final</b><span class="sub">Databases · 2 of 6</span></div><div class="acts"><span>✓</span><span>✕</span></div></div>
+        </div>
+
+        <div class="day">
+          <h4>Wed 2 Dec</h4>
+          <div class="blk"><div class="txt"><b>6–7 pm · Study: Stats midterm</b><span class="sub">Statistics · 3 of 6</span></div><div class="acts"><span>✓</span><span>✕</span></div></div>
+          <div class="blk"><div class="txt"><b>7–8 pm · Study: DB final</b><span class="sub">Databases · 3 of 6</span></div><div class="acts"><span>✓</span><span>✕</span></div></div>
+          <div class="item event"><b>Study group</b><span class="sub">Canvas event · 8–9 pm</span></div>
+          <div class="item"><b>SQL homework</b><span class="sub">Databases · due 11:59 pm</span></div>
+        </div>
+
+        <div class="day">
+          <h4>Thu 3 Dec</h4>
+          <div class="item exam"><b>Exam: Stats midterm</b><span class="sub">Statistics · 9:00 am</span></div>
+        </div>
+      </div>
+      <div class="ph-foot"><span class="btn fill">Add</span><span class="btn">Sync Canvas</span><span class="btn" style="flex:0 0 40px">⚙</span></div>
+    </div>
+    <p class="caption"><b>A · Day list</b></p>
+  </div>
+
+  <!-- B: time grid -->
+  <div>
+    <div class="ph">
+      <div class="ph-head"><span class="arr">‹</span><span>Mon 30 Nov – Wed 2 Dec</span><span class="arr">›</span></div>
+      <div class="ph-body">
+        <div class="warn"><b>DB final: 5 of 6 hours fit</b> before Mon 7 Dec. Add study times or lower the hours.</div>
+        <div class="bar"><span><b>7 suggested blocks</b></span><span class="btn fill small">Accept all</span></div>
+        <div class="grid-wrap">
+          <div class="grid-days"><span></span><span>Mon 30</span><span style="color:#5B4BC4">Tue 1</span><span>Wed 2</span></div>
+          <div class="due-row"><span></span><span></span><span></span><span class="due">SQL hw due 11:59 pm</span></div>
+          <div class="grid">
+            <div class="hours"><div style="top:0">6 pm</div><div style="top:50px">7 pm</div><div style="top:100px">8 pm</div><div style="top:150px">9 pm</div><div style="top:199px">10</div></div>
+            <div class="col">
+              <div class="g p" style="top:1px;height:47px">SQL homework<br>1 of 2</div>
+              <div class="g ok" style="top:51px;height:47px">Stats midterm<br>1 of 6 ✓</div>
+              <div class="g p" style="top:101px;height:47px">DB final<br>1 of 6</div>
+            </div>
+            <div class="col">
+              <div class="g p" style="top:1px;height:47px">SQL homework<br>2 of 2</div>
+              <div class="g p" style="top:51px;height:47px">Stats midterm<br>2 of 6</div>
+              <div class="g p" style="top:101px;height:47px">DB final<br>2 of 6</div>
+            </div>
+            <div class="col">
+              <div class="g p" style="top:1px;height:47px">Stats midterm<br>3 of 6</div>
+              <div class="g p" style="top:51px;height:47px">DB final<br>3 of 6</div>
+              <div class="g ev" style="top:101px;height:47px">Study group<br>Canvas event</div>
+            </div>
+          </div>
+          <div class="swipe">Swipe for Thu – Sat ›</div>
+        </div>
+        <div class="legend"><span><i style="border:1.5px dashed #5B4BC4;background:#F1EFFC"></i>Suggested</span><span><i style="background:#5B4BC4"></i>Accepted</span><span><i style="background:#E6E6EC"></i>Busy</span></div>
+        <p class="sub" style="margin:0">Tap a block to accept, move or reject it.</p>
+      </div>
+      <div class="ph-foot"><span class="btn fill">Add</span><span class="btn">Sync Canvas</span><span class="btn" style="flex:0 0 40px">⚙</span></div>
+    </div>
+    <p class="caption"><b>B · Time grid</b></p>
+  </div>
+</div>
+
+<h3 style="margin-top:34px">2. The rest of the flow (same for A or B)</h3>
+<p class="subtitle">Left: the student sets study times once (from ⚙). Right: tapping a block opens this sheet.</p>
+
+<div class="phones" style="margin-top:12px">
+  <div>
+    <div class="ph">
+      <div class="ph-head"><span class="arr">‹</span><span>Study times</span><span style="width:14px"></span></div>
+      <div class="ph-body">
+        <p class="sub" style="margin:2px 2px 4px;font-size:12.5px">Cue only suggests study blocks inside these times, and never on top of your Canvas events.</p>
+        <div class="row"><span><b>Mon</b>&nbsp; 6:00 pm – 10:00 pm</span><span class="tog"></span></div>
+        <div class="row"><span><b>Tue</b>&nbsp; 6:00 pm – 10:00 pm</span><span class="tog"></span></div>
+        <div class="row"><span><b>Wed</b>&nbsp; 6:00 pm – 10:00 pm</span><span class="tog"></span></div>
+        <div class="row"><span><b>Thu</b>&nbsp; 6:00 pm – 10:00 pm</span><span class="tog"></span></div>
+        <div class="row"><span><b>Fri</b>&nbsp; 6:00 pm – 10:00 pm</span><span class="tog off"></span></div>
+        <div class="row"><span><b>Sat</b>&nbsp; 10:00 am – 4:00 pm</span><span class="tog"></span></div>
+        <div class="row"><span><b>Sun</b>&nbsp; 10:00 am – 4:00 pm</span><span class="tog"></span></div>
+        <div class="row"><span>Most study in one day</span><span class="step"><span>–</span>3 h<span>+</span></span></div>
+        <p class="sub" style="margin:2px">Time zone: Central Time (from your phone)</p>
+      </div>
+      <div class="ph-foot"><span class="btn fill">Save and plan</span></div>
+    </div>
+    <p class="caption"><b>Study times</b> · Fri is switched off here</p>
+  </div>
+
+  <div>
+    <div class="ph">
+      <div class="ph-head"><span class="arr">‹</span><span>30 Nov – 6 Dec</span><span class="arr">›</span></div>
+      <div class="ph-body">
+        <div class="day"><h4>Tue 1 Dec · Today</h4>
+          <div class="blk"><div class="txt"><b>6–7 pm · Study: SQL homework</b><span class="sub">Databases · 2 of 2</span></div></div>
+          <div class="blk"><div class="txt"><b>7–8 pm · Study: Stats midterm</b><span class="sub">Statistics · 2 of 6</span></div></div>
+        </div>
+      </div>
+      <div class="dim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div><b style="font-size:16px">Study: Stats midterm</b><div class="sub" style="font-size:12.5px;margin-top:2px">Tue 1 Dec · 7:00–8:00 pm</div></div>
+        <div class="sub" style="font-size:12.5px">Block 2 of 6 before the exam on Thu 3 Dec, 9:00 am.</div>
+        <span class="btn fill">Accept</span>
+        <span class="btn">Move to another time</span>
+        <span class="btn">Not this time</span>
+        <div style="border-top:1px solid #E2E2EA;padding-top:10px" class="row">
+          <span>Study time for this exam</span><span class="step"><span>–</span>6 h<span>+</span></span>
+        </div>
+      </div>
+    </div>
+    <p class="caption"><b>Block sheet</b> · "Not this time" asks Cue for another slot</p>
+  </div>
+</div>

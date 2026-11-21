@@ -6,12 +6,14 @@ import { ApiProvider } from './src/api/ApiContext';
 import { ApiClient, friendlyMessage } from './src/api/client';
 import { SERVER_URL } from './src/config';
 import { ConnectScreen } from './src/screens/ConnectScreen';
+import { StudyTimesScreen } from './src/screens/StudyTimesScreen';
 import { ReviewScreen } from './src/screens/ReviewScreen';
 import { WeekScreen } from './src/screens/WeekScreen';
+import { syncTimeZone } from './src/timeZone';
 import { Button } from './src/ui/components';
 import { useTheme } from './src/ui/theme';
 
-type Screen = 'loading' | 'connect' | 'review' | 'week';
+type Screen = 'loading' | 'connect' | 'review' | 'week' | 'studyTimes';
 
 export default function App({ client }: { client?: ApiClient }) {
   const api = useMemo(() => client ?? new ApiClient(SERVER_URL, AsyncStorage), [client]);
@@ -29,6 +31,7 @@ function Root({ api }: { api: ApiClient }) {
   const scheme = useColorScheme();
   const [screen, setScreen] = useState<Screen>('loading');
   const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
+  const [loginAvailable, setLoginAvailable] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -37,9 +40,11 @@ function Root({ api }: { api: ApiClient }) {
     (async () => {
       try {
         await api.ensureAccount();
+        syncTimeZone(api); // not awaited: a slow server never holds up startup (and it never fails)
         const status = await api.getConnection();
         if (cancelled) return;
         setCanvasUrl(status.baseUrl);
+        setLoginAvailable(status.loginAvailable);
         setScreen(status.connected ? 'week' : 'connect');
       } catch (err) {
         if (!cancelled) setStartError(friendlyMessage(err));
@@ -62,7 +67,7 @@ function Root({ api }: { api: ApiClient }) {
                 title="Try again"
                 onPress={() => {
                   setStartError(null);
-                  setAttempt((a) => a + 1);
+                  setAttempt(a => a + 1);
                 }}
               />
             </>
@@ -72,11 +77,30 @@ function Root({ api }: { api: ApiClient }) {
         </View>
       ) : null}
       {screen === 'connect' ? (
-        <ConnectScreen initialUrl={canvasUrl} onConnected={() => setScreen('review')} onSkip={() => setScreen('week')} />
+        <ConnectScreen
+          initialUrl={canvasUrl}
+          loginAvailable={loginAvailable}
+          onConnected={() => setScreen('review')}
+          onSkip={() => setScreen('week')}
+        />
       ) : null}
-      {screen === 'review' ? <ReviewScreen onDone={() => setScreen('week')} onCancel={() => setScreen('week')} /> : null}
+      {screen === 'review' ? (
+        <ReviewScreen
+          onDone={() => setScreen('week')}
+          onCancel={() => setScreen('week')}
+          loginAvailable={loginAvailable}
+          onConnect={() => setScreen('connect')}
+        />
+      ) : null}
       {screen === 'week' ? (
-        <WeekScreen onSync={() => setScreen('review')} onCanvasSettings={() => setScreen('connect')} />
+        <WeekScreen
+          onSync={() => setScreen('review')}
+          onCanvasSettings={() => setScreen('connect')}
+          onStudyTimes={() => setScreen('studyTimes')}
+        />
+      ) : null}
+      {screen === 'studyTimes' ? (
+        <StudyTimesScreen onDone={() => setScreen('week')} onCancel={() => setScreen('week')} />
       ) : null}
     </SafeAreaView>
   );
@@ -84,5 +108,10 @@ function Root({ api }: { api: ApiClient }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
 });

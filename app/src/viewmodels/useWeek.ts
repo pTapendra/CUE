@@ -1,32 +1,41 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
-import type { Course, Item, ItemInput, ItemStatus, Week } from '../api/types';
-import { addDays, sameDay, startOfWeek } from '../dates';
+import type { Course, ItemInput, ItemStatus, Shortfall, StudyBlock, StudyWindow, Week } from '../api/types';
+import { addDays, dayLabel, fromInput, startOfDay } from '../dates';
+import { syncTimeZone } from '../timeZone';
+import { gridRange, timedEventsFor } from './grid';
 
-export interface DayGroup {
-  date: Date;
-  items: Item[];
+/** Days the grid shows at once; the arrows move by this many. */
+export const DAYS_PER_PAGE = 3;
+
+/** "DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours." */
+function shortfallText(s: Shortfall): string {
+  const fit = `${s.plannedMinutes / 60} of ${s.neededMinutes / 60} hours fit`;
+  return `${s.itemTitle}: ${fit} before ${dayLabel(new Date(s.dueAt))}. Add study times or lower the hours.`;
 }
 
-/** Splits a week's items into seven days, Monday first. Empty days are kept. */
-export function groupByDay(items: Item[], from: Date): DayGroup[] {
-  const days: DayGroup[] = Array.from({ length: 7 }, (_, i) => ({ date: addDays(from, i), items: [] }));
-  for (const item of items) {
-    if (!item.dueAt) continue;
-    const due = new Date(item.dueAt);
-    const day = days.find((d) => sameDay(d.date, due));
-    if (day) day.items.push(item);
-  }
-  return days;
+/**
+ * The open block as the latest load has it. A re-plan gives suggestions new ids, so look for
+ * the same id, else the same item's block at the same start; else keep the block as it was opened.
+ */
+function findOpenBlock(opened: StudyBlock, blocks: StudyBlock[]): StudyBlock {
+  return (
+    blocks.find((b) => b.id === opened.id) ??
+    blocks.find((b) => b.itemId === opened.itemId && b.startsAt === opened.startsAt) ??
+    opened
+  );
 }
 
-/** View model for the weekly view (UC2). */
+/** View model for the Week screen: a time grid of a few days with study blocks (UC2). */
 export function useWeek(today: Date = new Date()) {
   const api = useApi();
-  const [from, setFrom] = useState(() => startOfWeek(today));
+  const [from, setFrom] = useState(() => startOfDay(today));
   const [week, setWeek] = useState<Week | null>(null);
+  const [windows, setWindows] = useState<StudyWindow[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [opened, setOpened] = useState<StudyBlock | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,9 +43,15 @@ export function useWeek(today: Date = new Date()) {
     setLoading(true);
     setError(null);
     try {
-      const [w, c] = await Promise.all([api.getWeek(from), api.listCourses()]);
+      const [w, c, s] = await Promise.all([
+        // Up to local midnight after the last day: a page over a clock change is not 72 hours.
+        api.getWeek(from, addDays(from, DAYS_PER_PAGE)),
+        api.listCourses(),
+        api.getPlannerSettings(),
+      ]);
       setWeek(w);
       setCourses(c.courses);
+      setWindows(s.windows);
     } catch (err) {
       setError(friendlyMessage(err));
     } finally {
@@ -48,7 +63,19 @@ export function useWeek(today: Date = new Date()) {
     load();
   }, [load]);
 
-  /** Runs a change, then reloads the week. Returns false and shows the error if it fails. */
+  // The phone may be in another time zone when the student comes back to the app.
+  // When the server gets a new zone it re-plans, so load the week again.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      syncTimeZone(api).then((changed) => {
+        if (changed) load();
+      });
+    });
+    return () => subscription.remove();
+  }, [api, load]);
+
+  /** Runs a change, then reloads the week. If it fails, reloads anyway and then shows the error; returns false. */
   async function mutate(action: () => Promise<unknown>): Promise<boolean> {
     setError(null);
     try {
@@ -56,22 +83,64 @@ export function useWeek(today: Date = new Date()) {
       await load();
       return true;
     } catch (err) {
+      // load() clears the error, so show this one once the reload has finished.
+      await load();
       setError(friendlyMessage(err));
       return false;
     }
   }
 
+  /** Moves a block to a typed local start time, such as "2026-11-06 14:00". */
+  async function moveBlock(id: string, text: string): Promise<boolean> {
+    const startsAt = fromInput(text);
+    if (!startsAt) {
+      setError('Use the form 2026-11-06 14:00');
+      return false;
+    }
+    return mutate(() => api.moveBlock(id, startsAt));
+  }
+
+  /** Saves the item's study time. The open block keeps the new amount even if the re-plan moved it away. */
+  async function setStudyHours(itemId: string, hours: number): Promise<boolean> {
+    const ok = await mutate(() => api.updateItem(itemId, { studyMinutes: hours * 60 }));
+    if (ok) setOpened((b) => (b && b.itemId === itemId ? { ...b, itemStudyMinutes: hours * 60 } : b));
+    return ok;
+  }
+
+  const days = Array.from({ length: DAYS_PER_PAGE }, (_, i) => addDays(from, i));
+  const items = week?.items ?? [];
+  const blocks = week?.blocks ?? [];
+  const events = days.flatMap((day) => timedEventsFor(day, items));
+  const openBlock = opened ? findOpenBlock(opened, blocks) : null;
+
   return {
     from,
-    days: week ? groupByDay(week.items, from) : [],
+    days,
+    range: gridRange(days, windows, blocks, events),
+    blocks,
+    items,
     undated: week?.undated ?? [],
+    shortfalls: (week?.shortfalls ?? []).map((s) => ({ itemId: s.itemId, text: shortfallText(s) })),
+    windows,
     courses,
     loading,
     error,
     reload: load,
-    previousWeek: () => setFrom((f) => addDays(f, -7)),
-    nextWeek: () => setFrom((f) => addDays(f, 7)),
-    thisWeek: () => setFrom(startOfWeek(new Date())),
+    previous: () => setFrom((f) => addDays(f, -DAYS_PER_PAGE)),
+    next: () => setFrom((f) => addDays(f, DAYS_PER_PAGE)),
+    goToday: () => setFrom(startOfDay(new Date())),
+    suggestedCount: blocks.filter((b) => b.state === 'proposed').length,
+    acceptVisible: () => mutate(() => api.acceptBlocks(from, addDays(from, DAYS_PER_PAGE))),
+    /** The block whose sheet is open, kept up to date across reloads. */
+    openBlock,
+    /** Hours of study the open block's item needs. */
+    openBlockHours: openBlock ? openBlock.itemStudyMinutes / 60 : 0,
+    showBlock: (block: StudyBlock) => setOpened(block),
+    closeBlock: () => setOpened(null),
+    acceptBlock: (id: string) => mutate(() => api.acceptBlock(id)),
+    rejectBlock: (id: string) => mutate(() => api.rejectBlock(id)),
+    moveBlock,
+    setStudyHours,
     saveItem: (id: string | null, input: ItemInput) =>
       mutate(() => (id ? api.updateItem(id, input) : api.addItem(input))),
     setStatus: (id: string, status: ItemStatus) => mutate(() => api.setStatus(id, status)),

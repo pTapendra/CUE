@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApi } from '../api/ApiContext';
-import { friendlyMessage } from '../api/client';
+import { ApiError, friendlyMessage } from '../api/client';
 import type { SyncPreview } from '../api/types';
 import { fromInput } from '../dates';
+
+/** Sync failures that connecting Canvas again fixes. */
+const CONNECT_AGAIN = new Set(['canvas_token_rejected', 'canvas_not_connected']);
 
 /** View model for reviewing Canvas items before they are saved (UC1). */
 export function useSyncReview() {
@@ -13,10 +16,12 @@ export function useSyncReview() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsConnect, setNeedsConnect] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNeedsConnect(false);
     try {
       const p = await api.previewSync();
       setPreview(p);
@@ -24,6 +29,7 @@ export function useSyncReview() {
       setDateText({});
     } catch (err) {
       setError(friendlyMessage(err));
+      setNeedsConnect(err instanceof ApiError && CONNECT_AGAIN.has(err.code));
     } finally {
       setLoading(false);
     }
@@ -64,7 +70,21 @@ export function useSyncReview() {
     }
   }
 
-  return { preview, selected, toggle, dateText, setDate, invalidDates, loading, saving, error, reload: load, confirm };
+  return {
+    preview,
+    selected,
+    toggle,
+    dateText,
+    setDate,
+    invalidDates,
+    loading,
+    saving,
+    error,
+    /** The sync failed because Canvas must be connected (again): offer to log in. */
+    needsConnect,
+    reload: load,
+    confirm,
+  };
 }
 
 /** Turns the student's typed dates into ISO dates for the accepted items only. */

@@ -4,11 +4,27 @@ import type { ProposedItem } from '../api/types';
 import { dayLabel, timeLabel } from '../dates';
 import { Button, ErrorBanner } from '../ui/components';
 import { useTheme } from '../ui/theme';
+import { useCanvasLogin } from '../viewmodels/useCanvasLogin';
 import { useSyncReview } from '../viewmodels/useSyncReview';
+import { CanvasLoginScreen } from './CanvasLoginScreen';
 
-export function ReviewScreen({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+export function ReviewScreen({
+  onDone,
+  onCancel,
+  loginAvailable,
+  onConnect,
+}: {
+  onDone: () => void;
+  onCancel: () => void;
+  /** The server has Canvas login set up, so the student can log in again right here. */
+  loginAvailable: boolean;
+  /** Opens the Connect screen (for a server without Canvas login). */
+  onConnect: () => void;
+}) {
   const t = useTheme();
   const vm = useSyncReview();
+  // After logging in again, read Canvas again right here.
+  const login = useCanvasLogin(vm.reload);
 
   if (vm.loading) {
     return (
@@ -34,6 +50,16 @@ export function ReviewScreen({ onDone, onCancel }: { onDone: () => void; onCance
               Untick anything you don't want. Exams without a date need one from you.
             </Text>
             <ErrorBanner message={vm.error} />
+            {vm.needsConnect ? (
+              loginAvailable ? (
+                <>
+                  <Button title="Log in with Canvas" busy={login.busy && !login.authorizeUrl} onPress={login.start} />
+                  <ErrorBanner message={login.error} />
+                </>
+              ) : (
+                <Button title="Connect Canvas" onPress={onConnect} />
+              )
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -50,6 +76,14 @@ export function ReviewScreen({ onDone, onCancel }: { onDone: () => void; onCance
           />
         )}
       />
+      {login.authorizeUrl ? (
+        <CanvasLoginScreen
+          authorizeUrl={login.authorizeUrl}
+          busy={login.busy}
+          onNavigate={login.onNavigate}
+          onCancel={login.cancel}
+        />
+      ) : null}
       <View style={[styles.footer, { borderColor: t.border, backgroundColor: t.background }]}>
         <Button title="Cancel" variant="secondary" onPress={onCancel} />
         {vm.preview ? (

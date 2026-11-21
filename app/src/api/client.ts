@@ -1,9 +1,11 @@
 import type {
+  CanvasLoginStart,
   ConnectionStatus,
   Course,
   Item,
   ItemInput,
   ItemStatus,
+  PlannerSettings,
   SyncPreview,
   Week,
 } from './types';
@@ -33,7 +35,11 @@ export function friendlyMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case 'canvas_token_rejected':
-        return 'Canvas rejected your token. Create a new one in Canvas and reconnect.';
+        return "Canvas no longer accepts Cue's access. Connect again.";
+      case 'login_expired':
+        return 'The login took too long. Please try again.';
+      case 'canvas_login_failed':
+        return "Canvas didn't complete the login. Please try again.";
       case 'canvas_not_connected':
         return 'Connect your Canvas account first.';
       case 'invalid_canvas_url':
@@ -42,6 +48,8 @@ export function friendlyMessage(err: unknown): string {
         return 'Canvas is not responding right now. Your saved schedule is still here.';
       case 'sync_expired':
         return 'That sync is out of date. Please sync again.';
+      case 'block_move_invalid':
+        return err.message;
       case 'invalid_request':
         return 'Some details are not valid. Please check and try again.';
       default:
@@ -81,6 +89,14 @@ export class ApiClient {
     return this.call<ConnectionStatus>('PUT', '/api/canvas/connection', { baseUrl, token });
   }
 
+  startCanvasLogin() {
+    return this.call<CanvasLoginStart>('POST', '/api/canvas/login');
+  }
+
+  finishCanvasLogin(code: string, state: string) {
+    return this.call<ConnectionStatus>('POST', '/api/canvas/login/finish', { code, state });
+  }
+
   disconnectCanvas() {
     return this.call<void>('DELETE', '/api/canvas/connection');
   }
@@ -93,8 +109,37 @@ export class ApiClient {
     return this.call<{ imported: number }>('POST', '/api/canvas/sync/confirm', { syncId, accept, dates });
   }
 
-  getWeek(from: Date) {
-    return this.call<Week>('GET', `/api/schedule/week?from=${encodeURIComponent(from.toISOString())}`);
+  /** The schedule from `from` up to `to`. */
+  getWeek(from: Date, to: Date) {
+    const range = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+    return this.call<Week>('GET', `/api/schedule/week?${range}`);
+  }
+
+  getPlannerSettings() {
+    return this.call<PlannerSettings>('GET', '/api/planner/settings');
+  }
+
+  savePlannerSettings(settings: PlannerSettings & { timeZone: string }) {
+    return this.call<PlannerSettings>('PUT', '/api/planner/settings', settings);
+  }
+
+  acceptBlock(id: string) {
+    return this.call<void>('POST', `/api/blocks/${id}/accept`);
+  }
+
+  acceptBlocks(from: Date, to: Date) {
+    return this.call<{ accepted: number }>('POST', '/api/blocks/accept', {
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+  }
+
+  rejectBlock(id: string) {
+    return this.call<void>('POST', `/api/blocks/${id}/reject`);
+  }
+
+  moveBlock(id: string, startsAt: string) {
+    return this.call<void>('POST', `/api/blocks/${id}/move`, { startsAt });
   }
 
   listCourses() {

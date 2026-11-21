@@ -3,6 +3,7 @@
  * Subsystems depend on this interface, never on the HTTP details,
  * so the access route (personal token now, OAuth later) can change here alone.
  * Every method is a read: Cue never writes to Canvas.
+ * The login's token requests (exchange, renew, revoke) live in CanvasLogin.
  */
 export interface CanvasClient {
   listCourses(): Promise<CanvasCourse[]>;
@@ -30,6 +31,8 @@ export interface CanvasEvent {
   courseId: string;
   title: string;
   startAt: string | null;
+  endAt: string | null;
+  allDay: boolean;
 }
 
 export type CanvasClientFactory = (baseUrl: string, token: string) => CanvasClient;
