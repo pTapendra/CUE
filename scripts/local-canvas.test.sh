@@ -413,6 +413,7 @@ test_start_with_ngrok_end_to_end() {
   mkdir -p "$T/canvas"
   settings_save "$T/canvas" ""
   printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  printf 'role\n' >"$T/local-canvas-accounts.csv" # demo data already added: no question
   stub docker 'echo "docker $*" >>"$T/docker.log"
 case "$*" in *"rails runner"*) echo "CUE_KEY 10000000000001 s3cr/t+=" ;; esac
 exit 0'
@@ -450,6 +451,7 @@ test_start_with_ngrok_when_login_setup_fails() {
   mkdir -p "$T/canvas"
   settings_save "$T/canvas" ""
   printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  printf 'role\n' >"$T/local-canvas-accounts.csv" # demo data already added: no question
   stub docker 'echo "docker $*" >>"$T/docker.log"
 exit 0'
   stub_ngrok_world
@@ -475,6 +477,7 @@ test_start_stops_ngrok_when_canvas_fails_to_restart() {
   mkdir -p "$T/canvas"
   settings_save "$T/canvas" ""
   printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  printf 'role\n' >"$T/local-canvas-accounts.csv" # demo data already added: no question
   stub docker 'case "$*" in *"--no-deps web"*) exit 1 ;; *) exit 0 ;; esac'
   stub_ngrok_world
   printf 'y\n' | bash "$SCRIPT" start >"$T/out" 2>&1
@@ -482,6 +485,52 @@ test_start_stops_ngrok_when_canvas_fails_to_restart() {
   assert_contains "says why" "Couldn't restart Canvas's web container" "$(cat "$T/out")"
   assert_true "ngrok had started" test -s "$T/ngrok.pid"
   assert_false "ngrok stopped" kill -0 "$(cat "$T/ngrok.pid")" 2>/dev/null
+}
+
+# Before the ngrok question, start offers demo data when there is none.
+test_start_offers_demo_data_when_there_is_none() {
+  seed_world
+  export CUE_SERVER_ENV="$T/server.env"
+  fake_seed_output >"$T/seed.out"
+  stub docker 'echo "docker $*" >>"$T/docker.log"
+case "$*" in
+  "compose ps"*) printf "web\n" ;;
+  "compose exec"*) cat "$T/seed.out" ;;
+esac'
+  stub curl 'printf 200'
+  printf 'y\nn\n' | bash "$SCRIPT" start >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  local out
+  out="$(cat "$T/out")"
+  assert_contains "asks" "Add demo courses and accounts (about a minute)? [y/N]" "$out"
+  assert_contains "seed ran" "compose exec -T" "$(cat "$T/docker.log")"
+  assert_contains "accounts written" "Demo data ready" "$out"
+  assert_true "accounts file exists" test -s "$T/local-canvas-accounts.csv"
+  assert_contains "ngrok question still asked" "Canvas is running at http://canvas.docker" "$out"
+}
+
+test_start_carries_on_when_demo_data_fails() {
+  seed_world
+  export CUE_SERVER_ENV="$T/server.env"
+  stub docker 'case "$*" in "compose ps"*) printf "web\n" ;; "compose exec"*) echo boom >&2; exit 1 ;; esac'
+  stub curl 'printf 200'
+  printf 'y\nn\n' | bash "$SCRIPT" start >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  assert_contains "warns" "Demo data wasn't added; Canvas is still running." "$(cat "$T/out")"
+  assert_contains "carries on" "Canvas is running at http://canvas.docker" "$(cat "$T/out")"
+}
+
+test_start_mentions_demo_accounts_when_they_exist() {
+  seed_world
+  export CUE_SERVER_ENV="$T/server.env"
+  printf 'role\n' >"$T/local-canvas-accounts.csv"
+  stub docker 'exit 0'
+  printf 'n\n' | bash "$SCRIPT" start >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  local out
+  out="$(cat "$T/out")"
+  assert_contains "shows the file" "Demo accounts: $T/local-canvas-accounts.csv" "$out"
+  case "$out" in *"Add demo courses"*) assert_eq "no question" "absent" "asked" ;; esac
 }
 
 # --- review fixes: drive, Docker's disk, port, folder, existing checkout ---
@@ -543,6 +592,7 @@ test_start_with_ngrok_refuses_when_port_8080_is_taken() {
   mkdir -p "$T/canvas"
   settings_save "$T/canvas" ""
   printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  printf 'role\n' >"$T/local-canvas-accounts.csv" # demo data already added: no question
   stub docker 'exit 0'
   stub_ngrok_world
   stub lsof 'printf "p321\ncnode\n"'

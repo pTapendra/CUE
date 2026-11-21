@@ -19,10 +19,6 @@ SEED_RUBY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/local-canvas-seed.rb"
 # shellcheck source=local-canvas.sh
 . "$(dirname "$SEED_RUBY")/local-canvas.sh"
 
-seed_accounts_file() {
-  printf '%s\n' "$(dirname "$(settings_file)")/local-canvas-accounts.csv"
-}
-
 # True when Canvas's web container is running. (grep reads all of docker's
 # output rather than stopping at the match, which under pipefail could fail
 # docker with SIGPIPE.)

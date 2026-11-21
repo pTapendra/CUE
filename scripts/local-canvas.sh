@@ -795,6 +795,29 @@ find_canvas() {
   drop_missing_ngrok_compose "$CANVAS_DIR"
 }
 
+# Where the demo accounts and passwords are written (by local-canvas-seed.sh),
+# next to the settings file.
+seed_accounts_file() {
+  printf '%s\n' "$(dirname "$(settings_file)")/local-canvas-accounts.csv"
+}
+
+# Before the ngrok question: says where the demo accounts are, or, the first
+# time, offers to add demo courses and accounts. If adding them fails, start
+# carries on.
+offer_demo_data() {
+  local file
+  file="$(seed_accounts_file)"
+  if [ -f "$file" ]; then
+    say "Demo accounts: $file"
+    return 0
+  fi
+  ask_yes_no "Add demo courses and accounts (about a minute)?" || return 0
+  if wait_for_canvas http://canvas.docker 300 && bash "$(repo_dir)/scripts/local-canvas-seed.sh"; then
+    return 0
+  fi
+  warn "Demo data wasn't added; Canvas is still running."
+}
+
 cmd_start() {
   find_canvas
   ensure_docker_app || exit 1
@@ -807,6 +830,7 @@ cmd_start() {
   # Canvas's own setup does. The rest, like webpack's file watcher, is for
   # working on Canvas itself and costs a lot of CPU.
   (cd "$CANVAS_DIR" && docker compose up -d web) || die "Couldn't start Canvas's containers."
+  offer_demo_data
   if ask_yes_no "Make Canvas reachable from a phone through ngrok?"; then
     expose_with_ngrok
   else
@@ -833,8 +857,9 @@ Usage: scripts/local-canvas.sh <command>
 
   setup   First time: check the tools you need, then install Canvas in Docker.
           Takes an hour or more.
-  start   Start Canvas. Asks whether to make it reachable from a phone
-          through ngrok; with ngrok it also sets up Canvas login for Cue.
+  start   Start Canvas. Offers demo courses and accounts the first time, then
+          asks whether to make it reachable from a phone through ngrok; with
+          ngrok it also sets up Canvas login for Cue.
   stop    Stop Canvas.
 EOF
 }
