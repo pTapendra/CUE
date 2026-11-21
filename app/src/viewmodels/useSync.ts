@@ -15,6 +15,8 @@ export type Sync = {
   sync(): void;
   /** Starts the in-app Canvas login, or opens the token form in token mode. */
   connect(): void;
+  /** Asks the server about the Canvas connection again (after Settings disconnects). */
+  reload(): Promise<void>;
   /**
    * The login `connect` starts. The screen shows it with `<CanvasLoginSheet login={sync.login} />`,
    * and `login.error` (a refused or failed login) in an ErrorBanner.
@@ -36,23 +38,29 @@ export function useSync(): Sync {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const login = useCanvasLogin(() => navigation.navigate('Review'));
 
-  useFocusEffect(
-    useCallback(() => {
-      let current = true;
+  const load = useCallback(
+    (isCurrent: () => boolean) =>
       api
         .getConnection()
         .then((status) => {
-          if (!current) return;
+          if (!isCurrent()) return;
           setConnected(status.connected);
           setLoginAvailable(status.loginAvailable);
           setLastSyncedAt(status.lastSyncedAt);
         })
         // Keep what the screen knew: the button still works, and the next focus asks again.
-        .catch(() => {});
+        .catch(() => {}),
+    [api],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let current = true;
+      load(() => current);
       return () => {
         current = false;
       };
-    }, [api]),
+    }, [load]),
   );
 
   function connect() {
@@ -67,6 +75,7 @@ export function useSync(): Sync {
     busy: login.busy,
     sync: () => (connected ? navigation.navigate('Review') : connect()),
     connect,
+    reload: () => load(() => true),
     login,
   };
 }

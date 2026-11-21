@@ -278,7 +278,7 @@ describe('Today', () => {
 
     await press(root, 'Set study times');
     await flush();
-    expect(texts(root)).toContain('Save and plan');
+    expect(texts(root)).toEqual(expect.arrayContaining(['Study times', 'Save']));
   });
 
   it('a day in the strip opens Schedule in Day view on that day', async () => {

@@ -56,6 +56,10 @@ export function fakeServer() {
       state.connected = true;
       return { status: 200, body: { connected: true, baseUrl: b.baseUrl, lastSyncedAt: null, loginAvailable: state.loginAvailable } };
     },
+    'DELETE /api/canvas/connection': () => {
+      state.connected = false;
+      return { status: 204 };
+    },
     'POST /api/canvas/login': () => ({
       status: 200,
       body: { authorizeUrl: `${state.loginUrl}/login/oauth2/auth?client_id=1&state=s1`, state: 's1' },

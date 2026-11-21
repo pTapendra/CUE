@@ -10,8 +10,9 @@ import { CoursesScreen } from '../screens/courses/CoursesScreen';
 import { TokenConnectScreen } from '../screens/connect/TokenConnectScreen';
 import { ReviewScreen } from '../screens/review/ReviewScreen';
 import { ScheduleScreen } from '../screens/schedule/ScheduleScreen';
-import { SettingsMenu } from '../screens/SettingsMenu';
-import { StudyTimesScreen } from '../screens/StudyTimesScreen';
+import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { StudyTimesScreen } from '../screens/settings/StudyTimesScreen';
+import { WhatCueKeepsScreen } from '../screens/settings/WhatCueKeepsScreen';
 import { TodayScreen } from '../screens/today/TodayScreen';
 import { WelcomeScreen } from '../screens/welcome/WelcomeScreen';
 import type { IoniconName } from '../ui/kit';
@@ -63,16 +64,12 @@ export function RootNavigator({ initialRouteName, startup }: { initialRouteName:
           <Stack.Screen name="Tabs" component={TabsNavigator} />
           <Stack.Screen name="Course" component={CourseRoute} />
           <Stack.Screen name="StudyTimes" component={StudyTimesRoute} />
+          <Stack.Screen name="WhatCueKeeps" component={WhatCueKeepsRoute} />
           <Stack.Group screenOptions={{ presentation: 'fullScreenModal' }}>
             <Stack.Screen name="Review" component={ReviewRoute} />
             <Stack.Screen name="TokenConnect" component={TokenConnectScreen} />
+            <Stack.Screen name="Settings" component={SettingsRoute} />
           </Stack.Group>
-          {/* The old ⚙ menu draws its own sheet over the screen below, until Settings has its own screen. */}
-          <Stack.Screen
-            name="Settings"
-            component={SettingsRoute}
-            options={{ presentation: 'transparentModal', animation: 'none' }}
-          />
         </Stack.Navigator>
       </NavigationContainer>
     </StartupContext.Provider>
@@ -144,21 +141,26 @@ function ReviewRoute({ navigation }: RootScreenProps<'Review'>) {
   );
 }
 
-function SettingsRoute({ navigation }: RootScreenProps<'Settings'>) {
+function SettingsRoute(props: RootScreenProps<'Settings'>) {
   return (
-    <SettingsMenu
-      visible
-      onStudyTimes={() => navigation.replace('StudyTimes')}
-      onCanvas={() => navigation.replace('Welcome')}
-      onClose={() => navigation.goBack()}
-    />
+    <Page>
+      <SettingsScreen {...props} />
+    </Page>
   );
 }
 
-function StudyTimesRoute({ navigation }: RootScreenProps<'StudyTimes'>) {
+function StudyTimesRoute(props: RootScreenProps<'StudyTimes'>) {
   return (
     <Page>
-      <StudyTimesScreen onDone={() => navigation.goBack()} onCancel={() => navigation.goBack()} />
+      <StudyTimesScreen {...props} />
+    </Page>
+  );
+}
+
+function WhatCueKeepsRoute(props: RootScreenProps<'WhatCueKeeps'>) {
+  return (
+    <Page>
+      <WhatCueKeepsScreen {...props} />
     </Page>
   );
 }

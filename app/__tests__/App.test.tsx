@@ -320,24 +320,6 @@ it('the login screen gets the Cue user agent for an ngrok Canvas address', async
 });
 
 describe('Settings, from the gear on Today', () => {
-  it("the settings menu's Canvas connection opens Welcome, and the token form has the school's address", async () => {
-    const server = fakeServer();
-    server.state.connected = true;
-    const { root } = await launch(server);
-    expect(selectedTab(root)).toBe('Today');
-    await tap(root, 'Settings');
-    await press(root, 'Canvas connection');
-    await flush();
-    expect(texts(root)).toContain(HEADLINE);
-
-    await press(root, 'Connect Canvas');
-    await flush();
-    const address = root.find(
-      (n) => n.props.placeholder === 'yourschool.instructure.com' && typeof n.props.onChangeText === 'function',
-    );
-    expect(address.props.value).toBe('https://s.instructure.com');
-  });
-
   it('loads Today and the schedule again after study times are saved', async () => {
     const server = fakeServer();
     server.state.connected = true;
@@ -353,9 +335,11 @@ describe('Settings, from the gear on Today', () => {
     await tap(root, 'Settings');
     await press(root, 'Study times');
     await flush();
-    await press(root, 'Save and plan');
+    await press(root, 'Save');
     await flush();
-    expect(texts(root)).not.toContain('Save and plan');
+    await press(root, 'Done');
+    await flush();
+    expect(texts(root)).not.toContain('Save');
     expect(selectedTab(root)).toBe('Today');
     expect(loads('/api/schedule/overview')).toBe(overviewLoads + 1);
 
