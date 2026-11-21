@@ -9,15 +9,17 @@
 #
 # Every account's login and password go into seed/local-canvas-accounts.csv in
 # the project folder (git-ignored), readable by this user only. The data and the
-# Ruby that creates it are in local-canvas-seed.rb.
+# Ruby that creates it are in seed/local-canvas-seed.rb.
 #
 # Like local-canvas.sh, the functions below run nothing when this file is
 # sourced (the tests in local-canvas.test.sh do that); only running the file
 # calls main.
 
-SEED_RUBY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/local-canvas-seed.rb"
+SEED_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The data (courses, people, assignments, events) lives in the seed folder.
+SEED_RUBY="$(cd "$SEED_SCRIPTS_DIR/.." && pwd)/seed/local-canvas-seed.rb"
 # shellcheck source=local-canvas.sh
-. "$(dirname "$SEED_RUBY")/local-canvas.sh"
+. "$SEED_SCRIPTS_DIR/local-canvas.sh"
 
 # True when Canvas's web container is running. (grep reads all of docker's
 # output rather than stopping at the match, which under pipefail could fail

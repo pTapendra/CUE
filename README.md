@@ -134,7 +134,7 @@ If setup put Canvas on an external drive, Docker keeps its disk there too, insid
 
 ### Demo data
 
-Until there is demo data, `start` offers to add it (`Add demo courses and accounts (about a minute)? [y/N]`). To add it or refresh it later, run `scripts/local-canvas-seed.sh` while Canvas is running. It creates 3 courses (CS 4350 Software Engineering, CS 4513 Database Systems, STAT 3303 Applied Statistics), 3 teachers and 6 students, with assignments (homework, quizzes, midterms, one exam with no date) and calendar events (a final exam, a review session, a demo day) dated around the day it runs.
+Until there is demo data, `start` offers to add it (`Add demo courses and accounts (about a minute)? [y/N]`). To add it or refresh it later, run `scripts/local-canvas-seed.sh` while Canvas is running. The data it adds is in `seed/local-canvas-seed.rb`. It creates 3 courses (CS 4350 Software Engineering, CS 4513 Database Systems, STAT 3303 Applied Statistics), 3 teachers and 6 students, with assignments (homework, quizzes, midterms, one exam with no date) and calendar events (a final exam, a review session, a demo day) dated around the day it runs.
 
 Every account's password is its first name in lowercase plus `-cue2026` (for example `maya-cue2026`). The logins and passwords are in `seed/local-canvas-accounts.csv` in the project folder, readable only by you and kept out of git. Running the seed again moves the dates to the new day and adds nothing twice. It only changes records it created (their Canvas SIS IDs start with `cue-demo-`), never the admin account or courses you made by hand.
 

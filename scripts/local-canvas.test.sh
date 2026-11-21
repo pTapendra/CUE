@@ -940,6 +940,7 @@ esac'
   assert_contains "runs in the Canvas folder" "$T/canvas: docker compose exec -T" "$log"
   assert_contains "passes the Mac's time zone" "-e CUE_SEED_TZ=" "$log"
   assert_contains "runs rails in the web container" "web bundle exec rails runner" "$log"
+  assert_contains "sends the seed data from seed/" "$(head -n 1 "$HERE/../seed/local-canvas-seed.rb")" "$log"
   assert_contains "passes the seed's Ruby" "cue-demo-term" "$log"
   case "$out" in *"Rails noise"*) assert_eq "Canvas's other output hidden" "hidden" "shown" ;; esac
 }
@@ -1010,15 +1011,15 @@ test_seed_refuses_to_run_as_root() {
 
 test_seed_ruby_follows_the_rules() {
   local ruby needle
-  ruby="$(cat "$HERE/local-canvas-seed.rb")"
+  ruby="$(cat "$HERE/../seed/local-canvas-seed.rb")"
   for needle in cue-demo-term -cue2026 students.cue.demo faculty.cue.demo CUE_SEED_TZ CUE_ACCOUNT \
     "already belongs to a Canvas user the seed didn't create"; do
     assert_contains "has $needle" "$needle" "$ruby"
   done
-  assert_false "no old email domain" grep -q 'cue-demo\.test' "$HERE/local-canvas-seed.rb"
+  assert_false "no old email domain" grep -q 'cue-demo\.test' "$HERE/../seed/local-canvas-seed.rb"
   # The word Cue never uses for a stretch of work, in any case. Written as a
   # pattern so that this file doesn't contain the word either.
-  assert_false "never uses the word" grep -qi 'spr[i]nt' "$HERE/local-canvas-seed.rb"
+  assert_false "never uses the word" grep -qi 'spr[i]nt' "$HERE/../seed/local-canvas-seed.rb"
 }
 
 # --- runner ----------------------------------------------------------------
