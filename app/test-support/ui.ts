@@ -26,6 +26,15 @@ export function press(root: Node, label: string) {
   });
 }
 
+/** Presses the control with this accessibility label (for icon buttons, which have no text). */
+export function tap(root: Node, label: string) {
+  const target = root.findAll((n) => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function')[0];
+  if (!target) throw new Error(`No control "${label}"`);
+  return act(async () => {
+    await target.props.onPress();
+  });
+}
+
 /** Whether the button labelled `label` is disabled. */
 export function isDisabled(root: Node, label: string): boolean {
   const button = root.findAll((n) => n.props.accessibilityRole === 'button' && texts(n).includes(label))[0];

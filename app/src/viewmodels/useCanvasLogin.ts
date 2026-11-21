@@ -85,3 +85,5 @@ export function useCanvasLogin(onConnected: () => void) {
 
   return { authorizeUrl, busy, error, start, onNavigate, cancel };
 }
+
+export type CanvasLogin = ReturnType<typeof useCanvasLogin>;

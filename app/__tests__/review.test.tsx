@@ -9,7 +9,7 @@ import type { ProposedItem } from '../src/api/types';
 import { ApiClient, type TokenStore } from '../src/api/client';
 import { groupByCourse } from '../src/viewmodels/useSyncReview';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, isDisabled, press, texts } from '../test-support/ui';
+import { flush, isDisabled, press, tap, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -54,7 +54,7 @@ async function openReview(setup?: (server: ReturnType<typeof fakeServer>) => voi
   const { root } = await launch(server);
   await press(root, 'Schedule');
   await flush();
-  await press(root, 'Sync Canvas');
+  await press(root, 'Sync');
   await flush();
   return { server, root };
 }
@@ -167,12 +167,20 @@ describe('Check what Cue found', () => {
     expect(selectedTab(root)).toBe('Today');
     expect(tokenForms(root)).toBe(0);
 
+    // Schedule opens on today and the next two days; the homework is due on Tuesday.
     await press(root, 'Schedule');
     await flush();
-    expect(texts(root)).toContain('SQL homework');
-    expect(texts(root)).not.toContain('Exam: Midterm Exam');
-    await press(root, '›');
+    const shown = texts(root);
+    expect(shown).toContain('Mon 2 Nov – Wed 4 Nov');
+    expect(root.findAll((n) => n.props.accessibilityLabel === 'Tue 3 Nov')).not.toHaveLength(0);
+    expect(shown).toContain('SQL homework');
+    expect(shown).not.toContain('Exam: Midterm Exam');
+    expect(shown).not.toContain('Needs a date'); // items without a date are on Today
+
+    // The exam on Friday is on the next page.
+    await tap(root, 'Next days');
     await flush();
+    expect(texts(root)).toContain('Thu 5 Nov – Sat 7 Nov');
     expect(texts(root)).toContain('Exam: Midterm Exam');
     expect(server.state.items).toHaveLength(2);
   });

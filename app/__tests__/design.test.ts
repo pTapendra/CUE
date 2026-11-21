@@ -40,6 +40,9 @@ describe.each(modes)('%s tokens', (_name, c, courses, unknown) => {
         k.tint,
       ]),
       ['unknown course', unknown.text, unknown.tint],
+      // Suggested study blocks show the course's text shade on the screen's background.
+      ...courses.map((k, i): [string, string, string] => [`course ${i} on bg`, k.text, c.bg]),
+      ['unknown course on bg', unknown.text, c.bg],
     ];
     for (const [label, fg, bg] of pairs) {
       expect([label, contrastRatio(fg, bg) >= 4.5]).toEqual([label, true]);

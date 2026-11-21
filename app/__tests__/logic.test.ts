@@ -6,9 +6,10 @@ import { useCanvasLogin } from '../src/viewmodels/useCanvasLogin';
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item, StudyBlock, StudyWindow } from '../src/api/types';
 import { serverUrl } from '../src/config';
-import { fromInput, rangeLabel, startOfWeek, toInput } from '../src/dates';
+import { fromInput, monthTitle, parseDay, rangeLabel, startOfWeek, toInput } from '../src/dates';
 import { deadlinesFor, gridRange, placeInDay, timedEventsFor } from '../src/viewmodels/grid';
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
+import { pageStart } from '../src/viewmodels/useSchedule';
 import { syncTimeZone, withDeviceTimeZone } from '../src/timeZone';
 import { buildDates } from '../src/viewmodels/useSyncReview';
 import { rangeText, windowError } from '../src/viewmodels/useStudyTimes';
@@ -266,8 +267,36 @@ describe('grid layout', () => {
     expect(placeInDay(day, timed, { startHour: 8, endHour: 22 }).map((p) => p.height)).toEqual([50, 50]);
   });
 
-  it('labels a range of days', () => {
+  it('labels a range of days, and a single day', () => {
     expect(rangeLabel(new Date(2026, 10, 2), 3)).toBe('Mon 2 Nov – Wed 4 Nov');
+    expect(rangeLabel(new Date(2026, 10, 2), 1)).toBe('Mon 2 Nov');
+  });
+
+  it('titles a page by its month, naming the year only when it is not this year', () => {
+    const now = new Date(2026, 10, 2, 9, 0);
+    expect(monthTitle(new Date(2026, 10, 2), new Date(2026, 10, 8), now)).toBe('November');
+    expect(monthTitle(new Date(2026, 9, 26), new Date(2026, 10, 1), now)).toBe('Oct – Nov');
+    expect(monthTitle(new Date(2027, 0, 4), new Date(2027, 0, 10), now)).toBe('January 2027');
+    expect(monthTitle(new Date(2026, 11, 28), new Date(2027, 0, 3), now)).toBe('Dec 2026 – Jan 2027');
+  });
+
+  it("reads a route's date as a local day", () => {
+    const wed = new Date(2026, 10, 4);
+    expect(parseDay('2026-11-04')).toEqual(wed); // a date alone is a local date, not UTC midnight
+    expect(parseDay(new Date(2026, 10, 4, 23, 30).toISOString())).toEqual(wed);
+    expect(parseDay('next friday')).toBeNull();
+    expect(parseDay('2026-02-30')).toBeNull();
+    expect(parseDay(undefined)).toBeNull();
+  });
+
+  it('starts a week page on Monday and other pages on the day, at local midnight', () => {
+    const sundayNight = new Date(2026, 10, 8, 23, 30);
+    expect(pageStart('week', sundayNight)).toEqual(new Date(2026, 10, 2));
+    expect(pageStart('week', new Date(2026, 10, 2, 0, 0))).toEqual(new Date(2026, 10, 2));
+    expect(pageStart('3days', sundayNight)).toEqual(new Date(2026, 10, 8));
+    expect(pageStart('day', sundayNight)).toEqual(new Date(2026, 10, 8));
+    // The week with the clock change (Sunday 1 November in North America) still starts at midnight.
+    expect(pageStart('week', new Date(2026, 10, 1, 12, 0))).toEqual(new Date(2026, 9, 26));
   });
 });
 

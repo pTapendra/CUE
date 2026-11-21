@@ -5,7 +5,8 @@ import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { Item, StudyBlock } from '../src/api/types';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, isDisabled, press, texts } from '../test-support/ui';
+import { BlockSheet } from '../src/screens/sheets/BlockSheet';
+import { flush, isDisabled, press, tap, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -44,15 +45,6 @@ async function openWeek(items: Item[] = []) {
 }
 
 type Node = ReactTestRenderer.ReactTestInstance;
-
-/** Presses the control with this accessibility label. */
-function tap(root: Node, label: string) {
-  const target = root.findAll((n) => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function')[0];
-  if (!target) throw new Error(`No control "${label}"`);
-  return act(async () => {
-    await target.props.onPress();
-  });
-}
 
 /** Opens the date field with this label and picks `date` in its picker. */
 async function pick(root: Node, label: string, date: Date) {
@@ -187,6 +179,29 @@ describe('block sheet', () => {
     expect(texts(root)).toContain('8 h');
   });
 
+  it('says "hour" for one hour of study, and "hours" otherwise', async () => {
+    const noop = async () => true;
+    const sheet = (studyHours: number) => (
+      <BlockSheet
+        block={statsBlock}
+        studyHours={studyHours}
+        onAccept={noop}
+        onReject={noop}
+        onMove={noop}
+        onStudyHours={noop}
+        onClose={() => {}}
+      />
+    );
+    let r!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      r = ReactTestRenderer.create(sheet(1));
+    });
+    expect(texts(r.root)).toContain('This needs 1 hour of study');
+    await act(async () => r.update(sheet(2)));
+    expect(texts(r.root)).toContain('This needs 2 hours of study');
+    await act(async () => r.unmount());
+  });
+
   it('shows a message and refreshes when the block is already gone', async () => {
     const { server, root } = await openSheet();
     server.state.blocks = [];
@@ -266,7 +281,7 @@ describe('item sheet', () => {
 
   it('adds an event with an end time', async () => {
     const { server, root } = await openWeek();
-    await press(root, 'Add');
+    await tap(root, 'Add');
     await typeTitle(root, 'Club meeting');
     await tap(root, 'Event');
     expect(texts(root)).not.toContain('Study time');

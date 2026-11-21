@@ -7,9 +7,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { type Edge, SafeAreaView } from 'react-native-safe-area-context';
 import { TokenConnectScreen } from '../screens/connect/TokenConnectScreen';
 import { ReviewScreen } from '../screens/review/ReviewScreen';
+import { ScheduleScreen } from '../screens/schedule/ScheduleScreen';
 import { SettingsMenu } from '../screens/SettingsMenu';
 import { StudyTimesScreen } from '../screens/StudyTimesScreen';
-import { WeekScreen } from '../screens/WeekScreen';
 import { WelcomeScreen } from '../screens/welcome/WelcomeScreen';
 import type { IoniconName } from '../ui/kit';
 import { space, type, useTokens } from '../ui/tokens';
@@ -94,10 +94,10 @@ function TabsNavigator() {
   );
 }
 
-function ScheduleTab({ navigation }: TabScreenProps<'Schedule'>) {
+function ScheduleTab(props: TabScreenProps<'Schedule'>) {
   return (
     <Page edges={TAB_EDGES}>
-      <WeekScreen onSync={() => navigation.navigate('Review')} onSettings={() => navigation.navigate('Settings')} />
+      <ScheduleScreen {...props} />
     </Page>
   );
 }

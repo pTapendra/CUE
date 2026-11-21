@@ -4,7 +4,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export type TabParamList = {
   Today: undefined;
-  Schedule: { date?: string; view?: 'day' | '3days' | 'week' } | undefined;
+  Schedule:
+    | {
+        /** The day to show: "YYYY-MM-DD" (a local date) or an ISO time (its local day). Default: today. */
+        date?: string;
+        /** Default: the view on screen (3 days at first). */
+        view?: 'day' | '3days' | 'week';
+      }
+    | undefined;
   Courses: undefined;
 };
 

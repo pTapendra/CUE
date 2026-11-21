@@ -6,6 +6,20 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../ui/kit';
 import { space, type, useTokens } from '../ui/tokens';
 import { loginUserAgent } from '../viewmodels/canvasLogin';
+import type { CanvasLogin } from '../viewmodels/useCanvasLogin';
+
+/** The Canvas login over the screen while one is open (see `useSync`); nothing otherwise. */
+export function CanvasLoginSheet({ login }: { login: CanvasLogin }) {
+  if (!login.authorizeUrl) return null;
+  return (
+    <CanvasLoginScreen
+      authorizeUrl={login.authorizeUrl}
+      busy={login.busy}
+      onNavigate={login.onNavigate}
+      onCancel={login.cancel}
+    />
+  );
+}
 
 /** Canvas's own login and Authorize pages in a full-screen web view. Nothing is injected and no page content is read. */
 export function CanvasLoginScreen({

@@ -1,15 +1,29 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
 import type { Course, Shortfall, StudyBlock, StudyWindow, Week } from '../api/types';
-import { addDays, dayLabel, startOfDay } from '../dates';
+import { addDays, dayLabel, startOfDay, startOfWeek } from '../dates';
 import { syncTimeZone } from '../timeZone';
 import { gridRange, timedEventsFor } from './grid';
 import { useItemActions } from './useItemActions';
 
-/** Days the grid shows at once; the arrows move by this many. */
-export const DAYS_PER_PAGE = 3;
+export type ScheduleView = 'day' | '3days' | 'week';
+
+/** Days on screen in each view; the arrows move by this many. */
+export const DAYS_IN_VIEW: Record<ScheduleView, number> = { day: 1, '3days': 3, week: 7 };
+
+/** The first day of the page that shows `date`, at local midnight: its Monday in week view, else the day itself. */
+export function pageStart(view: ScheduleView, date: Date): Date {
+  return view === 'week' ? startOfWeek(date) : startOfDay(date);
+}
+
+type Page = { view: ScheduleView; from: Date };
+
+/** `next`, unless it is the page already shown (so nothing reloads). */
+function keep(current: Page, next: Page): Page {
+  return current.view === next.view && current.from.getTime() === next.from.getTime() ? current : next;
+}
 
 /** "DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours." */
 function shortfallText(s: Shortfall): string {
@@ -29,36 +43,46 @@ function findOpenBlock(opened: StudyBlock, blocks: StudyBlock[]): StudyBlock {
   );
 }
 
-/** View model for the Week screen: a time grid of a few days with study blocks (UC2). */
-export function useWeek(today: Date = new Date()) {
+/**
+ * View model for Schedule: a time grid of 1, 3 or 7 days with deadlines and study blocks (UC2).
+ * `open` is the first page shown; `show` opens another one later (as route params do).
+ */
+export function useSchedule(open: { view: ScheduleView; date: Date }) {
   const api = useApi();
-  const [from, setFrom] = useState(() => startOfDay(today));
+  const [page, setPage] = useState<Page>(() => ({ view: open.view, from: pageStart(open.view, open.date) }));
   const [week, setWeek] = useState<Week | null>(null);
   const [windows, setWindows] = useState<StudyWindow[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [opened, setOpened] = useState<StudyBlock | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setError] = useState<string | null>(null);
+  // Only the latest request may fill the screen: paging quickly must not show an older page's answer.
+  const latest = useRef(0);
+
+  const { view, from } = page;
+  const count = DAYS_IN_VIEW[view];
 
   const load = useCallback(async () => {
+    const mine = ++latest.current;
     setLoading(true);
     setError(null);
     try {
       const [w, c, s] = await Promise.all([
-        // Up to local midnight after the last day: a page over a clock change is not 72 hours.
-        api.getWeek(from, addDays(from, DAYS_PER_PAGE)),
+        // Up to local midnight after the last day: a page over a clock change is not a whole number of 24 hours.
+        api.getWeek(from, addDays(from, count)),
         api.listCourses(),
         api.getPlannerSettings(),
       ]);
+      if (mine !== latest.current) return;
       setWeek(w);
       setCourses(c.courses);
       setWindows(s.windows);
     } catch (err) {
-      setError(friendlyMessage(err));
+      if (mine === latest.current) setError(friendlyMessage(err));
     } finally {
-      setLoading(false);
+      if (mine === latest.current) setLoading(false);
     }
-  }, [api, from]);
+  }, [api, from, count]);
 
   const actions = useItemActions(load);
   const { clearError } = actions;
@@ -69,7 +93,7 @@ export function useWeek(today: Date = new Date()) {
   }, [load, clearError]);
 
   // The phone may be in another time zone when the student comes back to the app.
-  // When the server gets a new zone it re-plans, so load the week again.
+  // When the server gets a new zone it re-plans, so load the page again.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
@@ -80,6 +104,23 @@ export function useWeek(today: Date = new Date()) {
     return () => subscription.remove();
   }, [api, load]);
 
+  /** Opens the page with `date` in `view` (or the current view). */
+  const show = useCallback((nextView: ScheduleView | undefined, date: Date) => {
+    setPage((p) => {
+      const v = nextView ?? p.view;
+      return keep(p, { view: v, from: pageStart(v, date) });
+    });
+  }, []);
+
+  /** Switches view around today when it is on screen, else around the first day shown. */
+  const setView = useCallback((nextView: ScheduleView) => {
+    setPage((p) => {
+      const now = new Date();
+      const showsToday = now >= p.from && now < addDays(p.from, DAYS_IN_VIEW[p.view]);
+      return keep(p, { view: nextView, from: pageStart(nextView, showsToday ? now : p.from) });
+    });
+  }, []);
+
   /** Saves the item's study time. The open block keeps the new amount even if the re-plan moved it away. */
   async function setStudyHours(itemId: string, hours: number): Promise<boolean> {
     const ok = await actions.setStudyHours(itemId, hours);
@@ -87,21 +128,20 @@ export function useWeek(today: Date = new Date()) {
     return ok;
   }
 
-  const days = Array.from({ length: DAYS_PER_PAGE }, (_, i) => addDays(from, i));
+  const days = Array.from({ length: count }, (_, i) => addDays(from, i));
   const items = week?.items ?? [];
   const blocks = week?.blocks ?? [];
   const events = days.flatMap((day) => timedEventsFor(day, items));
   const openBlock = opened ? findOpenBlock(opened, blocks) : null;
 
   return {
+    view,
     from,
     days,
     range: gridRange(days, windows, blocks, events),
     blocks,
     items,
-    undated: week?.undated ?? [],
     shortfalls: (week?.shortfalls ?? []).map((s) => ({ itemId: s.itemId, text: shortfallText(s) })),
-    windows,
     courses,
     loading,
     error: actions.error ?? loadError,
@@ -110,11 +150,14 @@ export function useWeek(today: Date = new Date()) {
       clearError();
       await load();
     },
-    previous: () => setFrom((f) => addDays(f, -DAYS_PER_PAGE)),
-    next: () => setFrom((f) => addDays(f, DAYS_PER_PAGE)),
-    goToday: () => setFrom(startOfDay(new Date())),
+    setView,
+    show,
+    previous: () => setPage((p) => ({ ...p, from: addDays(p.from, -DAYS_IN_VIEW[p.view]) })),
+    next: () => setPage((p) => ({ ...p, from: addDays(p.from, DAYS_IN_VIEW[p.view]) })),
+    goToday: () => setPage((p) => keep(p, { view: p.view, from: pageStart(p.view, new Date()) })),
     suggestedCount: blocks.filter((b) => b.state === 'proposed').length,
-    acceptVisible: () => actions.run(() => api.acceptBlocks(from, addDays(from, DAYS_PER_PAGE))),
+    /** Accepts every suggestion that starts on the days on screen. */
+    acceptVisible: () => actions.run(() => api.acceptBlocks(from, addDays(from, count))),
     /** The block whose sheet is open, kept up to date across reloads. */
     openBlock,
     /** Hours of study the open block's item needs. */

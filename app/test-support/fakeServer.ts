@@ -1,4 +1,4 @@
-import type { Item, PlannerSettings, Shortfall, StudyBlock } from '../src/api/types';
+import type { Course, Item, PlannerSettings, Shortfall, StudyBlock } from '../src/api/types';
 
 type Handler = (body: any, url: URL) => { status: number; body?: unknown };
 
@@ -14,6 +14,9 @@ export function fakeServer() {
     /** When set, DELETE /api/account fails with a 500. */
     deleteFails: false,
     syncError: null as { status: number; error: string } | null,
+    /** When Canvas was last synced, as the connection reports it. */
+    lastSyncedAt: null as string | null,
+    courses: [] as Course[],
     items: [] as Item[],
     blocks: [] as StudyBlock[],
     shortfalls: [] as Shortfall[],
@@ -41,7 +44,12 @@ export function fakeServer() {
     'POST /api/devices': () => ({ status: 201, body: { deviceToken: 'device-1' } }),
     'GET /api/canvas/connection': () => ({
       status: 200,
-      body: { connected: state.connected, baseUrl: state.connected ? 'https://s.instructure.com' : null, lastSyncedAt: null, loginAvailable: state.loginAvailable },
+      body: {
+        connected: state.connected,
+        baseUrl: state.connected ? 'https://s.instructure.com' : null,
+        lastSyncedAt: state.lastSyncedAt,
+        loginAvailable: state.loginAvailable,
+      },
     }),
     'PUT /api/canvas/connection': (b) => {
       if (b.token === 'bad-token-123') return { status: 409, body: { error: 'canvas_token_rejected', message: 'x' } };
@@ -121,7 +129,7 @@ export function fakeServer() {
       for (const k of due) k.state = 'accepted';
       return { status: 200, body: { accepted: due.length } };
     },
-    'GET /api/courses': () => ({ status: 200, body: { courses: [] } }),
+    'GET /api/courses': () => ({ status: 200, body: { courses: state.courses } }),
     'POST /api/items': (b) => {
       const item: Item = {
         id: String(nextId++),

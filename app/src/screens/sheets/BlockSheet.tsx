@@ -91,7 +91,7 @@ export function BlockSheet({
 
           <View style={[styles.hoursRow, { borderColor: colors.line }]}>
             <Text style={[type.body, styles.hoursLabel, { color: colors.text }]}>
-              {`This needs ${studyHours} hours of study`}
+              {`This needs ${studyHours} ${studyHours === 1 ? 'hour' : 'hours'} of study`}
             </Text>
             <Stepper
               label="Study time"

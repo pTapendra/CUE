@@ -10,7 +10,7 @@ import App from '../App';
 import { ApiClient, type TokenStore } from '../src/api/client';
 import { deviceTimeZone } from '../src/timeZone';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, isDisabled, press, texts, type } from '../test-support/ui';
+import { flush, isDisabled, press, tap, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -169,7 +169,7 @@ it('lets a student skip Canvas and add an exam by hand', async () => {
   await flush();
   await press(root, 'Schedule');
   await flush();
-  await press(root, 'Add');
+  await tap(root, 'Add');
   await type(root, 'e.g. Statistics midterm', 'Stats quiz');
   await press(root, 'Exam');
   // The date comes from the picker, not from typing.
@@ -316,8 +316,8 @@ it('the login screen gets the Cue user agent for an ngrok Canvas address', async
   expect(texts(root)).toContain('demo.ngrok-free.dev');
 });
 
-describe('the week in the Schedule tab', () => {
-  async function openWeek(loginAvailable = false) {
+describe('the Schedule tab', () => {
+  async function openSchedule(loginAvailable = false) {
     const server = fakeServer();
     server.state.connected = true;
     server.state.loginAvailable = loginAvailable;
@@ -327,9 +327,9 @@ describe('the week in the Schedule tab', () => {
     return { server, root };
   }
 
-  it("the ⚙ menu's Canvas connection opens Welcome, and the token form has the school's address", async () => {
-    const { root } = await openWeek();
-    await press(root, '⚙');
+  it("the settings menu's Canvas connection opens Welcome, and the token form has the school's address", async () => {
+    const { root } = await openSchedule();
+    await tap(root, 'Settings');
     await press(root, 'Canvas connection');
     await flush();
     expect(texts(root)).toContain(HEADLINE);
@@ -345,9 +345,9 @@ describe('the week in the Schedule tab', () => {
   it.each([
     ['Save 2 items', 'Today'],
     ['Cancel', 'Schedule'],
-  ])('a sync from the week: %s goes to %s', async (button, tab) => {
-    const { root } = await openWeek();
-    await press(root, 'Sync Canvas');
+  ])('a sync from Schedule: %s goes to %s', async (button, tab) => {
+    const { root } = await openSchedule();
+    await press(root, 'Sync');
     await flush();
     expect(texts(root)).toContain('Check what Cue found');
 
@@ -357,12 +357,12 @@ describe('the week in the Schedule tab', () => {
     expect(selectedTab(root)).toBe(tab);
   });
 
-  it('loads the week again after study times are saved', async () => {
-    const { server, root } = await openWeek();
+  it('loads the schedule again after study times are saved', async () => {
+    const { server, root } = await openSchedule();
     const weekLoads = () => server.state.calls.filter((c) => c.path === '/api/schedule/week').length;
     const loads = weekLoads();
 
-    await press(root, '⚙');
+    await tap(root, 'Settings');
     await press(root, 'Study times');
     await flush();
     await press(root, 'Save and plan');
