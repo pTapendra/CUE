@@ -13,7 +13,7 @@ The app talks only to the server. Only the server talks to Canvas, and only with
 
 ## What works
 
-- **Retrieve schedule data (UC1).** Connect a Canvas account with a personal access token, read courses, assignment deadlines and calendar events, and review them before anything is saved. Exams are recognised by their titles (exam, midterm, final, test). An exam with no date in Canvas is flagged so the student can type one in.
+- **Retrieve schedule data (UC1).** Connect a Canvas account with Log in with Canvas (or with a personal access token when the server has no login settings), read courses, assignment deadlines and calendar events, and review them before anything is saved. Exams are recognised by their titles (exam, midterm, final, test). An exam with no date in Canvas is flagged so the student can type one in.
 - **View and edit the schedule (UC2).** A three-day time grid (the arrows move three days; tapping the title returns to today) with a "Needs a date" list. Students can add items by hand (including exams Canvas does not list), edit them, delete them, and set one of four statuses: Not started, In progress, Done, Postponed.
 - **Study planner.** Students set their study times (which hours of each weekday they can study, in their own time zone) and a daily limit, and give each item an amount of study time (an exam defaults to 6 hours, an assignment to 2). Cue suggests study blocks that fit inside the study times, before the due date, and shows them on a three-day time grid next to events and deadlines. A student can accept, move or reject each block, or accept all suggestions on screen at once. Where the time does not fit, the app says how much is missing.
 - **Privacy.** Each installed app gets an anonymous account. No name or email is collected. The Canvas token is encrypted (AES-256-GCM) on the server and never stored on the phone.
@@ -126,7 +126,7 @@ scripts/local-canvas.sh stop
 
 The script writes the `server/.env` of the checkout it runs from, which suits running Cue's server on the same Mac as Canvas. For a Cue server on another computer, copy the three `CUE_CANVAS_*` lines from that file into its `server/.env` by hand; the script never prints them. If setting up login fails, `start` says so and carries on; students can still connect with a token.
 
-A free ngrok account allows one tunnel at a time. While it runs, anyone with the address can reach your Canvas login page, so give the Canvas admin a strong password. The first time a phone opens the address, ngrok shows a warning page; tap **Visit Site**.
+A free ngrok account allows one tunnel at a time. While it runs, anyone with the address can reach your Canvas login page, so give the Canvas admin a strong password. The first time a phone opens the address, ngrok shows a warning page; tap **Visit Site**. Inside Cue's private login screen it may appear on each login; tap **Visit Site** there too.
 
 If setup put Canvas on an external drive, Docker keeps its disk there too, inside a disk image that has to be mounted before Docker starts. Turn off **Start Docker Desktop when you sign in** (Docker Desktop → Settings → General), plug the drive in, and use `scripts/local-canvas.sh start`: it mounts the disk image first, then starts Docker. If Docker Desktop did start without it, `start` says so; quit Docker Desktop and run `start` again.
 
@@ -145,6 +145,9 @@ server/src/
   canvas/CanvasClient.ts         adapter interface (read-only)
   canvas/HttpCanvasClient.ts     real Canvas REST client
   canvas/FakeCanvasClient.ts     in-memory Canvas for tests
+  canvas/CanvasLogin.ts          login adapter interface (token requests only)
+  canvas/HttpCanvasLogin.ts      real Canvas login requests
+  canvas/FakeCanvasLogin.ts      in-memory Canvas login for tests
   canvasReader/                  Canvas Reader: connect, preview, confirm (UC1)
   schedule/                      Schedule Manager: courses, items, study blocks (UC2)
   planner/                       Planner: study times, suggested study blocks
@@ -154,11 +157,12 @@ server/src/
 app/src/
   api/                           API client and types
   viewmodels/                    hooks holding screen logic (MVVM)
-  screens/                       Connect, Review, Week, TimeGrid, BlockSheet, StudyTimes, ItemEditor
+  viewmodels/useCanvasLogin.ts   screen logic for Log in with Canvas
+  screens/                       Connect, CanvasLoginScreen, Review, Week, TimeGrid, BlockSheet, StudyTimes, ItemEditor
   ui/                            shared components and theme
 ```
 
-Each subsystem reads and writes only its own data through a repository (Repository pattern). Canvas is reached only through the `CanvasClient` interface (Adapter pattern), so tests use a fake and the access route can change in one place.
+Each subsystem reads and writes only its own data through a repository (Repository pattern). Canvas reads go only through the `CanvasClient` interface, and the login's token requests only through `CanvasLogin` (Adapter pattern), so tests use a fake and the access route can change in one place.
 
 ## API
 
