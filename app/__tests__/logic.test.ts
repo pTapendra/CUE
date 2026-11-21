@@ -69,6 +69,98 @@ describe('ApiClient', () => {
     expect(server.state.calls.at(-1)!.auth).toBe('Bearer device-1');
   });
 
+  it('adopts the device token a login reply carries', async () => {
+    const server = fakeServer();
+    server.state.switchToken = 'device-9';
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    const result = await api.finishCanvasLogin('good-code', 's1');
+    expect(result.switched).toBe(true);
+    expect(result).not.toHaveProperty('deviceToken');
+    expect(store.map.get('cue.deviceToken')).toBe('device-9');
+    await api.getConnection();
+    expect(server.state.calls.at(-1)!.auth).toBe('Bearer device-9');
+  });
+
+  it('a login reply without a device token is not a switch', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    expect((await api.finishCanvasLogin('good-code', 's1')).switched).toBe(false);
+    expect((await api.connectCanvas('https://s.instructure.com', 'good-token-123')).switched).toBe(false);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+  });
+
+  it("a request still in flight with the old token doesn't start a fresh account", async () => {
+    const server = fakeServer();
+    server.state.switchToken = 'device-9';
+    const store = memoryStore();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held = false;
+    const gated = (async (url: string, init?: RequestInit) => {
+      // Hold the first overview request; the server answers it after the switch, so it gets a 401.
+      if (new URL(url).pathname === '/api/schedule/overview' && !held) {
+        held = true;
+        await gate;
+      }
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const api = new ApiClient('http://cue.test', store, gated);
+    await api.getConnection(); // device-1
+    const pending = api.getOverview();
+    await api.finishCanvasLogin('good-code', 's1'); // switches to device-9
+    release();
+    await pending;
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-9');
+    const overview = server.state.calls.filter((c) => c.path === '/api/schedule/overview');
+    expect(overview.map((c) => c.auth)).toEqual(['Bearer device-1', 'Bearer device-9']);
+  });
+
+  it('a 401 with the current token still starts a fresh account', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    await store.setItem('cue.deviceToken', 'unknown-token');
+    const unknown = (async (url: string, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>).Authorization;
+      if (auth === 'Bearer unknown-token') {
+        return { ok: false, status: 401, json: async () => ({ error: 'unauthorized', message: 'x' }) } as Response;
+      }
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const api = new ApiClient('http://cue.test', store, unknown);
+    await api.getConnection();
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+  });
+
+  it('logout forgets the token on 204 and on 401, and keeps it on 500', async () => {
+    const server = fakeServer();
+    server.state.linked = true;
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await api.ensureAccount();
+    await api.logout();
+    expect(server.state.calls.at(-1)).toMatchObject({ method: 'DELETE', path: '/api/device', auth: 'Bearer device-1' });
+    expect(store.map.has('cue.deviceToken')).toBe(false);
+
+    await api.ensureAccount();
+    server.state.logoutUnauthorized = true;
+    await api.logout();
+    expect(store.map.has('cue.deviceToken')).toBe(false);
+    // The 401 did not start a fresh account and retry: only the two accounts made by ensureAccount exist.
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(2);
+    expect(server.state.calls.filter((c) => c.method === 'DELETE')).toHaveLength(2);
+
+    await api.ensureAccount();
+    server.state.logoutUnauthorized = false;
+    server.state.linked = false; // 409 account_not_linked
+    const err = await api.logout().catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(store.map.get('cue.deviceToken')).toBe('device-3');
+  });
+
   it('turns server errors into messages a student can act on', async () => {
     const server = fakeServer();
     const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);

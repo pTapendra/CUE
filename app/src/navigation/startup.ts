@@ -6,9 +6,11 @@ export type Startup = {
   loginAvailable: boolean;
   /** The Canvas address already connected, to fill in the token form. */
   canvasUrl: string | null;
+  /** The account has a Canvas identity (it can log out, and a login finds it again). */
+  linked: boolean;
 };
 
-export const StartupContext = createContext<Startup>({ loginAvailable: false, canvasUrl: null });
+export const StartupContext = createContext<Startup>({ loginAvailable: false, canvasUrl: null, linked: false });
 
 export function useStartup(): Startup {
   return useContext(StartupContext);

@@ -8,6 +8,8 @@ export type Sync = {
   connected: boolean;
   /** The server has Canvas login set up; without it, connecting uses the token form. */
   loginAvailable: boolean;
+  /** The account has a Canvas identity, so Settings can offer Log out. */
+  linked: boolean;
   lastSyncedAt: string | null;
   /** The Canvas login is starting or finishing. */
   busy: boolean;
@@ -35,6 +37,7 @@ export function useSync(): Sync {
   // Start-up's answer until the screen's own arrives, so a connected student doesn't see "Connect Canvas" flash.
   const [connected, setConnected] = useState(startup.canvasUrl !== null);
   const [loginAvailable, setLoginAvailable] = useState(startup.loginAvailable);
+  const [linked, setLinked] = useState(startup.linked);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const login = useCanvasLogin(() => navigation.navigate('Review'));
 
@@ -46,6 +49,7 @@ export function useSync(): Sync {
           if (!isCurrent()) return;
           setConnected(status.connected);
           setLoginAvailable(status.loginAvailable);
+          setLinked(status.linked);
           setLastSyncedAt(status.lastSyncedAt);
         })
         // Keep what the screen knew: the button still works, and the next focus asks again.
@@ -71,6 +75,7 @@ export function useSync(): Sync {
   return {
     connected,
     loginAvailable,
+    linked,
     lastSyncedAt,
     busy: login.busy,
     sync: () => (connected ? navigation.navigate('Review') : connect()),

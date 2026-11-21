@@ -87,16 +87,41 @@ export class ApiClient {
     return this.call<ConnectionStatus>('GET', '/api/canvas/connection');
   }
 
-  connectCanvas(baseUrl: string, token: string) {
-    return this.call<ConnectionStatus>('PUT', '/api/canvas/connection', { baseUrl, token });
+  async connectCanvas(baseUrl: string, token: string): Promise<ConnectionStatus & { switched: boolean }> {
+    return this.adopt(await this.call<ConnectionStatus & { deviceToken?: string }>('PUT', '/api/canvas/connection', { baseUrl, token }));
   }
 
   startCanvasLogin() {
     return this.call<CanvasLoginStart>('POST', '/api/canvas/login');
   }
 
-  finishCanvasLogin(code: string, state: string) {
-    return this.call<ConnectionStatus>('POST', '/api/canvas/login/finish', { code, state });
+  async finishCanvasLogin(code: string, state: string): Promise<ConnectionStatus & { switched: boolean }> {
+    return this.adopt(
+      await this.call<ConnectionStatus & { deviceToken?: string }>('POST', '/api/canvas/login/finish', { code, state }),
+    );
+  }
+
+  /** Stores the device token a reply carries (the phone switched accounts) and reports whether it did. */
+  private async adopt(reply: ConnectionStatus & { deviceToken?: string }): Promise<ConnectionStatus & { switched: boolean }> {
+    const { deviceToken, ...status } = reply;
+    if (!deviceToken) return { ...status, switched: false };
+    await this.store.setItem(TOKEN_KEY, deviceToken);
+    this.token = deviceToken;
+    return { ...status, switched: true };
+  }
+
+  /**
+   * Log out: the server forgets this phone. A 401 means it already has. Either way the token is forgotten;
+   * any other failure keeps it. It doesn't use `call`, whose 401 recovery would make a new account.
+   */
+  async logout(): Promise<void> {
+    if (!this.token) await this.ensureAccount();
+    try {
+      await this.raw('DELETE', '/api/device', undefined, true);
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 401)) throw err;
+    }
+    await this.forgetDevice();
   }
 
   disconnectCanvas() {
@@ -183,12 +208,15 @@ export class ApiClient {
 
   private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
     if (!this.token) await this.ensureAccount();
+    const sentWith = this.token;
     try {
       return (await this.raw(method, path, body, true)) as T;
     } catch (err) {
-      // The server no longer knows this device (for example, its database was reset):
-      // start a fresh anonymous account once and retry.
       if (err instanceof ApiError && err.status === 401) {
+        // A login switched accounts while this request was in flight: its token is the old one. Retry with the new.
+        if (this.token && this.token !== sentWith) return (await this.raw(method, path, body, true)) as T;
+        // The server no longer knows this device (for example, its database was reset):
+        // start a fresh anonymous account once and retry.
         await this.store.removeItem(TOKEN_KEY);
         this.token = null;
         await this.ensureAccount();

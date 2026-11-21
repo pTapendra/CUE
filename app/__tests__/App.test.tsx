@@ -368,6 +368,28 @@ describe('after Canvas has been connected once', () => {
   });
 });
 
+describe('connecting with the token form', () => {
+  it.each([
+    ['switched', 'device-9', 1],
+    ['unswitched', null, 0],
+  ])('the token form: after a %s connect, the new account is asked for its time zone', async (_name, switchToken, asked) => {
+    const server = fakeServer();
+    server.state.switchToken = switchToken;
+    const { root } = await launch(server);
+    await press(root, 'Connect Canvas');
+    await flush();
+    await type(root, 'yourschool.instructure.com', 's.instructure.com');
+    await type(root, 'Paste your token', 'good-token-123');
+    await press(root, 'Connect and sync');
+    await flush();
+    // Start-up already sent the zone with the first account's token; only a switch checks the new account's.
+    const zoneChecks = server.state.calls.filter(
+      (c) => c.method === 'GET' && c.path === '/api/planner/settings' && c.auth === 'Bearer device-9',
+    );
+    expect(zoneChecks).toHaveLength(asked);
+  });
+});
+
 describe('Settings, from the gear on Today', () => {
   it('loads Today and the schedule again after study times are saved', async () => {
     const server = fakeServer();

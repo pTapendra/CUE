@@ -44,7 +44,7 @@ function Root({ api }: { api: ApiClient }) {
         setStarted({
           // Welcome until the student connects Canvas or skips it (once; disconnecting later doesn't bring it back).
           initialRoute: status.connected || onboarded ? 'Tabs' : 'Welcome',
-          startup: { loginAvailable: status.loginAvailable, canvasUrl: status.baseUrl },
+          startup: { loginAvailable: status.loginAvailable, canvasUrl: status.baseUrl, linked: status.linked },
         });
       } catch (err) {
         if (!cancelled) setStartError(friendlyMessage(err));

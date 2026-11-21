@@ -25,6 +25,7 @@ function Probe() {
     <>
       <Text>{`connected ${sync.connected}`}</Text>
       <Text>{`login ${sync.loginAvailable}`}</Text>
+      <Text>{`linked ${sync.linked}`}</Text>
       <Text>{`synced ${sync.lastSyncedAt}`}</Text>
       <Text>{`busy ${sync.busy}`}</Text>
       <Pressable onPress={sync.sync}>
@@ -48,7 +49,7 @@ const SettingsMarker = Marker('Settings screen');
 
 let tree: ReactTestRenderer.ReactTestRenderer | undefined;
 
-async function open(server: Server, startup: Startup = { loginAvailable: false, canvasUrl: null }, fetchImpl = server.fetchImpl) {
+async function open(server: Server, startup: Startup = { loginAvailable: false, canvasUrl: null, linked: false }, fetchImpl = server.fetchImpl) {
   const client = new ApiClient('http://cue.test', memoryStore(), fetchImpl);
   const nav = createNavigationContainerRef<RootStackParamList>();
   await act(async () => {
@@ -139,7 +140,7 @@ describe('useSync', () => {
       if (new URL(url).pathname === '/api/canvas/login') await started;
       return server.fetchImpl(url, init);
     }) as unknown as typeof fetch;
-    const { root } = await open(server, { loginAvailable: true, canvasUrl: null }, gated);
+    const { root } = await open(server, { loginAvailable: true, canvasUrl: null, linked: false }, gated);
 
     await press(root, 'connect');
     expect(texts(root)).toContain('busy true');
@@ -155,5 +156,35 @@ describe('useSync', () => {
     await flush();
     expect(root.findAllByType('WebView' as never)).toHaveLength(0);
     expect(texts(root)).toContain('Review screen');
+  });
+
+  it('reports linked from the connection status', async () => {
+    const server = fakeServer();
+    server.state.linked = true;
+    const { root } = await open(server);
+    await flush();
+    expect(texts(root)).toContain('linked true');
+  });
+
+  describe.each([
+    ['switched', 'device-9', true],
+    ['unswitched', null, false],
+  ])('after a %s login', (_name, switchToken, sent) => {
+    it(`${sent ? 'sends' : "doesn't send"} the phone's time zone`, async () => {
+      const server = fakeServer();
+      server.state.loginAvailable = true;
+      server.state.switchToken = switchToken;
+      const { root } = await open(server, { loginAvailable: true, canvasUrl: null, linked: false });
+      await press(root, 'connect');
+      await flush();
+      await act(async () => {
+        root
+          .findByType('WebView' as never)
+          .props.onShouldStartLoadWithRequest({ url: 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1' });
+      });
+      await flush();
+      const puts = server.state.calls.filter((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
+      expect(puts).toHaveLength(sent ? 1 : 0);
+    });
   });
 });

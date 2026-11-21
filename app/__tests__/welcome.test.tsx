@@ -25,7 +25,7 @@ it('puts the tabs under Review after a Canvas login, so Back cannot return to We
   await act(async () => {
     tree = ReactTestRenderer.create(
       <ApiProvider client={client}>
-        <StartupContext.Provider value={{ loginAvailable: true, canvasUrl: null }}>
+        <StartupContext.Provider value={{ loginAvailable: true, canvasUrl: null, linked: false }}>
           <WelcomeScreen {...({ navigation, route: { key: 'w', name: 'Welcome' } } as any)} />
         </StartupContext.Provider>
       </ApiProvider>,

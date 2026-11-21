@@ -82,6 +82,8 @@ export interface ConnectionStatus {
   lastSyncedAt: string | null;
   /** True when the server is set up for Log in with Canvas. */
   loginAvailable: boolean;
+  /** The account has a Canvas identity; it stays true after Disconnect. */
+  linked: boolean;
 }
 
 export interface CanvasLoginStart {
