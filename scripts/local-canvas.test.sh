@@ -549,6 +549,7 @@ test_start_mentions_demo_accounts_when_they_exist() {
   local out
   out="$(cat "$T/out")"
   assert_contains "shows the file" "Demo accounts: $T/local-canvas-accounts.csv" "$out"
+  assert_contains "hints how to refresh the dates" "(move their dates to today with: scripts/local-canvas-seed.sh)" "$out"
   case "$out" in *"Add demo courses"*) assert_eq "no question" "absent" "asked" ;; esac
 }
 
@@ -947,6 +948,50 @@ esac'
   case "$out" in *"from /app/x.rb:1"*) assert_eq "backtrace hidden" "hidden" "shown" ;; esac
   case "$out" in *"Demo data ready"*) assert_eq "no summary" "absent" "present" ;; esac
   assert_eq "old file kept" "old" "$(cat "$T/local-canvas-accounts.csv")"
+}
+
+test_seed_without_account_lines_blames_canvas() {
+  seed_world
+  printf 'old\n' >"$T/local-canvas-accounts.csv"
+  stub docker 'case "$*" in
+  "compose ps"*) echo web ;;
+  "compose exec"*) echo "just noise" ;;
+esac'
+  bash "$SEED_SCRIPT" >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "blames Canvas" "Canvas didn't list the demo accounts" "$(cat "$T/out")"
+  assert_eq "old file kept" "old" "$(cat "$T/local-canvas-accounts.csv")"
+}
+
+test_seed_write_failure_says_it_couldnt_write_the_file() {
+  seed_world
+  fake_seed_output >"$T/seed.out"
+  stub docker 'case "$*" in
+  "compose ps"*) echo web ;;
+  "compose exec"*) cat "$T/seed.out" ;;
+esac'
+  # The settings folder can be read but not written to.
+  chmod 500 "$T"
+  bash "$SEED_SCRIPT" >"$T/../out.$$" 2>&1
+  local code=$?
+  chmod 700 "$T"
+  local out
+  out="$(cat "$T/../out.$$")"
+  rm -f "$T/../out.$$"
+  assert_eq "status" "1" "$code"
+  assert_contains "says the write failed" "Couldn't write $T/local-canvas-accounts.csv." "$out"
+  case "$out" in *"didn't list"*) assert_eq "not blamed on Canvas" "absent" "present" ;; esac
+}
+
+test_seed_refuses_to_run_as_root() {
+  seed_world
+  stub docker 'exit 1'
+  stub id 'echo 0'
+  local out code
+  out="$(bash "$SEED_SCRIPT" 2>&1)"
+  code=$?
+  assert_eq "exit code" "1" "$code"
+  assert_contains "message" "root" "$out"
 }
 
 test_seed_ruby_follows_the_rules() {

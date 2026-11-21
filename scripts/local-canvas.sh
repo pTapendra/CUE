@@ -801,14 +801,14 @@ seed_accounts_file() {
   printf '%s\n' "$(dirname "$(settings_file)")/local-canvas-accounts.csv"
 }
 
-# Before the ngrok question: says where the demo accounts are, or, the first
-# time, offers to add demo courses and accounts. If adding them fails, start
-# carries on.
+# Before the ngrok question: says where the demo accounts are, or, until there
+# is demo data, offers to add demo courses and accounts. If adding them fails,
+# start carries on.
 offer_demo_data() {
   local file
   file="$(seed_accounts_file)"
   if [ -f "$file" ]; then
-    say "Demo accounts: $file"
+    say "Demo accounts: $file (move their dates to today with: scripts/local-canvas-seed.sh)"
     return 0
   fi
   ask_yes_no "Add demo courses and accounts (about a minute)?" || return 0
@@ -857,8 +857,8 @@ Usage: scripts/local-canvas.sh <command>
 
   setup   First time: check the tools you need, then install Canvas in Docker.
           Takes an hour or more.
-  start   Start Canvas. Offers demo courses and accounts the first time, then
-          asks whether to make it reachable from a phone through ngrok; with
+  start   Start Canvas. Until there is demo data, offers to add demo
+          courses and accounts, then asks whether to make it reachable from a phone through ngrok; with
           ngrok it also sets up Canvas login for Cue.
   stop    Stop Canvas.
 EOF

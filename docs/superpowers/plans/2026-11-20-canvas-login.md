@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Never write "Sprint" (or "Sprint 1/2") in code, tests, docs, README or commit messages.
+- No iteration labels (the team's rule) in code, tests, docs, README or commit messages.
 - The developer key's secret is never sent to the app, logged, printed by the script, or committed.
 - Nothing from Canvas's token reply except `access_token`, `refresh_token` and `expires_in` is kept. `user` and `real_user` are dropped, never stored or logged.
 - Cue's only non-GET requests to Canvas are the token requests: `POST /login/oauth2/token` (exchange, renewal) and `DELETE /login/oauth2/token` (revoke).

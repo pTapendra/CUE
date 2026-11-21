@@ -57,30 +57,36 @@ run_seed_ruby() { # canvas_dir
 # Reads the Ruby's output on stdin and writes its CUE_ACCOUNT lines to <file>
 # as CSV. The file is written in full beside <file> first (under umask 077, so
 # never readable by others, even briefly), then moved over it. Without any
-# account lines nothing is written and the old file stays as it was.
+# account lines nothing is written and the old file stays as it was (returns 1
+# for that; 2 when writing the file failed).
 write_accounts_file() { # file
   local file="$1" rows tmp
   rows="$(awk -F '\t' 'BEGIN { OFS = "," } $1 == "CUE_ACCOUNT" { print $2, $3, $4, $5, $6, $7 }')"
   [ -n "$rows" ] || return 1
-  mkdir -p "$(dirname "$file")" || return 1
-  tmp="$(umask 077 && mktemp "$file.XXXXXX")" || return 1
+  mkdir -p "$(dirname "$file")" || return 2
+  tmp="$(umask 077 && mktemp "$file.XXXXXX")" || return 2
   if printf 'role,name,email,password,canvas_user_id,courses\n%s\n' "$rows" >"$tmp" &&
     chmod 600 "$tmp" && mv -f "$tmp" "$file"; then
     return 0
   fi
   rm -f "$tmp"
-  return 1
+  return 2
 }
 
 seed_main() {
-  local file out counts
+  local file out counts code
   find_canvas
   canvas_web_running "$CANVAS_DIR" || die "Canvas isn't running. Start it with: scripts/local-canvas.sh start"
   file="$(seed_accounts_file)"
   say "Adding demo courses and accounts (about a minute)..."
   out="$(run_seed_ruby "$CANVAS_DIR")" || exit 1
-  printf '%s\n' "$out" | write_accounts_file "$file" ||
-    die "Canvas didn't list the demo accounts, so $file wasn't written."
+  printf '%s\n' "$out" | write_accounts_file "$file"
+  code=$?
+  case "$code" in
+    0) ;;
+    1) die "Canvas didn't list the demo accounts, so $file wasn't written." ;;
+    *) die "Couldn't write $file." ;;
+  esac
   counts="$(printf '%s\n' "$out" | awk -F '\t' '
     $1 == "CUE_COURSES" { courses = $2 }
     $1 == "CUE_ACCOUNT" && $2 == "teacher" { teachers++ }
@@ -92,6 +98,9 @@ seed_main() {
 }
 
 main() {
+  if [ "$(id -u)" = "0" ]; then
+    die "Please don't run this as root (or with sudo). It asks for your password when it needs it."
+  fi
   seed_main
 }
 

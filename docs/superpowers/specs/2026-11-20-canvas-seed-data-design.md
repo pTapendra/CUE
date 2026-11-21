@@ -23,7 +23,7 @@ To test "Log in with Canvas" and to demo Cue, the local Canvas needs student and
 
 - Touching anything the seed didn't create, in particular the admin account and courses teammates made by hand.
 - Committing the accounts file.
-- Using the word "Sprint" anywhere (data included).
+- Using an iteration label (the banned word) anywhere (data included).
 
 ## Approaches
 

@@ -257,7 +257,7 @@ module CueDemoSeed
   def enroll(course, user, role)
     type = (role == "teacher") ? "TeacherEnrollment" : "StudentEnrollment"
     enrollment = course.enroll_user(user, type, enrollment_state: "active", force_update: true, no_notify: true)
-    return if enrollment.persisted? && enrollment.workflow_state == "active"
+    return if enrollment.persisted? && enrollment.workflow_state == "active" && !enrollment.changed?
 
     raise "Couldn't enroll #{user.name} in #{course.course_code}: #{enrollment.errors.full_messages.join(", ")}"
   end

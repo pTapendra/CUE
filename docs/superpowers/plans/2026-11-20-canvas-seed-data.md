@@ -16,7 +16,7 @@
 - Emails: `first.last@students.cue-demo.test` and `first.last@faculty.cue-demo.test`.
 - SIS IDs: courses `cue-demo-<code without space, lowercase>` (e.g. `cue-demo-cs4350`), users `cue-demo-<first>-<last>` (lowercase), term `cue-demo-term`. Records without a `cue-demo-` SIS ID are never changed.
 - Accounts file: `local-canvas-accounts.csv` in the same folder as `local-canvas.sh`'s settings file (so `CUE_LOCAL_CANVAS_SETTINGS` moves it in tests), mode 600. Header: `role,name,email,password,canvas_user_id,courses`.
-- Never start ngrok. Never write the real `~/.config/cue` from tests. Never write "Sprint" anywhere, data included.
+- Never start ngrok. Never write the real `~/.config/cue` from tests. No iteration labels (the team's rule) anywhere, data included.
 - macOS bash 3.2 compatible (no arrays-of-arrays, `mapfile`, `${x,,}`).
 
 ## Review Focus
@@ -87,7 +87,7 @@
   - `test_seed_failure_keeps_the_old_file_and_shows_canvas_error`: the `exec` stub writes `RuntimeError: maya.thompson@students.cue-demo.test already belongs to a Canvas user the seed didn't create` and a `from /app/x.rb:1` line to stderr, then exits 1. Expect exit 1; the message is shown, the `from` line is not, and the old file is unchanged (Review Focus 2 and 4).
   - `test_seed_ruby_follows_the_rules`: a static check of `scripts/local-canvas-seed.rb`:
     - it contains `cue-demo-term`, `-cue2026`, `students.cue-demo.test`, `faculty.cue-demo.test`, `CUE_SEED_TZ`, `CUE_ACCOUNT` and `already belongs to a Canvas user the seed didn't create`;
-    - it does not contain `Sprint` (any case).
+    - it does not contain the banned iteration label (any case), checked with a pattern so the test file does not contain the word either.
 
 - [ ] **Step 2: Run them to see them fail**
   Run: `bash scripts/local-canvas.test.sh`
