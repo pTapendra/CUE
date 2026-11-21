@@ -287,6 +287,23 @@ describe('Canvas login', () => {
     expect(readLoginReturn('https://evil.test/login/oauth2/auth?code=c1&state=s1', A, 's1')).toBeNull();
   });
 
+  it('readLoginReturn: only access_denied is denied, other errors failed', () => {
+    expect(readLoginReturn('https://canvas.test/login/oauth2/auth?error=invalid_scope&state=s1', A, 's1')).toEqual({
+      kind: 'failed',
+    });
+  });
+
+  it('readLoginReturn compares the host, so an http return address still counts', () => {
+    expect(readLoginReturn('http://canvas.test/login/oauth2/auth?code=c1&state=s1', A, 's1')).toEqual({
+      kind: 'code',
+      code: 'c1',
+    });
+    expect(readLoginReturn('http://evil.test/login/oauth2/auth?code=c1&state=s1', A, 's1')).toBeNull();
+    expect(readLoginReturn('http://canvas.test/login/oauth2/auth?code=c1&state=zz', A, 's1')).toEqual({
+      kind: 'mismatch',
+    });
+  });
+
   it('friendly messages for the login errors', () => {
     expect(friendlyMessage(new ApiError(409, 'canvas_token_rejected', 'x'))).toBe(
       "Canvas no longer accepts Cue's access. Connect again.",
@@ -360,6 +377,13 @@ describe('Canvas login', () => {
     await act(async () => hook().start());
     await act(async () => {
       hook().onNavigate(back('nope'));
+    });
+    expect(hook().authorizeUrl).toBeNull();
+    expect(hook().error).toBe("Canvas didn't complete the login. Please try again.");
+
+    await act(async () => hook().start());
+    await act(async () => {
+      hook().onNavigate('https://canvas.test/login/oauth2/auth?error=invalid_scope&state=s1');
     });
     expect(hook().authorizeUrl).toBeNull();
     expect(hook().error).toBe("Canvas didn't complete the login. Please try again.");

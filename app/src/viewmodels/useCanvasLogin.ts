@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useApi } from '../api/ApiContext';
-import { friendlyMessage } from '../api/client';
+import { ApiError, friendlyMessage } from '../api/client';
 import { readLoginReturn } from './canvasLogin';
 
 interface Session {
@@ -51,6 +51,8 @@ export function useCanvasLogin(onConnected: () => void) {
     s.finished = true;
     if (found.kind === 'denied') {
       close("You didn't allow Cue to read Canvas.");
+    } else if (found.kind === 'failed') {
+      close(friendlyMessage(new ApiError(409, 'canvas_login_failed', '')));
     } else if (found.kind === 'mismatch') {
       close("The login didn't complete. Please try again.");
     } else {

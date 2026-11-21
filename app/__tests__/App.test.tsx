@@ -205,6 +205,20 @@ describe('Log in with Canvas', () => {
     });
   });
 
+  it('finishes from onNavigationStateChange alone', async () => {
+    const { server, root, tree, webView } = await openLogin();
+    await act(async () => {
+      webView().props.onNavigationStateChange({ url: codeUrl });
+    });
+    await flush();
+    expect(texts(root)).toContain('Check what Cue found');
+    const finish = server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/login/finish');
+    expect(finish).toHaveLength(1);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
   it('denying Cue returns to Connect with a message', async () => {
     const { root, tree } = await openLogin();
     await act(async () => {
