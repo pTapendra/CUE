@@ -56,6 +56,12 @@ export interface BlockView {
   clash: { title: string; startsAt: string; endsAt: string } | null;
 }
 
+export interface Overview {
+  items: Item[];
+  undated: Item[];
+  blocks: BlockView[];
+}
+
 export interface Week {
   from: string;
   to: string;
@@ -103,7 +109,8 @@ function checkEnd(dueAt: string | null, endsAt: string | null): void {
  */
 export class ScheduleService {
   private readonly listeners: ((studentId: string) => void)[] = [];
-  private readonly now: () => Date;
+  /** The service's clock; the API reads it so the overview agrees with the planner. */
+  readonly now: () => Date;
 
   constructor(
     private readonly repo: ScheduleRepository,
@@ -115,6 +122,11 @@ export class ScheduleService {
   /** Called with the student's id after each change to their items or a block they rejected or moved. */
   onChange(listener: (studentId: string) => void): void {
     this.listeners.push(listener);
+  }
+
+  /** Tells the listeners about a change saved elsewhere, such as items moved in from another account. */
+  markChanged(studentId: string): void {
+    this.emit(studentId);
   }
 
   listCourses(studentId: string): Course[] {
@@ -134,6 +146,20 @@ export class ScheduleService {
       items: this.repo.itemsDueBetween(studentId, from, to).map((item) => this.present(item)),
       undated: this.repo.undatedItems(studentId).map((item) => this.present(item)),
       blocks: this.blocksBetween(studentId, from, to),
+    };
+  }
+
+  /**
+   * Everything the overview screens need in one read: items due from 30 days back to 200 days ahead,
+   * every undated item, and the proposed and accepted blocks that have not ended within 200 days.
+   */
+  getOverview(studentId: string, now: Date): Overview {
+    const from = new Date(now.getTime() - 30 * DAY_MS);
+    const to = new Date(now.getTime() + 200 * DAY_MS);
+    return {
+      items: this.repo.itemsDueBetween(studentId, from, to).map((item) => this.present(item)),
+      undated: this.repo.undatedItems(studentId).map((item) => this.present(item)),
+      blocks: this.blocksBetween(studentId, now, to),
     };
   }
 

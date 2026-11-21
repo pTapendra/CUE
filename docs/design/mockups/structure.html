@@ -1,0 +1,194 @@
+<style>
+  .phones { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+  .pc { width: 290px; flex: none; }
+  .phone {
+    width: 280px; height: 590px; margin: 0 auto; border: 1px solid #d9d9de; border-radius: 38px;
+    background: #fff; color: #1d1d1f; overflow: hidden; position: relative; flex: none;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+    box-shadow: 0 12px 30px rgba(0,0,0,.08);
+  }
+  .status { height: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 22px; font-size: 12px; font-weight: 600; }
+  .scr { padding: 0 16px; }
+  .h1 { font-size: 26px; font-weight: 700; letter-spacing: -.4px; margin: 6px 0 2px; }
+  .h2 { font-size: 20px; font-weight: 700; letter-spacing: -.3px; margin: 4px 0 2px; }
+  .sub { font-size: 12px; color: #8a8a8e; }
+  .topbar { display: flex; justify-content: space-between; align-items: flex-end; }
+  .iconbtn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: #6e6e73; font-size: 15px; }
+  .back { color: #2f6feb; font-size: 13px; margin: 2px 0 6px; }
+  .sec { font-size: 11px; font-weight: 700; color: #1d1d1f; margin: 16px 0 6px; display: flex; justify-content: space-between; }
+  .sec span { color: #8a8a8e; font-weight: 500; }
+  .row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid #f0f0f2; }
+  .chk { width: 16px; height: 16px; border-radius: 9px; border: 1.5px solid #c7c7cc; margin-top: 1px; flex: none; }
+  .title { font-size: 13px; font-weight: 500; line-height: 1.25; }
+  .meta { font-size: 11px; color: #8a8a8e; margin-top: 2px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .dot { width: 7px; height: 7px; border-radius: 4px; display: inline-block; flex: none; }
+  .c1 { background: #7a6ff0; } .c2 { background: #12a38a; } .c3 { background: #e39b2d; }
+  .tag { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: #fdecef; color: #c4364d; font-weight: 600; }
+  .tabs { position: absolute; bottom: 0; left: 0; right: 0; height: 62px; border-top: 1px solid #eeeef0; background: rgba(255,255,255,.96);
+    display: flex; justify-content: space-around; padding-top: 8px; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: #8a8a8e; }
+  .tab.on { color: #1d1d1f; font-weight: 600; }
+  .seg { display: flex; background: #f2f2f4; border-radius: 9px; padding: 2px; margin: 10px 0 4px; }
+  .seg span { flex: 1; text-align: center; font-size: 11px; padding: 5px 0; border-radius: 7px; color: #6e6e73; }
+  .seg span.on { background: #fff; color: #1d1d1f; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .grid { position: relative; margin-top: 4px; border-top: 1px solid #f0f0f2; }
+  .hr { height: 44px; border-bottom: 1px solid #f4f4f6; font-size: 9px; color: #a1a1a6; padding-left: 2px; }
+  .ev { position: absolute; border-radius: 7px; padding: 4px 6px; font-size: 10px; line-height: 1.2; overflow: hidden; }
+  .now { position: absolute; left: 28px; right: 0; height: 1.5px; background: #e5484d; }
+  .now:before { content: ""; position: absolute; left: -4px; top: -3px; width: 7px; height: 7px; border-radius: 4px; background: #e5484d; }
+  .cols { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; font-size: 10px; color: #8a8a8e; text-align: center; margin-top: 6px; }
+  .allday { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; gap: 3px; margin: 6px 0 2px; }
+  .pill { font-size: 9px; border-radius: 5px; padding: 3px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card { border: 1px solid #ececef; border-radius: 14px; padding: 12px; margin-top: 10px; }
+  .course-head { display: flex; align-items: center; gap: 8px; }
+  .code { font-size: 11px; font-weight: 700; color: #6e6e73; letter-spacing: .3px; }
+  .bar { height: 5px; border-radius: 3px; background: #f0f0f2; overflow: hidden; margin-top: 6px; }
+  .bar i { display: block; height: 100%; border-radius: 3px; }
+  .topic { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f0f0f2; font-size: 12px; }
+  .topic .name { flex: 1; }
+  .score { font-size: 11px; font-weight: 600; width: 34px; text-align: right; }
+  .mini { flex: 0 0 60px; height: 4px; border-radius: 2px; background: #f0f0f2; overflow: hidden; }
+  .mini i { display: block; height: 100%; }
+  .btn { display: inline-block; background: #1d1d1f; color: #fff; border-radius: 10px; padding: 8px 12px; font-size: 12px; font-weight: 600; text-align: center; }
+  .btn.full { display: block; margin-top: 10px; }
+  .btn.ghost { background: #f2f2f4; color: #1d1d1f; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { font-size: 11px; padding: 5px 9px; border-radius: 14px; border: 1px solid #e3e3e8; color: #3a3a3c; }
+  .chip.on { background: #1d1d1f; border-color: #1d1d1f; color: #fff; }
+  .soon { font-size: 9px; font-weight: 700; color: #8a8a8e; background: #f2f2f4; border-radius: 5px; padding: 1px 5px; margin-left: 4px; }
+  .pc h3 { margin: 14px 0 4px; }
+  .pc p { margin: 0; font-size: 13px; }
+</style>
+
+<h2>How the rest of the app fits together</h2>
+<p class="subtitle">Not options this time: one proposal for the Schedule, Courses and Study tabs, including where R3 (study plans), R5 (material), R6 (quizzes) and R7 (weak topics) will live. Grey "later" tags mark parts we build when those features come. Tell me what's wrong or missing.</p>
+
+<div class="phones">
+
+  <!-- Schedule -->
+  <div class="pc">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scr">
+        <div class="topbar">
+          <div><div class="h1">November</div></div>
+          <div style="display:flex"><div class="iconbtn">◷</div><div class="iconbtn" style="font-size:20px">+</div></div>
+        </div>
+        <div class="seg"><span>Day</span><span class="on">3 days</span><span>Week</span></div>
+        <div class="cols"><span></span><span style="color:#1d1d1f;font-weight:700">Sat 21</span><span>Sun 22</span><span>Mon 23</span></div>
+        <div class="allday">
+          <span style="font-size:8px;color:#a1a1a6">due</span><span></span>
+          <span class="pill" style="background:#fdf5e7;color:#9a6512">Quiz 1: Sampling</span>
+          <span class="pill" style="background:#e6f6f2;color:#0c7a67">Quiz 1: SQL</span>
+        </div>
+        <div class="grid">
+          <div class="hr">16</div><div class="hr">17</div><div class="hr">18</div><div class="hr">19</div><div class="hr">20</div><div class="hr">21</div><div class="hr">22</div><div class="hr">23</div>
+          <div class="ev" style="left:30px;width:68px;top:90px;height:40px;background:#fdf5e7;border-left:3px solid #e39b2d;color:#7a4f0e"><b>Study</b><br>Sampling Dist.</div>
+          <div class="ev" style="left:106px;width:68px;top:134px;height:84px;background:#fdf5e7;border-left:3px solid #e39b2d;color:#7a4f0e"><b>Study</b><br>Sampling Dist.</div>
+          <div class="ev" style="left:182px;width:66px;top:90px;height:84px;background:#e6f6f2;border-left:3px solid #12a38a;color:#0c6455"><b>Study</b><br>SQL Basics</div>
+          <div class="ev" style="left:30px;width:68px;top:222px;height:40px;background:#fff;border:1px dashed #7a6ff0;color:#4b42a8"><b>Suggested</b><br>UML diagrams</div>
+          <div class="now" style="top:60px"></div>
+        </div>
+      </div>
+      <div class="tabs"><div class="tab">◉<span>Today</span></div><div class="tab on">▦<span>Schedule</span></div><div class="tab">▤<span>Courses</span></div><div class="tab">✦<span>Study</span></div></div>
+    </div>
+    <h3>Schedule</h3>
+    <p>The calendar: Day, 3 days or Week. Deadlines in the top lane, study blocks as soft blocks in course colours, suggestions dashed. Tap a block to accept, move or reject it (a bottom sheet). ◷ jumps to today.</p>
+  </div>
+
+  <!-- Courses -->
+  <div class="pc">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scr">
+        <div class="topbar"><div class="h1">Courses</div><div class="iconbtn">⟳</div></div>
+        <div class="sub">Fall 2026 · synced from Canvas</div>
+
+        <div class="card">
+          <div class="course-head"><span class="dot c1"></span><span class="code">CS 4350</span></div>
+          <div class="title" style="font-size:14px;margin-top:3px">Software Engineering</div>
+          <div class="meta">Next: Quiz 1: Version Control · Tue</div>
+          <div class="meta"><span class="tag">Midterm needs a date</span></div>
+        </div>
+        <div class="card">
+          <div class="course-head"><span class="dot c2"></span><span class="code">CS 4513</span></div>
+          <div class="title" style="font-size:14px;margin-top:3px">Database Systems</div>
+          <div class="meta">Next: Quiz 1: SQL Basics · Mon</div>
+          <div class="meta">Midterm Mon 7 Dec · study plan 4 of 6 blocks</div>
+          <div class="bar"><i style="width:66%;background:#12a38a"></i></div>
+        </div>
+        <div class="card">
+          <div class="course-head"><span class="dot c3"></span><span class="code">STAT 3303</span></div>
+          <div class="title" style="font-size:14px;margin-top:3px">Applied Statistics</div>
+          <div class="meta">Next: Quiz 1: Sampling Distributions · Sun</div>
+          <div class="meta">2 weak topics <span class="soon">LATER</span></div>
+        </div>
+      </div>
+      <div class="tabs"><div class="tab">◉<span>Today</span></div><div class="tab">▦<span>Schedule</span></div><div class="tab on">▤<span>Courses</span></div><div class="tab">✦<span>Study</span></div></div>
+    </div>
+    <h3>Courses</h3>
+    <p>One card per course: what's next, its exams and how far their study plan has got. Tap a course to open it.</p>
+  </div>
+
+  <!-- Course detail -->
+  <div class="pc">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scr">
+        <div class="back">‹ Courses</div>
+        <div class="course-head"><span class="dot c2"></span><span class="code">CS 4513</span></div>
+        <div class="h2">Database Systems</div>
+        <div class="seg"><span class="on">Exams</span><span>Work</span><span>Notes</span><span>Topics</span></div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between"><div class="title">Midterm Exam <span class="tag">Exam</span></div><span class="sub">Mon 7 Dec</span></div>
+          <div class="meta">Study plan · starts Mon 30 Nov · 6 blocks</div>
+          <div class="bar"><i style="width:66%;background:#12a38a"></i></div>
+          <div class="meta">4 accepted · 2 suggested</div>
+          <div style="display:flex;gap:6px;margin-top:8px"><span class="btn ghost" style="flex:1">View plan</span><span class="btn" style="flex:1">Quiz me</span></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between"><div class="title">Final exam (Room 210) <span class="tag">Exam</span></div><span class="sub">Tue 22 Dec</span></div>
+          <div class="meta">No study plan yet</div>
+          <span class="btn full">Plan my studying</span>
+        </div>
+
+        <div class="sec">Weakest topics <span>last quiz · <span class="soon">LATER</span></span></div>
+        <div class="topic"><span class="name">Normalization</span><span class="mini"><i style="width:40%;background:#e5484d"></i></span><span class="score" style="color:#e5484d">40%</span></div>
+        <div class="topic"><span class="name">Joins</span><span class="mini"><i style="width:55%;background:#e39b2d"></i></span><span class="score" style="color:#b7791f">55%</span></div>
+      </div>
+      <div class="tabs"><div class="tab">◉<span>Today</span></div><div class="tab">▦<span>Schedule</span></div><div class="tab on">▤<span>Courses</span></div><div class="tab">✦<span>Study</span></div></div>
+    </div>
+    <h3>A course</h3>
+    <p>Exams first, each with its study plan (R3): "Plan my studying" proposes one. Work lists assignments; Notes holds material (R5); Topics shows weak topics, weakest first (R7).</p>
+  </div>
+
+  <!-- Study -->
+  <div class="pc">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scr">
+        <div class="topbar"><div class="h1">Study</div><div class="iconbtn" style="font-size:20px">+</div></div>
+        <div class="sub">Quiz yourself on your own notes and slides <span class="soon">LATER</span></div>
+
+        <div class="card">
+          <div class="title" style="font-size:14px">Quiz me on…</div>
+          <div class="chips"><span class="chip on">Midterm · CS 4513</span><span class="chip">STAT 3303</span><span class="chip">A topic</span></div>
+          <div class="meta" style="margin-top:8px">10 questions from 3 notes and 1 slide deck attached to this exam</div>
+          <span class="btn full">Start quiz</span>
+        </div>
+
+        <div class="sec">Recent quizzes <span>See all</span></div>
+        <div class="row"><span class="dot c2" style="margin-top:4px"></span><div style="flex:1"><div class="title">Midterm · CS 4513</div><div class="meta">Thu · 7 of 10</div></div><span class="score" style="color:#1d1d1f">70%</span></div>
+        <div class="row"><span class="dot c3" style="margin-top:4px"></span><div style="flex:1"><div class="title">Hypothesis testing</div><div class="meta">Tue · 4 of 8</div></div><span class="score" style="color:#e5484d">50%</span></div>
+
+        <div class="sec">Your material</div>
+        <div class="row"><div style="flex:1"><div class="title">3 notes · 2 slide decks</div><div class="meta">Add a note or upload slides under a topic</div></div><span class="sub">›</span></div>
+      </div>
+      <div class="tabs"><div class="tab">◉<span>Today</span></div><div class="tab">▦<span>Schedule</span></div><div class="tab">▤<span>Courses</span></div><div class="tab on">✦<span>Study</span></div></div>
+    </div>
+    <h3>Study</h3>
+    <p>The quiz hub (R6): choose an exam, course or topic, take a quiz built only from the material you picked (N1). Recent results, and + to add a note or slides (R5).</p>
+  </div>
+
+</div>

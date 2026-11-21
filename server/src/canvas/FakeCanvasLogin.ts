@@ -4,6 +4,8 @@ import { CanvasLoginRefusedError, type CanvasLogin, type CanvasTokens } from "./
 export class FakeCanvasLogin implements CanvasLogin {
   readonly canvasUrl = "https://canvas.test";
   expiresInSeconds: number | null = 3600;
+  /** Canvas user ID for each code that Canvas accepts. */
+  users: Record<string, string> = { "good-code": "42" };
   refuseRenewal = false;
   failRevoke = false;
   renewals = 0;
@@ -13,9 +15,14 @@ export class FakeCanvasLogin implements CanvasLogin {
     return `${this.canvasUrl}/login/oauth2/auth?state=${state}`;
   }
 
-  async exchangeCode(code: string): Promise<CanvasTokens> {
-    if (code !== "good-code") throw new CanvasLoginRefusedError();
-    return { accessToken: "access-1", refreshToken: "refresh-1", expiresInSeconds: this.expiresInSeconds };
+  async exchangeCode(code: string): Promise<CanvasTokens & { userId: string }> {
+    if (!Object.hasOwn(this.users, code)) throw new CanvasLoginRefusedError();
+    return {
+      accessToken: "access-1",
+      refreshToken: "refresh-1",
+      expiresInSeconds: this.expiresInSeconds,
+      userId: this.users[code],
+    };
   }
 
   async renew(_refreshToken: string): Promise<CanvasTokens> {

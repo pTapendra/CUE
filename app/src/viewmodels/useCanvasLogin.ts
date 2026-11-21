@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { useApi } from '../api/ApiContext';
 import { ApiError, friendlyMessage } from '../api/client';
+import { setOnboarded } from '../prefs';
+import { syncTimeZone } from '../timeZone';
 import { readLoginReturn } from './canvasLogin';
 
 interface Session {
@@ -65,7 +67,12 @@ export function useCanvasLogin(onConnected: () => void) {
     const mine = attempt.current;
     setBusy(true);
     try {
-      await api.finishCanvasLogin(code, s.state);
+      const result = await api.finishCanvasLogin(code, s.state);
+      // A new account has no time zone yet; not awaited, it never fails.
+      if (result.switched) syncTimeZone(api);
+      // Connected once: Welcome doesn't show again, even after a disconnect. If the phone can't keep
+      // the flag, Welcome just shows again on a launch without Canvas.
+      await setOnboarded(api.store, true).catch(() => {});
       if (mine !== attempt.current) return;
       close(null);
       onConnected();
@@ -85,3 +92,5 @@ export function useCanvasLogin(onConnected: () => void) {
 
   return { authorizeUrl, busy, error, start, onNavigate, cancel };
 }
+
+export type CanvasLogin = ReturnType<typeof useCanvasLogin>;

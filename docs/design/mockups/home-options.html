@@ -1,0 +1,166 @@
+<style>
+  .phones { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
+  .phone-card { width: 300px; }
+  .phone-card.option { display: block; width: 316px; flex: none; padding: 14px 8px 16px; }
+  .phone-card.option .phone { flex: none; }
+  .phone-card.option h3, .phone-card.option p { padding: 0 8px; }
+  .phone {
+    width: 280px; height: 590px; margin: 0 auto; border: 1px solid #d9d9de; border-radius: 38px;
+    background: #fff; color: #1d1d1f; overflow: hidden; position: relative;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+    box-shadow: 0 12px 30px rgba(0,0,0,.08);
+  }
+  .status { height: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 22px; font-size: 12px; font-weight: 600; }
+  .scr { padding: 0 16px; }
+  .h1 { font-size: 26px; font-weight: 700; letter-spacing: -.4px; margin: 6px 0 2px; }
+  .sub { font-size: 12px; color: #8a8a8e; }
+  .topbar { display: flex; justify-content: space-between; align-items: flex-end; }
+  .iconbtn { width: 30px; height: 30px; border-radius: 15px; display: flex; align-items: center; justify-content: center; color: #6e6e73; }
+  .sec { font-size: 11px; font-weight: 700; color: #1d1d1f; margin: 16px 0 6px; display: flex; justify-content: space-between; }
+  .sec span { color: #8a8a8e; font-weight: 500; }
+  .row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid #f0f0f2; }
+  .chk { width: 16px; height: 16px; border-radius: 9px; border: 1.5px solid #c7c7cc; margin-top: 1px; flex: none; }
+  .chk.exam { border-color: #d6455d; }
+  .title { font-size: 13px; font-weight: 500; line-height: 1.25; }
+  .meta { font-size: 11px; color: #8a8a8e; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+  .dot { width: 7px; height: 7px; border-radius: 4px; display: inline-block; }
+  .c1 { background: #7a6ff0; } .c2 { background: #12a38a; } .c3 { background: #e39b2d; }
+  .tag { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: #fdecef; color: #c4364d; font-weight: 600; }
+  .link { color: #2f6feb; font-weight: 600; font-size: 11px; }
+  .block { border-radius: 10px; padding: 8px 10px; margin: 2px 0 6px; font-size: 12px; }
+  .tabs { position: absolute; bottom: 0; left: 0; right: 0; height: 62px; border-top: 1px solid #eeeef0; background: rgba(255,255,255,.96);
+    display: flex; justify-content: space-around; padding-top: 8px; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: #8a8a8e; }
+  .tab.on { color: #1d1d1f; font-weight: 600; }
+  .fab { position: absolute; right: 16px; bottom: 76px; width: 46px; height: 46px; border-radius: 23px; background: #1d1d1f; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 300; box-shadow: 0 6px 16px rgba(0,0,0,.2); }
+  .strip { display: flex; justify-content: space-between; margin: 12px 0 4px; }
+  .day { width: 32px; text-align: center; font-size: 10px; color: #8a8a8e; }
+  .day b { display: block; font-size: 14px; color: #1d1d1f; margin-top: 3px; width: 28px; height: 28px; line-height: 28px; border-radius: 14px; margin-left: 2px; font-weight: 600; }
+  .day.on b { background: #1d1d1f; color: #fff; }
+  .day i { display: block; width: 4px; height: 4px; border-radius: 2px; margin: 3px auto 0; background: #c7c7cc; }
+  .grid { position: relative; margin-top: 6px; border-top: 1px solid #f0f0f2; }
+  .hr { height: 46px; border-bottom: 1px solid #f4f4f6; font-size: 9px; color: #a1a1a6; padding-left: 2px; }
+  .ev { position: absolute; border-radius: 7px; padding: 4px 6px; font-size: 10px; line-height: 1.2; overflow: hidden; }
+  .now { position: absolute; left: 28px; right: 0; height: 1.5px; background: #e5484d; }
+  .now:before { content: ""; position: absolute; left: -4px; top: -3px; width: 7px; height: 7px; border-radius: 4px; background: #e5484d; }
+  .cols { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; font-size: 10px; color: #8a8a8e; text-align: center; margin-top: 8px; }
+  .allday { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; gap: 3px; margin: 6px 0 2px; }
+  .pill { font-size: 9px; border-radius: 5px; padding: 3px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .next { border: 1px solid #ececef; border-radius: 14px; padding: 12px; margin-top: 12px; }
+  .btn { display: inline-block; background: #1d1d1f; color: #fff; border-radius: 9px; padding: 6px 12px; font-size: 11px; font-weight: 600; margin-top: 8px; }
+  .btn.ghost { background: #f2f2f4; color: #1d1d1f; margin-left: 6px; }
+  .phone-card h3 { margin: 14px 0 4px; }
+  .phone-card p { margin: 0; font-size: 13px; }
+</style>
+
+<h2>Which home screen feels right for Cue?</h2>
+<p class="subtitle">Same clean style in all three (white, near-black type, one colour per course, thin dividers, line icons, tab bar). What differs is what students see first. Click the one you like; real data from the demo seed.</p>
+
+<div class="phones">
+
+  <!-- A: Todoist-like list -->
+  <div class="phone-card option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scr">
+        <div class="topbar">
+          <div><div class="h1">Today</div><div class="sub">Saturday 21 November · 4 due this week</div></div>
+          <div class="iconbtn" title="Sync">⟳</div>
+        </div>
+
+        <div class="sec">Today <span>1 study block</span></div>
+        <div class="block" style="background:#fdf5e7;border-left:3px solid #e39b2d">
+          <b>Study · Quiz 1: Sampling Distributions</b>
+          <div class="meta"><span class="dot c3"></span>STAT 3303 · 18:00–19:00</div>
+        </div>
+
+        <div class="sec">Tomorrow <span>Sun 22 Nov</span></div>
+        <div class="row"><div class="chk"></div><div><div class="title">Quiz 1: Sampling Distributions</div><div class="meta"><span class="dot c3"></span>STAT 3303 · due 23:59</div></div></div>
+
+        <div class="sec">Monday <span>23 Nov</span></div>
+        <div class="row"><div class="chk"></div><div><div class="title">Quiz 1: SQL Basics</div><div class="meta"><span class="dot c2"></span>CS 4513 · due 23:59</div></div></div>
+
+        <div class="sec">Tuesday <span>24 Nov</span></div>
+        <div class="row"><div class="chk"></div><div><div class="title">Quiz 1: Version Control</div><div class="meta"><span class="dot c1"></span>CS 4350 · due 23:59</div></div></div>
+
+        <div class="sec">Needs a date</div>
+        <div class="row"><div class="chk exam"></div><div style="flex:1"><div class="title">Midterm Exam <span class="tag">Exam</span></div><div class="meta"><span class="dot c1"></span>CS 4350 · <span class="link">Add date</span></div></div></div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tabs">
+        <div class="tab on">◉<span>Today</span></div><div class="tab">▦<span>Schedule</span></div><div class="tab">▤<span>Courses</span></div><div class="tab">✦<span>Study</span></div>
+      </div>
+    </div>
+    <h3>A · Today list</h3>
+    <p>Like Todoist's Today. Study blocks and deadlines in time order, grouped by day; tick things off; + to add. Calendar view lives in the Schedule tab.</p>
+  </div>
+
+  <!-- B: Notion Calendar-like grid -->
+  <div class="phone-card option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scr">
+        <div class="topbar">
+          <div><div class="h1">November</div><div class="sub">2026 · 3 days</div></div>
+          <div style="display:flex;gap:2px"><div class="iconbtn">⟳</div><div class="iconbtn" style="font-size:20px">+</div></div>
+        </div>
+        <div class="cols"><span></span><span style="color:#1d1d1f;font-weight:700">Sat 21</span><span>Sun 22</span><span>Mon 23</span></div>
+        <div class="allday">
+          <span style="font-size:8px;color:#a1a1a6">due</span>
+          <span></span>
+          <span class="pill" style="background:#fdf5e7;color:#9a6512">Quiz 1: Sampling</span>
+          <span class="pill" style="background:#e6f6f2;color:#0c7a67">Quiz 1: SQL</span>
+        </div>
+        <div class="grid">
+          <div class="hr">16</div><div class="hr">17</div><div class="hr">18</div><div class="hr">19</div><div class="hr">20</div><div class="hr">21</div><div class="hr">22</div><div class="hr">23</div>
+          <div class="ev" style="left:30px;width:68px;top:94px;height:42px;background:#fdf5e7;border-left:3px solid #e39b2d;color:#7a4f0e"><b>Study</b><br>Sampling Dist.</div>
+          <div class="ev" style="left:106px;width:68px;top:140px;height:88px;background:#fdf5e7;border-left:3px solid #e39b2d;color:#7a4f0e"><b>Study</b><br>Sampling Dist.</div>
+          <div class="ev" style="left:182px;width:66px;top:94px;height:88px;background:#e6f6f2;border-left:3px solid #12a38a;color:#0c6455"><b>Study</b><br>SQL Basics</div>
+          <div class="ev" style="left:30px;width:68px;top:232px;height:42px;background:#efedfd;border-left:3px dashed #7a6ff0;color:#4b42a8"><b>Suggested</b><br>UML diagrams</div>
+          <div class="now" style="top:62px"></div>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab">◉<span>Today</span></div><div class="tab on">▦<span>Schedule</span></div><div class="tab">▤<span>Courses</span></div><div class="tab">✦<span>Study</span></div>
+      </div>
+    </div>
+    <h3>B · Calendar first</h3>
+    <p>Like Notion Calendar. Opens on a 3-day time grid: deadlines in a top lane, study blocks as soft coloured blocks, suggestions dashed, a red "now" line.</p>
+  </div>
+
+  <!-- C: Hybrid -->
+  <div class="phone-card option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scr">
+        <div class="topbar">
+          <div><div class="h1">Today</div><div class="sub">Saturday 21 November</div></div>
+          <div class="iconbtn">⟳</div>
+        </div>
+        <div class="strip">
+          <div class="day">M<b>16</b></div><div class="day">T<b>17</b></div><div class="day">W<b>18</b></div><div class="day">T<b>19</b></div><div class="day">F<b>20</b></div><div class="day on">S<b>21</b><i style="background:#e39b2d"></i></div><div class="day">S<b>22</b><i></i></div>
+        </div>
+
+        <div class="next">
+          <div class="sub" style="font-weight:600;color:#e39b2d">UP NEXT · 18:00</div>
+          <div class="title" style="font-size:15px;margin-top:3px">Study for Quiz 1: Sampling Distributions</div>
+          <div class="meta"><span class="dot c3"></span>STAT 3303 · 1 hour · Quiz due tomorrow</div>
+          <span class="btn">Start</span><span class="btn ghost">Move</span>
+        </div>
+
+        <div class="sec">Due soon <span>See all</span></div>
+        <div class="row"><div class="chk"></div><div><div class="title">Quiz 1: Sampling Distributions</div><div class="meta"><span class="dot c3"></span>STAT 3303 · tomorrow 23:59</div></div></div>
+        <div class="row"><div class="chk"></div><div><div class="title">Quiz 1: SQL Basics</div><div class="meta"><span class="dot c2"></span>CS 4513 · Mon 23:59</div></div></div>
+        <div class="row"><div class="chk exam"></div><div><div class="title">Midterm Exam <span class="tag">Exam</span></div><div class="meta"><span class="dot c3"></span>STAT 3303 · Thu 3 Dec</div></div></div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tabs">
+        <div class="tab on">◉<span>Today</span></div><div class="tab">▦<span>Schedule</span></div><div class="tab">▤<span>Courses</span></div><div class="tab">✦<span>Study</span></div>
+      </div>
+    </div>
+    <h3>C · Today with "Up next"</h3>
+    <p>A week strip, one big card for the next study block (Start / Move; ties into reminders, R4), then what's due soon. Calendar grid in the Schedule tab.</p>
+  </div>
+
+</div>

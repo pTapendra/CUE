@@ -31,6 +31,13 @@ export interface Week {
   shortfalls: Shortfall[];
 }
 
+export interface Overview {
+  items: Item[];
+  undated: Item[];
+  blocks: StudyBlock[];
+  shortfalls: Shortfall[];
+}
+
 export interface StudyBlock {
   id: string;
   itemId: string;
@@ -75,6 +82,8 @@ export interface ConnectionStatus {
   lastSyncedAt: string | null;
   /** True when the server is set up for Log in with Canvas. */
   loginAvailable: boolean;
+  /** The account has a Canvas identity; it stays true after Disconnect. */
+  linked: boolean;
 }
 
 export interface CanvasLoginStart {

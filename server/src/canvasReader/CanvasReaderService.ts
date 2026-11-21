@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { AccountService, CurrentDevice } from "../accounts/AccountService.js";
 import { CanvasAuthError, type CanvasClient, type CanvasClientFactory } from "../canvas/CanvasClient.js";
 import { CanvasLoginRefusedError, type CanvasLogin } from "../canvas/CanvasLogin.js";
 import { decrypt, encrypt } from "../crypto.js";
@@ -49,6 +50,8 @@ const RENEW_WITHIN = 2 * 60 * 1000;
 
 export interface CanvasReaderOptions {
   secretKey: Buffer;
+  /** A Canvas login (or pasted token) decides which account the phone uses. */
+  accounts: AccountService;
   /** Allows http:// and local addresses, for development against a local fake Canvas. */
   allowInsecureUrls?: boolean;
   /** Logging in with Canvas; null or absent when the server has no login settings. */
@@ -81,6 +84,7 @@ export class CanvasReaderService {
       baseUrl: c?.baseUrl ?? null,
       lastSyncedAt: c?.lastSyncedAt ?? null,
       loginAvailable: this.login != null,
+      linked: this.opts.accounts.isLinked(studentId),
     };
   }
 
@@ -92,10 +96,18 @@ export class CanvasReaderService {
     return { authorizeUrl: this.login.authorizeUrl(state), state };
   }
 
-  /** Exchanges the code, checks the access token with one read, then stores both tokens sealed. */
-  async finishLogin(studentId: string, code: string, state: string): Promise<void> {
+  /**
+   * Exchanges the code and checks the access token with one read, then puts the phone on the
+   * Canvas user's account and stores both tokens sealed there. `deviceToken` is set when the
+   * phone switched accounts.
+   */
+  async finishLogin(
+    current: CurrentDevice,
+    code: string,
+    state: string,
+  ): Promise<{ studentId: string; deviceToken: string | null }> {
     if (!this.login) throw new LoginUnavailableError();
-    if (!this.repo.takeLoginState(studentId, state, this.now())) throw new LoginExpiredError();
+    if (!this.repo.takeLoginState(current.studentId, state, this.now())) throw new LoginExpiredError();
     const tokens = await this.login.exchangeCode(code);
     try {
       await this.makeClient(this.login.canvasUrl, tokens.accessToken).listCourses();
@@ -106,21 +118,59 @@ export class CanvasReaderService {
     const key = this.opts.secretKey;
     const accessExpiresAt =
       tokens.expiresInSeconds == null ? null : new Date(this.now().getTime() + tokens.expiresInSeconds * 1000).toISOString();
-    const previous = this.repo.getConnection(studentId);
-    this.repo.saveConnection(
-      studentId,
-      this.login.canvasUrl,
-      encrypt(tokens.accessToken, key),
-      tokens.refreshToken ? { refreshSealed: encrypt(tokens.refreshToken, key), accessExpiresAt } : null,
-    );
-    if (previous && this.isRenewable(previous)) {
-      await this.revokeQuietly(decrypt(previous.tokenSealed, key));
+    try {
+      return this.linkAndSave(
+        current,
+        { canvasUrl: this.login.canvasUrl, userId: tokens.userId },
+        encrypt(tokens.accessToken, key),
+        tokens.refreshToken ? { refreshSealed: encrypt(tokens.refreshToken, key), accessExpiresAt } : null,
+      );
+    } catch (e) {
+      // Nothing was saved (the transaction rolled back), so Cue won't use this grant.
+      await this.revokeQuietly(tokens.accessToken);
+      throw e;
     }
+  }
+
+  /**
+   * Every Canvas request is done by now. Links the phone to the Canvas user's account and saves
+   * the connection there in one transaction, and returns as soon as it commits. Nothing after the
+   * commit throws or waits: the login connections Cue no longer uses (the one replaced, and the one
+   * of the phone's old account if it was deleted) are revoked best effort, without waiting for Canvas.
+   */
+  private linkAndSave(
+    current: CurrentDevice,
+    identity: { canvasUrl: string; userId: string },
+    tokenSealed: string,
+    renewal: { refreshSealed: string; accessExpiresAt: string | null } | null,
+  ): { studentId: string; deviceToken: string | null } {
+    const ownConnection = this.repo.getConnection(current.studentId);
+    let replaced = null as StoredConnection | null;
+    const result = this.opts.accounts.link(current, identity, (target) => {
+      replaced = this.repo.getConnection(target);
+      this.repo.saveConnection(target, identity.canvasUrl, tokenSealed, renewal);
+    });
+
+    if (replaced && this.isRenewable(replaced)) void this.revokeStored(replaced);
+    if (result.removedStudentId === current.studentId && ownConnection && this.isRenewable(ownConnection)) {
+      void this.revokeStored(ownConnection);
+    }
+    if (result.movedItems > 0) this.schedule.markChanged(result.studentId);
+    return { studentId: result.studentId, deviceToken: result.deviceToken };
   }
 
   private async revokeQuietly(accessToken: string): Promise<void> {
     try {
       await this.login!.revoke(accessToken);
+    } catch {
+      // Best effort.
+    }
+  }
+
+  /** Revokes a stored connection's access token; never throws, so the caller need not wait for it. */
+  private async revokeStored(conn: StoredConnection): Promise<void> {
+    try {
+      await this.login!.revoke(decrypt(conn.tokenSealed, this.opts.secretKey));
     } catch {
       // Best effort.
     }
@@ -135,11 +185,20 @@ export class CanvasReaderService {
     );
   }
 
-  /** Checks the token with one read before storing it, encrypted. */
-  async connect(studentId: string, baseUrl: string, token: string): Promise<void> {
+  /**
+   * Checks the token with one read and asks Canvas who it belongs to, then links the phone
+   * as a login does and stores the token, encrypted, on the resulting account.
+   */
+  async connect(
+    current: CurrentDevice,
+    baseUrl: string,
+    token: string,
+  ): Promise<{ studentId: string; deviceToken: string | null }> {
     const url = this.checkUrl(baseUrl);
-    await this.makeClient(url, token).listCourses();
-    this.repo.saveConnection(studentId, url, encrypt(token, this.opts.secretKey));
+    const client = this.makeClient(url, token);
+    await client.listCourses();
+    const { id } = await client.whoAmI();
+    return this.linkAndSave(current, { canvasUrl: url, userId: id }, encrypt(token, this.opts.secretKey), null);
   }
 
   /**

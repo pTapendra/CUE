@@ -15,6 +15,7 @@ export interface FakeCanvasData {
 /** In-memory Canvas for tests and offline demos. */
 export class FakeCanvasClient implements CanvasClient {
   rejectToken = false;
+  userId = "42";
 
   constructor(public data: FakeCanvasData) {}
 
@@ -36,6 +37,11 @@ export class FakeCanvasClient implements CanvasClient {
       const t = Date.parse(e.startAt);
       return t >= from.getTime() && t <= to.getTime();
     });
+  }
+
+  async whoAmI() {
+    this.check();
+    return { id: this.userId };
   }
 
   private check() {

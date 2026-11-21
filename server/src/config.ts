@@ -18,9 +18,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       throw new Error("CUE_SECRET_KEY must be 32 bytes, base64-encoded");
     }
   } else {
-    // Development only: a random key means stored Canvas tokens become
-    // unreadable after a restart, and students must reconnect.
-    console.warn("CUE_SECRET_KEY is not set; using a temporary key for this run.");
+    // Development only: a random key means that after a restart stored Canvas tokens become
+    // unreadable, and every account is unlinked from its Canvas login (the key also keys the
+    // identity hash): the next login opens a new, empty account and the old data can't be reached.
+    console.warn(
+      "CUE_SECRET_KEY is not set; using a temporary key for this run. After a restart, saved Canvas tokens " +
+        "can't be read and every account is unlinked from its Canvas login: the next login opens a new, empty account.",
+    );
     secretKey = randomBytes(32);
   }
 

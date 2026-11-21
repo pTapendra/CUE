@@ -3,137 +3,191 @@
  */
 
 import React from 'react';
+import { ActivityIndicator, Alert } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import * as WebBrowser from 'expo-web-browser';
 import App from '../App';
-import { ApiClient } from '../src/api/client';
+import { ApiClient, type TokenStore } from '../src/api/client';
 import { deviceTimeZone } from '../src/timeZone';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, isDisabled, press, texts, type } from '../test-support/ui';
+import { flush, isDisabled, press, tap, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
 // Opening a real browser is not possible in tests; record where the app tries to go.
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })) }));
 
-it('connects Canvas, confirms items with a missing exam date, and shows the week', async () => {
-  const server = fakeServer();
-  const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+type Node = ReactTestRenderer.ReactTestInstance;
 
-  let tree: ReactTestRenderer.ReactTestRenderer;
+const HEADLINE = 'Know what to study, and when.';
+const SKIP = 'Skip for now · add dates by hand';
+const TABS = ['Today', 'Schedule', 'Courses'];
+
+let tree: ReactTestRenderer.ReactTestRenderer | undefined;
+
+/** Starts the app against `server`. A restart passes the same `store`, as the phone keeps it. */
+async function launch(server = fakeServer(), store: TokenStore = memoryStore(), fetchImpl = server.fetchImpl) {
+  const client = new ApiClient('http://cue.test', store, fetchImpl);
   await act(async () => {
     tree = ReactTestRenderer.create(<App client={client} />);
   });
   await flush();
-  const root = tree!.root;
-  expect(texts(root)).toContain('Connect Canvas');
+  return { server, store, root: tree!.root };
+}
 
-  await type(root, 'yourschool.instructure.com', 's.instructure.com');
-  await type(root, 'Paste your token', 'good-token-123');
-  await press(root, 'Connect and sync');
-  await flush();
-  expect(server.state.calls.find((c) => c.method === 'PUT' && c.path !== '/api/planner/settings')!.body).toEqual({
-    baseUrl: 'https://s.instructure.com',
-    token: 'good-token-123',
-  });
-
-  // The phone's time zone was sent to the Planner at startup.
-  const zonePut = server.state.calls.find((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
-  expect((zonePut!.body as { timeZone: string }).timeZone).toBe(deviceTimeZone());
-
-  // Review screen: the exam has no date, so the student types one.
-  expect(texts(root)).toContain('Check what Cue found');
-  expect(texts(root)).toContain('Canvas has no date for this exam.');
-  await type(root, 'YYYY-MM-DD HH:mm', '2026-11-06 10:00');
-  await press(root, 'Save 2 items');
-  await flush();
-
-  // The grid opens on today and the next two days; the homework is due on Tuesday.
-  const shown = texts(root);
-  expect(shown).toContain('Mon 2 Nov – Wed 4 Nov');
-  expect(shown).toContain('Tue 3 Nov');
-  expect(shown).toContain('SQL homework');
-  expect(shown).not.toContain('Exam: Midterm Exam');
-  expect(shown).not.toContain('Needs a date');
-
-  // The exam on Friday is on the next page.
-  await press(root, '›');
-  await flush();
-  expect(texts(root)).toContain('Thu 5 Nov – Sat 7 Nov');
-  expect(texts(root)).toContain('Exam: Midterm Exam');
-
+afterEach(async () => {
   await act(async () => {
-    tree!.unmount();
+    tree?.unmount();
   });
+  tree = undefined;
 });
 
-it('starts without waiting for the time zone to be sent', async () => {
-  const server = fakeServer();
-  // The Planner settings never answer; everything else does.
-  const slowSettings = ((url: string, init?: RequestInit) =>
-    new URL(url).pathname === '/api/planner/settings' ? new Promise(() => {}) : server.fetchImpl(url, init)) as unknown as typeof fetch;
-  const client = new ApiClient('http://cue.test', memoryStore(), slowSettings);
+/** The label of the tab on screen, or undefined when the tabs are not showing. */
+function selectedTab(root: Node): string | undefined {
+  const tab = root.findAll((n) => n.props['aria-selected'] === true && typeof n.props.onPress === 'function')[0];
+  return tab ? texts(tab).find((t) => TABS.includes(t)) : undefined;
+}
 
-  let tree: ReactTestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = ReactTestRenderer.create(<App client={client} />);
+function tokenForms(root: Node): number {
+  return root.findAll((n) => n.props.placeholder === 'Paste your token').length;
+}
+
+describe('first launch', () => {
+  it('shows Welcome, outside the tabs', async () => {
+    const server = fakeServer();
+    server.state.loginAvailable = true;
+    const { root } = await launch(server);
+
+    const shown = texts(root);
+    expect(shown).toContain(HEADLINE);
+    expect(shown).toContain('Log in with Canvas');
+    expect(shown).toContain(SKIP);
+    expect(shown).toContain("No name or email needed. Your Canvas login is your Cue account; your Canvas access stays on Cue's server.");
+    expect(shown).not.toContain('Connect Canvas');
+    expect(selectedTab(root)).toBeUndefined();
   });
-  await flush();
-  expect(texts(tree!.root)).toContain('Connect Canvas');
 
-  await act(async () => {
-    tree!.unmount();
+  it('Skip goes to the tabs, and the next launch skips Welcome', async () => {
+    const server = fakeServer();
+    const { root, store } = await launch(server);
+
+    await press(root, SKIP);
+    await flush();
+    expect(texts(root)).toEqual(expect.arrayContaining(TABS));
+    expect(selectedTab(root)).toBe('Today');
+    expect(texts(root)).not.toContain(HEADLINE);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+    const restarted = await launch(server, store);
+    expect(selectedTab(restarted.root)).toBe('Today');
+    expect(texts(restarted.root)).not.toContain(HEADLINE);
+  });
+
+  it('a connected student starts on the tabs', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    const { root } = await launch(server);
+
+    expect(texts(root)).toEqual(expect.arrayContaining(TABS));
+    expect(selectedTab(root)).toBe('Today');
+    expect(texts(root)).not.toContain(HEADLINE);
+  });
+
+  it('in token mode, Connect Canvas opens the token form, and Cancel goes back to Welcome', async () => {
+    const { root } = await launch();
+    expect(texts(root)).toContain('Connect Canvas');
+    expect(texts(root)).not.toContain('Log in with Canvas');
+    expect(tokenForms(root)).toBe(0);
+
+    await press(root, 'Connect Canvas');
+    await flush();
+    expect(tokenForms(root)).toBeGreaterThan(0);
+
+    await press(root, 'Cancel');
+    await flush();
+    expect(tokenForms(root)).toBe(0);
+    expect(texts(root)).toContain(HEADLINE);
+  });
+
+  it('shows a spinner while starting, then the error with Try again, which starts again', async () => {
+    const server = fakeServer();
+    let release!: (ok: boolean) => void;
+    let reply = new Promise<boolean>((resolve) => (release = resolve));
+    const gated = (async (url: string, init?: RequestInit) => {
+      if (!(await reply)) throw new TypeError('Network request failed');
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const { root } = await launch(server, memoryStore(), gated);
+    expect(root.findAllByType(ActivityIndicator)).toHaveLength(1);
+    expect(texts(root)).not.toContain(HEADLINE);
+
+    await act(async () => release(false));
+    await flush();
+    expect(texts(root)).toContain('Cannot reach the Cue server. Check your connection and try again.');
+
+    reply = Promise.resolve(true);
+    await press(root, 'Try again');
+    await flush();
+    expect(texts(root)).toContain(HEADLINE);
+  });
+
+  it("sends the phone's time zone to the Planner at startup", async () => {
+    const { server } = await launch();
+    const zonePut = server.state.calls.find((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
+    expect((zonePut!.body as { timeZone: string }).timeZone).toBe(deviceTimeZone());
+  });
+
+  it('starts without waiting for the time zone to be sent', async () => {
+    const server = fakeServer();
+    // The Planner settings never answer; everything else does.
+    const slowSettings = ((url: string, init?: RequestInit) =>
+      new URL(url).pathname === '/api/planner/settings' ? new Promise(() => {}) : server.fetchImpl(url, init)) as unknown as typeof fetch;
+    const { root } = await launch(server, memoryStore(), slowSettings);
+    expect(texts(root)).toContain(HEADLINE);
+    expect(texts(root)).toContain('Connect Canvas');
   });
 });
 
 it('opens the school Canvas settings page in the app so the student can make a token on the phone', async () => {
-  const server = fakeServer();
-  const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
-
-  let tree: ReactTestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = ReactTestRenderer.create(<App client={client} />);
-  });
+  const { root } = await launch();
+  await press(root, 'Connect Canvas');
   await flush();
-  const root = tree!.root;
 
   expect(isDisabled(root, 'Open Canvas to create a token')).toBe(true);
   await type(root, 'yourschool.instructure.com', 's.instructure.com');
   expect(isDisabled(root, 'Open Canvas to create a token')).toBe(false);
   await press(root, 'Open Canvas to create a token');
   expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://s.instructure.com/profile/settings');
-
-  await act(async () => {
-    tree!.unmount();
-  });
 });
 
 it('lets a student skip Canvas and add an exam by hand', async () => {
-  const server = fakeServer();
-  const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+  const { server, root } = await launch();
 
-  let tree: ReactTestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = ReactTestRenderer.create(<App client={client} />);
-  });
+  await press(root, SKIP);
   await flush();
-  const root = tree!.root;
-
-  await press(root, "Skip – I'll add dates by hand");
-  await flush();
-  await press(root, 'Add');
+  expect(selectedTab(root)).toBe('Today');
+  await tap(root, 'Add');
   await type(root, 'e.g. Statistics midterm', 'Stats quiz');
   await press(root, 'Exam');
-  await type(root, 'YYYY-MM-DD HH:mm', '2026-11-04 14:00');
+  // The date comes from the picker, not from typing.
+  await act(async () => {
+    root.findAll((n) => n.props.accessibilityLabel === 'Due or exam date' && typeof n.props.onPress === 'function')[0].props.onPress();
+  });
+  await act(async () => {
+    root.findAllByType('DateTimePicker' as never)[0].props.onChange({ type: 'set' }, new Date(2026, 10, 4, 14, 0));
+  });
+  await press(root, 'Done');
   await press(root, 'Save');
   await flush();
 
   expect(server.state.items[0]).toMatchObject({ title: 'Stats quiz', kind: 'exam' });
+  // Due on Wednesday: Today lists it as due soon, and Schedule shows it on its day.
+  expect(texts(root)).toEqual(expect.arrayContaining(['Due soon', 'Stats quiz', 'Exam', 'Wed 4 Nov, 14:00']));
+  await press(root, 'Schedule');
+  await flush();
   expect(texts(root)).toContain('Exam: Stats quiz');
-
-  await act(async () => {
-    tree!.unmount();
-  });
 });
 
 describe('Log in with Canvas', () => {
@@ -143,21 +197,15 @@ describe('Log in with Canvas', () => {
   async function openLogin() {
     const server = fakeServer();
     server.state.loginAvailable = true;
-    const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
-    let tree: ReactTestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = ReactTestRenderer.create(<App client={client} />);
-    });
-    await flush();
-    const root = tree!.root;
+    const { root } = await launch(server);
     await press(root, 'Log in with Canvas');
     await flush();
     const webView = () => root.findByType('WebView' as any);
-    return { server, tree: tree!, root, webView };
+    return { server, root, webView };
   }
 
   it("shows a spinner while Canvas's pages load", async () => {
-    const { root, tree, webView } = await openLogin();
+    const { root, webView } = await openLogin();
     expect(texts(root)).toContain('Loading Canvas…');
     await act(async () => {
       webView().props.onLoadEnd({ nativeEvent: {} });
@@ -167,23 +215,21 @@ describe('Log in with Canvas', () => {
       webView().props.onLoadStart({ nativeEvent: {} });
     });
     expect(texts(root)).toContain('Loading Canvas…');
-    await act(async () => {
-      tree.unmount();
-    });
+  });
+
+  it('shows the Canvas address with a lock under the header', async () => {
+    const { root } = await openLogin();
+    expect(texts(root)).toContain('Log in to Canvas');
+    expect(texts(root)).toContain('canvas.test');
+    expect(root.findAll((n) => n.props.name === 'lock-closed').length).toBeGreaterThan(0);
   });
 
   it('logs in with Canvas and goes to the review screen', async () => {
     const server = fakeServer();
     server.state.loginAvailable = true;
-    const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
-    let tree: ReactTestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = ReactTestRenderer.create(<App client={client} />);
-    });
-    await flush();
-    const root = tree!.root;
+    const { root } = await launch(server);
     expect(texts(root)).toContain('Log in with Canvas');
-    expect(root.findAll((n) => n.props.placeholder === 'Paste your token')).toHaveLength(0);
+    expect(tokenForms(root)).toBe(0);
     expect(root.findAll((n) => n.props.placeholder === 'yourschool.instructure.com')).toHaveLength(0);
 
     await press(root, 'Log in with Canvas');
@@ -202,13 +248,10 @@ describe('Log in with Canvas', () => {
     const finish = server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/login/finish');
     expect(finish).toHaveLength(1);
     expect(finish[0].body).toEqual({ code: 'good-code', state: 's1' });
-    await act(async () => {
-      tree!.unmount();
-    });
   });
 
   it('finishes once when both web view callbacks report the return address', async () => {
-    const { server, tree, webView } = await openLogin();
+    const { server, webView } = await openLogin();
     await act(async () => {
       webView().props.onNavigationStateChange({ url: codeUrl });
       webView().props.onShouldStartLoadWithRequest({ url: codeUrl });
@@ -216,13 +259,10 @@ describe('Log in with Canvas', () => {
     await flush();
     const finish = server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/login/finish');
     expect(finish).toHaveLength(1);
-    await act(async () => {
-      tree.unmount();
-    });
   });
 
   it('finishes from onNavigationStateChange alone', async () => {
-    const { server, root, tree, webView } = await openLogin();
+    const { server, root, webView } = await openLogin();
     await act(async () => {
       webView().props.onNavigationStateChange({ url: codeUrl });
     });
@@ -230,13 +270,10 @@ describe('Log in with Canvas', () => {
     expect(texts(root)).toContain('Check what Cue found');
     const finish = server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/login/finish');
     expect(finish).toHaveLength(1);
-    await act(async () => {
-      tree.unmount();
-    });
   });
 
-  it('denying Cue returns to Connect with a message', async () => {
-    const { root, tree } = await openLogin();
+  it('denying Cue returns to Welcome with a message', async () => {
+    const { root } = await openLogin();
     await act(async () => {
       root.findByType('WebView' as any).props.onShouldStartLoadWithRequest({
         url: 'https://canvas.test/login/oauth2/auth?error=access_denied&state=s1',
@@ -244,36 +281,28 @@ describe('Log in with Canvas', () => {
     });
     await flush();
     expect(texts(root)).toContain("You didn't allow Cue to read Canvas.");
+    expect(texts(root)).toContain(HEADLINE);
     expect(root.findAllByType('WebView' as any)).toHaveLength(0);
-    await act(async () => {
-      tree.unmount();
-    });
   });
 
   it('Cancel closes the login without a message', async () => {
-    const { root, tree } = await openLogin();
+    const { root } = await openLogin();
     expect(isDisabled(root, 'Cancel')).toBe(false);
     await press(root, 'Cancel');
     await flush();
     expect(root.findAllByType('WebView' as any)).toHaveLength(0);
     expect(texts(root)).toContain('Log in with Canvas');
     expect(texts(root)).not.toContain("You didn't allow Cue to read Canvas.");
-    await act(async () => {
-      tree.unmount();
-    });
   });
 
   it('disables Cancel while the login is being finished', async () => {
-    const { root, tree, webView } = await openLogin();
+    const { root, webView } = await openLogin();
     act(() => {
       webView().props.onShouldStartLoadWithRequest({ url: codeUrl });
     });
     // The finish call has started but not settled yet.
     expect(isDisabled(root, 'Cancel')).toBe(true);
     await flush();
-    await act(async () => {
-      tree.unmount();
-    });
   });
 });
 
@@ -281,84 +310,139 @@ it('the login screen gets the Cue user agent for an ngrok Canvas address', async
   const server = fakeServer();
   server.state.loginAvailable = true;
   server.state.loginUrl = 'https://demo.ngrok-free.dev';
-  const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
-  let tree: ReactTestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = ReactTestRenderer.create(<App client={client} />);
-  });
-  await flush();
-  const root = tree!.root;
+  const { root } = await launch(server);
   await press(root, 'Log in with Canvas');
   await flush();
   const web = root.findByType('WebView' as any);
   expect(web.props.source.uri).toBe('https://demo.ngrok-free.dev/login/oauth2/auth?client_id=1&state=s1');
   expect(web.props.userAgent).toMatch(/^CueApp\//);
-  await act(async () => {
-    tree!.unmount();
+  expect(texts(root)).toContain('demo.ngrok-free.dev');
+});
+
+describe('after Canvas has been connected once', () => {
+  const codeUrl = 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1';
+
+  it.each([
+    ['the token form', false],
+    ['Log in with Canvas', true],
+  ])('connecting with %s, then disconnecting, still starts on the tabs, not Welcome', async (_how, loginAvailable) => {
+    const server = fakeServer();
+    server.state.loginAvailable = loginAvailable;
+    const { root, store } = await launch(server);
+    if (loginAvailable) {
+      await press(root, 'Log in with Canvas');
+      await flush();
+      await act(async () => {
+        root.findByType('WebView' as never).props.onShouldStartLoadWithRequest({ url: codeUrl });
+      });
+    } else {
+      await press(root, 'Connect Canvas');
+      await flush();
+      await type(root, 'yourschool.instructure.com', 's.instructure.com');
+      await type(root, 'Paste your token', 'good-token-123');
+      await press(root, 'Connect and sync');
+    }
+    await flush();
+    await press(root, 'Cancel'); // nothing saved from the review
+    await flush();
+    expect(selectedTab(root)).toBe('Today');
+
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await tap(root, 'Settings');
+    await flush();
+    await press(root, 'Disconnect Canvas');
+    const buttons = alert.mock.calls.at(-1)![2] as { text: string; onPress?: () => void }[];
+    await act(async () => {
+      await buttons.find((b) => b.text === 'Disconnect')!.onPress?.();
+    });
+    await flush();
+    alert.mockRestore();
+    expect(server.state.connected).toBe(false);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+    const restarted = await launch(server, store);
+    expect(selectedTab(restarted.root)).toBe('Today');
+    expect(texts(restarted.root)).not.toContain(HEADLINE);
   });
 });
 
-describe('Logging in again from the sync screen', () => {
-  const codeUrl = 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1';
-  const refused = "Canvas no longer accepts Cue's access. Connect again.";
+describe('connecting with the token form', () => {
+  it.each([
+    ['switched', 'device-9', 1],
+    ['unswitched', null, 0],
+  ])('the token form: after a %s connect, the new account is asked for its time zone', async (_name, switchToken, asked) => {
+    const server = fakeServer();
+    server.state.switchToken = switchToken;
+    const { root } = await launch(server);
+    await press(root, 'Connect Canvas');
+    await flush();
+    await type(root, 'yourschool.instructure.com', 's.instructure.com');
+    await type(root, 'Paste your token', 'good-token-123');
+    await press(root, 'Connect and sync');
+    await flush();
+    // Start-up already sent the zone with the first account's token; only a switch checks the new account's.
+    const zoneChecks = server.state.calls.filter(
+      (c) => c.method === 'GET' && c.path === '/api/planner/settings' && c.auth === 'Bearer device-9',
+    );
+    expect(zoneChecks).toHaveLength(asked);
+  });
+});
 
-  // Opens the app already connected (on the Week screen), with the next sync
-  // failing as given, and presses Sync Canvas.
-  async function syncFailing(syncError: { status: number; error: string }, loginAvailable: boolean) {
+describe('Settings, from the gear on Today', () => {
+  it('loads Today and the schedule again after study times are saved', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    const { root } = await launch(server);
+    const loads = (path: string) => server.state.calls.filter((c) => c.path === path).length;
+    await press(root, 'Schedule');
+    await flush();
+    await press(root, 'Today');
+    await flush();
+    const overviewLoads = loads('/api/schedule/overview');
+    const weekLoads = loads('/api/schedule/week');
+
+    await tap(root, 'Settings');
+    await press(root, 'Study times');
+    await flush();
+    await press(root, 'Save');
+    await flush();
+    await press(root, 'Done');
+    await flush();
+    expect(texts(root)).not.toContain('Save');
+    expect(selectedTab(root)).toBe('Today');
+    expect(loads('/api/schedule/overview')).toBe(overviewLoads + 1);
+
+    await press(root, 'Schedule');
+    await flush();
+    expect(loads('/api/schedule/week')).toBe(weekLoads + 1);
+  });
+});
+
+describe('the Schedule tab', () => {
+  async function openSchedule(loginAvailable = false) {
     const server = fakeServer();
     server.state.connected = true;
     server.state.loginAvailable = loginAvailable;
-    server.state.syncError = syncError;
-    const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
-    let tree: ReactTestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = ReactTestRenderer.create(<App client={client} />);
-    });
+    const { root } = await launch(server);
+    await press(root, 'Schedule');
     await flush();
-    const root = tree!.root;
-    await press(root, 'Sync Canvas');
-    await flush();
-    return { server, tree: tree!, root };
+    return { server, root };
   }
 
-  it('a sync Canvas refuses offers Log in with Canvas, then shows the items', async () => {
-    const { root, tree } = await syncFailing({ status: 409, error: 'canvas_token_rejected' }, true);
-    expect(texts(root)).toContain(refused);
-    expect(texts(root)).toContain('Log in with Canvas');
-
-    await press(root, 'Log in with Canvas');
+  it.each([
+    ['Save 2 items', 'Today'],
+    ['Cancel', 'Schedule'],
+  ])('a sync from Schedule: %s goes to %s', async (button, tab) => {
+    const { root } = await openSchedule();
+    await press(root, 'Sync');
     await flush();
-    let load = true;
-    await act(async () => {
-      load = root.findByType('WebView' as any).props.onShouldStartLoadWithRequest({ url: codeUrl });
-    });
-    expect(load).toBe(false);
+    expect(texts(root)).toContain('Check what Cue found');
+
+    await press(root, button);
     await flush();
-
-    expect(texts(root)).toContain('SQL homework');
-    expect(texts(root)).not.toContain(refused);
-    await act(async () => {
-      tree.unmount();
-    });
-  });
-
-  it('without login settings the button opens the token form', async () => {
-    const { root, tree } = await syncFailing({ status: 409, error: 'canvas_token_rejected' }, false);
-    await press(root, 'Connect Canvas');
-    await flush();
-    expect(root.findAll((n) => n.props.placeholder === 'Paste your token').length).toBeGreaterThan(0);
-    await act(async () => {
-      tree.unmount();
-    });
-  });
-
-  it("other sync failures don't offer a login", async () => {
-    const { root, tree } = await syncFailing({ status: 502, error: 'canvas_unavailable' }, true);
-    expect(texts(root)).toContain('Canvas is not responding right now. Your saved schedule is still here.');
-    expect(texts(root)).not.toContain('Log in with Canvas');
-    expect(texts(root)).not.toContain('Connect Canvas');
-    await act(async () => {
-      tree.unmount();
-    });
+    expect(texts(root)).not.toContain('Check what Cue found');
+    expect(selectedTab(root)).toBe(tab);
   });
 });

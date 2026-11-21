@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApi } from '../api/ApiContext';
 import { ApiError, friendlyMessage } from '../api/client';
-import type { SyncPreview } from '../api/types';
-import { fromInput } from '../dates';
+import type { ProposedItem, SyncPreview } from '../api/types';
 
 /** Sync failures that connecting Canvas again fixes. */
 const CONNECT_AGAIN = new Set(['canvas_token_rejected', 'canvas_not_connected']);
@@ -12,7 +11,7 @@ export function useSyncReview() {
   const api = useApi();
   const [preview, setPreview] = useState<SyncPreview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [dateText, setDateText] = useState<Record<string, string>>({});
+  const [dates, setDates] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +25,7 @@ export function useSyncReview() {
       const p = await api.previewSync();
       setPreview(p);
       setSelected(new Set(p.items.map((i) => i.key)));
-      setDateText({});
+      setDates({});
     } catch (err) {
       setError(friendlyMessage(err));
       setNeedsConnect(err instanceof ApiError && CONNECT_AGAIN.has(err.code));
@@ -47,20 +46,15 @@ export function useSyncReview() {
       return next;
     });
 
-  const setDate = (key: string, text: string) => setDateText((prev) => ({ ...prev, [key]: text }));
-
-  /** Keys whose typed date is not a valid date. */
-  const invalidDates = Object.entries(dateText)
-    .filter(([, text]) => fromInput(text) === undefined)
-    .map(([key]) => key);
+  /** The date the student picked for an item (an ISO date), or null to leave it for later. */
+  const setDate = (key: string, iso: string | null) => setDates((prev) => ({ ...prev, [key]: iso }));
 
   async function confirm(): Promise<number | null> {
-    if (!preview || invalidDates.length > 0) return null;
+    if (!preview) return null;
     setSaving(true);
     setError(null);
     try {
-      const dates = buildDates(dateText, selected);
-      const res = await api.confirmSync(preview.syncId, [...selected], dates);
+      const res = await api.confirmSync(preview.syncId, [...selected], buildDates(dates, selected));
       return res.imported;
     } catch (err) {
       setError(friendlyMessage(err));
@@ -74,9 +68,10 @@ export function useSyncReview() {
     preview,
     selected,
     toggle,
-    dateText,
+    dates,
     setDate,
-    invalidDates,
+    /** The proposed items grouped by course, with the count to show. */
+    groups: groupByCourse(preview?.items ?? []),
     loading,
     saving,
     error,
@@ -87,12 +82,22 @@ export function useSyncReview() {
   };
 }
 
-/** Turns the student's typed dates into ISO dates for the accepted items only. */
-export function buildDates(dateText: Record<string, string>, selected: Set<string>): Record<string, string> {
+/** Keeps the picked dates of the accepted items only. */
+export function buildDates(dates: Record<string, string | null>, selected: Set<string>): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [key, text] of Object.entries(dateText)) {
-    const iso = fromInput(text);
+  for (const [key, iso] of Object.entries(dates)) {
     if (selected.has(key) && iso) out[key] = iso;
   }
   return out;
+}
+
+/** Items grouped by course, in the order each course first appears. */
+export function groupByCourse(items: ProposedItem[]): { courseName: string; items: ProposedItem[] }[] {
+  const groups = new Map<string, ProposedItem[]>();
+  for (const item of items) {
+    const list = groups.get(item.courseName);
+    if (list) list.push(item);
+    else groups.set(item.courseName, [item]);
+  }
+  return [...groups].map(([courseName, list]) => ({ courseName, items: list }));
 }

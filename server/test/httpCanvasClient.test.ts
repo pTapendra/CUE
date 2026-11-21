@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CanvasAuthError } from "../src/canvas/CanvasClient.js";
+import { CanvasAuthError, CanvasUnavailableError } from "../src/canvas/CanvasClient.js";
 import { HttpCanvasClient, nextLink } from "../src/canvas/HttpCanvasClient.js";
 
 type Call = { url: string; method: string; auth: string | null };
@@ -21,6 +21,31 @@ function fakeFetch(pages: Record<string, { body: unknown; link?: string; status?
 }
 
 describe("HttpCanvasClient", () => {
+  it("whoAmI asks /api/v1/users/self with the token", async () => {
+    const base = "https://school.instructure.com";
+    const { impl, calls } = fakeFetch({ [`${base}/api/v1/users/self`]: { body: { id: 7, name: "x" } } });
+    const me = await new HttpCanvasClient(base, "tok", impl).whoAmI();
+    expect(me).toEqual({ id: "7" });
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0].url).pathname).toBe("/api/v1/users/self");
+    expect(calls[0].method).toBe("GET");
+    expect(calls[0].auth).toBe("Bearer tok");
+  });
+
+  it("whoAmI without a usable id is CanvasUnavailableError", async () => {
+    const base = "https://school.instructure.com";
+    for (const body of [{ name: "x" }, { id: "" }, { id: {} }, null]) {
+      const { impl } = fakeFetch({ [`${base}/api/v1/users/self`]: { body } });
+      await expect(new HttpCanvasClient(base, "tok", impl).whoAmI()).rejects.toBeInstanceOf(CanvasUnavailableError);
+    }
+  });
+
+  it("whoAmI maps a 401 to CanvasAuthError", async () => {
+    const base = "https://school.instructure.com";
+    const { impl } = fakeFetch({ [`${base}/api/v1/users/self`]: { body: {}, status: 401 } });
+    await expect(new HttpCanvasClient(base, "tok", impl).whoAmI()).rejects.toBeInstanceOf(CanvasAuthError);
+  });
+
   it("only sends GET requests, with the token, and follows pagination", async () => {
     const base = "https://school.instructure.com";
     const { impl, calls } = fakeFetch({

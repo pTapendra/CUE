@@ -93,7 +93,12 @@ describe("log in with Canvas", () => {
     const { login } = setup();
     const insecure = { ...login, canvasUrl: "http://canvas.test" } as unknown as CanvasLogin;
     expect(
-      () => new CanvasReaderService({} as never, {} as never, (() => ({})) as never, { secretKey: Buffer.alloc(32), login: insecure }),
+      () =>
+        new CanvasReaderService({} as never, {} as never, (() => ({})) as never, {
+          secretKey: Buffer.alloc(32),
+          accounts: {} as never,
+          login: insecure,
+        }),
     ).toThrow(InvalidCanvasUrlError);
   });
 

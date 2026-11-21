@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import type { AccountRepository } from "../accounts/AccountRepository.js";
+import { AccountNotLinkedError, type AccountService, type CurrentDevice } from "../accounts/AccountService.js";
 import { CanvasLoginRefusedError } from "../canvas/CanvasLogin.js";
 import { CanvasAuthError, CanvasUnavailableError } from "../canvas/CanvasClient.js";
 import {
@@ -16,7 +16,7 @@ import type { PlannerService } from "../planner/PlannerService.js";
 import { BlockMoveError, InvalidItemError, NotFoundError, type ScheduleService } from "../schedule/ScheduleService.js";
 
 export interface Services {
-  accounts: AccountRepository;
+  accounts: AccountService;
   canvasReader: CanvasReaderService;
   schedule: ScheduleService;
   planner: PlannerService;
@@ -90,7 +90,7 @@ const schemas = {
   status: z.object({ status: z.enum(["not_started", "in_progress", "done", "postponed"]) }),
 };
 
-type Authed = Request & { studentId: string };
+type Authed = Request & CurrentDevice;
 
 export function createApp(s: Services) {
   const app = express();
@@ -117,10 +117,23 @@ export function createApp(s: Services) {
       return;
     }
     (req as Authed).studentId = studentId;
+    (req as Authed).deviceToken = token;
     next();
   });
 
   const sid = (req: Request) => (req as Authed).studentId;
+  const device = (req: Request): CurrentDevice => ({ studentId: sid(req), deviceToken: (req as Authed).deviceToken });
+  /** The resulting account's connection, plus the phone's new token when it switched accounts. */
+  const linkedReply = (r: { studentId: string; deviceToken: string | null }) => ({
+    ...s.canvasReader.status(r.studentId),
+    ...(r.deviceToken ? { deviceToken: r.deviceToken } : {}),
+  });
+
+  // Log out: this phone forgets its account; the account and its Canvas connection stay.
+  api.delete("/device", (req, res) => {
+    s.accounts.logout(sid(req), (req as Authed).deviceToken);
+    res.status(204).end();
+  });
 
   api.delete("/account", async (req, res) => {
     await s.canvasReader.disconnect(sid(req));
@@ -135,8 +148,7 @@ export function createApp(s: Services) {
 
   api.put("/canvas/connection", async (req, res) => {
     const body = schemas.connect.parse(req.body);
-    await s.canvasReader.connect(sid(req), body.baseUrl, body.token);
-    res.json(s.canvasReader.status(sid(req)));
+    res.json(linkedReply(await s.canvasReader.connect(device(req), body.baseUrl, body.token)));
   });
 
   api.post("/canvas/login", (req, res) => {
@@ -145,8 +157,7 @@ export function createApp(s: Services) {
 
   api.post("/canvas/login/finish", async (req, res) => {
     const body = schemas.finishLogin.parse(req.body);
-    await s.canvasReader.finishLogin(sid(req), body.code, body.state);
-    res.json(s.canvasReader.status(sid(req)));
+    res.json(linkedReply(await s.canvasReader.finishLogin(device(req), body.code, body.state)));
   });
 
   api.delete("/canvas/connection", async (req, res) => {
@@ -179,6 +190,11 @@ export function createApp(s: Services) {
     s.planner.replanIfNewDay(sid(req));
     const week = s.schedule.getWeek(sid(req), new Date(from), to === undefined ? days : new Date(to));
     res.json({ ...week, shortfalls: s.planner.shortfalls(sid(req)) });
+  });
+
+  api.get("/schedule/overview", (req, res) => {
+    s.planner.replanIfNewDay(sid(req));
+    res.json({ ...s.schedule.getOverview(sid(req), s.schedule.now()), shortfalls: s.planner.shortfalls(sid(req)) });
   });
 
   // --- Planner (UC2) ---
@@ -250,6 +266,7 @@ function describe(err: unknown): [number, string, string] {
   if (err instanceof NotFoundError) return [404, "not_found", err.message];
   if (err instanceof BlockMoveError) return [409, "block_move_invalid", err.message];
   if (err instanceof InvalidCanvasUrlError) return [400, "invalid_canvas_url", err.message];
+  if (err instanceof AccountNotLinkedError) return [409, "account_not_linked", err.message];
   if (err instanceof CanvasNotConnectedError) return [409, "canvas_not_connected", err.message];
   if (err instanceof CanvasAuthError) return [409, "canvas_token_rejected", "Canvas no longer accepts Cue's access. Connect again."];
   if (err instanceof LoginExpiredError) return [409, "login_expired", err.message];

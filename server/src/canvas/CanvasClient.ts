@@ -5,10 +5,19 @@
  * Every method is a read: Cue never writes to Canvas.
  * The login's token requests (exchange, renew, revoke) live in CanvasLogin.
  */
+/** A Canvas ID from a JSON reply (a number or a string) as a string, or null if it is neither. */
+export function canvasIdString(raw: unknown): string | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+  if (typeof raw === "string" && raw !== "") return raw;
+  return null;
+}
+
 export interface CanvasClient {
   listCourses(): Promise<CanvasCourse[]>;
   listAssignments(courseId: string): Promise<CanvasAssignment[]>;
   listCalendarEvents(courseIds: string[], from: Date, to: Date): Promise<CanvasEvent[]>;
+  /** Who the token belongs to (GET /api/v1/users/self). */
+  whoAmI(): Promise<{ id: string }>;
 }
 
 export interface CanvasCourse {

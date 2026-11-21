@@ -2,6 +2,10 @@ import Database from "better-sqlite3";
 
 export type Db = Database.Database;
 
+/**
+ * The first schema. It isn't the current one: the migrations below change it, and migration 3
+ * rebuilds `students` (its `token_hash` moves into `devices`, and it gains `canvas_identity`).
+ */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS students (
   id            TEXT PRIMARY KEY,
@@ -87,16 +91,46 @@ const MIGRATIONS: string[] = [
     expires_at TEXT NOT NULL
   );
   `,
+  `
+  CREATE TABLE devices (
+    token_hash TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX devices_by_student ON devices (student_id);
+  INSERT INTO devices (token_hash, student_id, created_at)
+    SELECT token_hash, id, created_at FROM students;
+  CREATE TABLE students_new (
+    id              TEXT PRIMARY KEY,
+    canvas_identity TEXT UNIQUE,
+    created_at      TEXT NOT NULL
+  );
+  INSERT INTO students_new (id, created_at) SELECT id, created_at FROM students;
+  DROP TABLE students;
+  ALTER TABLE students_new RENAME TO students;
+  `,
 ];
 
-/** Applies each migration newer than the database's `user_version`, once, in order. */
+/**
+ * Applies each migration newer than the database's `user_version`, once, in order.
+ * Foreign keys are off meanwhile (the pragma is a no-op inside a transaction) so a table
+ * rebuild cannot cascade-delete child rows; they are verified before each commit.
+ */
 export function migrate(db: Db): void {
   const current = db.pragma("user_version", { simple: true }) as number;
-  for (let v = current; v < MIGRATIONS.length; v++) {
-    db.transaction(() => {
-      db.exec(MIGRATIONS[v]!);
-      db.pragma(`user_version = ${v + 1}`);
-    })();
+  db.pragma("foreign_keys = OFF");
+  try {
+    for (let v = current; v < MIGRATIONS.length; v++) {
+      db.transaction(() => {
+        db.exec(MIGRATIONS[v]!);
+        db.pragma(`user_version = ${v + 1}`);
+        if ((db.pragma("foreign_key_check") as unknown[]).length > 0) {
+          throw new Error(`Migration ${v + 1} left rows that break a foreign key`);
+        }
+      })();
+    }
+  } finally {
+    db.pragma("foreign_keys = ON");
   }
 }
 

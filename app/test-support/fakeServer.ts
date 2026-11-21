@@ -1,17 +1,32 @@
-import type { Item, PlannerSettings, Shortfall, StudyBlock } from '../src/api/types';
+import type { Course, Item, PlannerSettings, Shortfall, StudyBlock } from '../src/api/types';
 
 type Handler = (body: any, url: URL) => { status: number; body?: unknown };
 
 /** A tiny in-memory stand-in for the Cue server, answering through `fetch`. */
 export function fakeServer() {
   let nextId = 1;
+  let nextDevice = 1;
+  let switched = false; // a switch reply was sent: the old device tokens stop working
   const state = {
     connected: false,
     loginAvailable: false,
     /** The Canvas address the login screen opens. */
     loginUrl: 'https://canvas.test',
+    /** The account has a Canvas identity (the connection reports `linked`). */
+    linked: false,
+    /** When set, a login or token connect switches the phone to the account with this device token. */
+    switchToken: null as string | null,
+    /** When set, DELETE /api/device fails with a 401 (the server no longer knows the token). */
+    logoutUnauthorized: false,
+    /** When set, DELETE /api/account fails with a 500. */
+    deleteFails: false,
+    /** When set, POST /api/devices fails with a 500 (no new account can be made). */
+    devicesFail: false,
     /** When set, the next syncs fail with this error (a successful login clears it). */
     syncError: null as { status: number; error: string } | null,
+    /** When Canvas was last synced, as the connection reports it. */
+    lastSyncedAt: null as string | null,
+    courses: [] as Course[],
     items: [] as Item[],
     blocks: [] as StudyBlock[],
     shortfalls: [] as Shortfall[],
@@ -35,16 +50,40 @@ export function fakeServer() {
     calls: [] as { method: string; path: string; query: Record<string, string>; body: any; auth: string | null }[],
   };
 
+  /** The `deviceToken` a login or token connect replies with when it switches the phone's account. */
+  function switchReply() {
+    if (state.switchToken === null) return {};
+    switched = true;
+    return { deviceToken: state.switchToken };
+  }
+
   const routes: Record<string, Handler> = {
-    'POST /api/devices': () => ({ status: 201, body: { deviceToken: 'device-1' } }),
+    // Each new account gets its own token: device-1, then device-2 after "Delete all my data".
+    'POST /api/devices': () =>
+      state.devicesFail
+        ? { status: 500, body: { error: 'server_error', message: 'x' } }
+        : { status: 201, body: { deviceToken: `device-${nextDevice++}` } },
     'GET /api/canvas/connection': () => ({
       status: 200,
-      body: { connected: state.connected, baseUrl: state.connected ? 'https://s.instructure.com' : null, lastSyncedAt: null, loginAvailable: state.loginAvailable },
+      body: {
+        connected: state.connected,
+        baseUrl: state.connected ? 'https://s.instructure.com' : null,
+        lastSyncedAt: state.lastSyncedAt,
+        loginAvailable: state.loginAvailable,
+        linked: state.linked,
+      },
     }),
     'PUT /api/canvas/connection': (b) => {
       if (b.token === 'bad-token-123') return { status: 409, body: { error: 'canvas_token_rejected', message: 'x' } };
       state.connected = true;
-      return { status: 200, body: { connected: true, baseUrl: b.baseUrl, lastSyncedAt: null, loginAvailable: state.loginAvailable } };
+      return {
+        status: 200,
+        body: { connected: true, baseUrl: b.baseUrl, lastSyncedAt: null, loginAvailable: state.loginAvailable, linked: state.linked, ...switchReply() },
+      };
+    },
+    'DELETE /api/canvas/connection': () => {
+      state.connected = false;
+      return { status: 204 };
     },
     'POST /api/canvas/login': () => ({
       status: 200,
@@ -56,7 +95,14 @@ export function fakeServer() {
       state.syncError = null;
       return {
         status: 200,
-        body: { connected: true, baseUrl: 'https://s.instructure.com', lastSyncedAt: null, loginAvailable: state.loginAvailable },
+        body: {
+          connected: true,
+          baseUrl: 'https://s.instructure.com',
+          lastSyncedAt: null,
+          loginAvailable: state.loginAvailable,
+          linked: state.linked,
+          ...switchReply(),
+        },
       };
     },
     'POST /api/canvas/sync': () =>
@@ -97,6 +143,22 @@ export function fakeServer() {
         },
       };
     },
+    'GET /api/schedule/overview': () => ({
+      status: 200,
+      body: { items: state.items.filter((i) => i.dueAt), undated: state.items.filter((i) => !i.dueAt), blocks: state.blocks, shortfalls: state.shortfalls },
+    }),
+    'DELETE /api/account': () => {
+      if (state.deleteFails) return { status: 500, body: { error: 'server_error', message: 'x' } };
+      state.connected = false;
+      state.items = [];
+      state.settings = { ...state.settings, timeZone: null }; // the next account starts without one
+      return { status: 204 };
+    },
+    'DELETE /api/device': () => {
+      if (state.logoutUnauthorized) return { status: 401, body: { error: 'unauthorized', message: 'x' } };
+      if (!state.linked) return { status: 409, body: { error: 'account_not_linked', message: 'x' } };
+      return { status: 204 };
+    },
     'GET /api/planner/settings': () => ({ status: 200, body: state.settings }),
     'PUT /api/planner/settings': (b) => {
       state.settings = b;
@@ -109,7 +171,7 @@ export function fakeServer() {
       for (const k of due) k.state = 'accepted';
       return { status: 200, body: { accepted: due.length } };
     },
-    'GET /api/courses': () => ({ status: 200, body: { courses: [] } }),
+    'GET /api/courses': () => ({ status: 200, body: { courses: state.courses } }),
     'POST /api/items': (b) => {
       const item: Item = {
         id: String(nextId++),
@@ -138,7 +200,9 @@ export function fakeServer() {
     const block = /^\/api\/blocks\/([^/]+)\/(accept|reject|move)$/.exec(url.pathname);
     const patch = /^\/api\/items\/([^/]+)$/.exec(url.pathname);
     let result: { status: number; body?: unknown };
-    if (method === 'POST' && block) {
+    if (switched && auth !== null && auth !== `Bearer ${state.switchToken}`) {
+      result = { status: 401, body: { error: 'unauthorized', message: 'x' } };
+    } else if (method === 'POST' && block) {
       const found = state.blocks.find((k) => k.id === block[1]);
       if (!found) {
         result = { status: 404, body: { error: 'not_found', message: 'nope' } };

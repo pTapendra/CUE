@@ -5,6 +5,7 @@ import type {
   Item,
   ItemInput,
   ItemStatus,
+  Overview,
   PlannerSettings,
   SyncPreview,
   Week,
@@ -65,19 +66,45 @@ export function friendlyMessage(err: unknown): string {
  */
 export class ApiClient {
   private token: string | null = null;
+  /**
+   * Counts changes of the device token: a login adopting one, the phone forgetting its own, a new account.
+   * Work that started before a change doesn't overwrite the token after it.
+   */
+  private generation = 0;
+  /** The `ensureAccount` running now, shared by everyone who asks during the same generation. */
+  private loading: { generation: number; done: Promise<void> } | null = null;
 
   constructor(
     private readonly baseUrl: string,
-    private readonly store: TokenStore,
+    /** Where the device token is kept; the app keeps its small preferences there too (see prefs.ts). */
+    readonly store: TokenStore,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  /** Loads the device token, creating an anonymous account on first launch. */
-  async ensureAccount(): Promise<void> {
-    this.token = await this.store.getItem(TOKEN_KEY);
-    if (this.token) return;
+  /**
+   * Loads the device token, creating an anonymous account on first launch. Callers at the same time share
+   * one request. If the token changes meanwhile (a login adopted one), that token stays and the result is dropped.
+   */
+  ensureAccount(): Promise<void> {
+    if (this.loading?.generation !== this.generation) {
+      const generation = this.generation;
+      const done = this.loadOrCreate(generation).finally(() => {
+        if (this.loading?.done === done) this.loading = null;
+      });
+      this.loading = { generation, done };
+    }
+    return this.loading.done;
+  }
+
+  private async loadOrCreate(generation: number): Promise<void> {
+    const stored = await this.store.getItem(TOKEN_KEY);
+    if (this.generation !== generation) return;
+    this.token = stored;
+    if (stored) return;
     const res = await this.raw('POST', '/api/devices', undefined, false);
+    if (this.generation !== generation) return;
     this.token = (res as { deviceToken: string }).deviceToken;
+    this.generation++;
     await this.store.setItem(TOKEN_KEY, this.token);
   }
 
@@ -85,16 +112,42 @@ export class ApiClient {
     return this.call<ConnectionStatus>('GET', '/api/canvas/connection');
   }
 
-  connectCanvas(baseUrl: string, token: string) {
-    return this.call<ConnectionStatus>('PUT', '/api/canvas/connection', { baseUrl, token });
+  async connectCanvas(baseUrl: string, token: string): Promise<ConnectionStatus & { switched: boolean }> {
+    return this.adopt(await this.call<ConnectionStatus & { deviceToken?: string }>('PUT', '/api/canvas/connection', { baseUrl, token }));
   }
 
   startCanvasLogin() {
     return this.call<CanvasLoginStart>('POST', '/api/canvas/login');
   }
 
-  finishCanvasLogin(code: string, state: string) {
-    return this.call<ConnectionStatus>('POST', '/api/canvas/login/finish', { code, state });
+  async finishCanvasLogin(code: string, state: string): Promise<ConnectionStatus & { switched: boolean }> {
+    return this.adopt(
+      await this.call<ConnectionStatus & { deviceToken?: string }>('POST', '/api/canvas/login/finish', { code, state }),
+    );
+  }
+
+  /** Stores the device token a reply carries (the phone switched accounts) and reports whether it did. */
+  private async adopt(reply: ConnectionStatus & { deviceToken?: string }): Promise<ConnectionStatus & { switched: boolean }> {
+    const { deviceToken, ...status } = reply;
+    if (!deviceToken) return { ...status, switched: false };
+    this.token = deviceToken;
+    this.generation++;
+    await this.store.setItem(TOKEN_KEY, deviceToken);
+    return { ...status, switched: true };
+  }
+
+  /**
+   * Log out: the server forgets this phone. A 401 means it already has. Either way the token is forgotten;
+   * any other failure keeps it. It doesn't use `call`, whose 401 recovery would make a new account.
+   */
+  async logout(): Promise<void> {
+    if (!this.token) await this.ensureAccount();
+    try {
+      await this.raw('DELETE', '/api/device', undefined, true);
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 401)) throw err;
+    }
+    await this.forgetDevice();
   }
 
   disconnectCanvas() {
@@ -113,6 +166,24 @@ export class ApiClient {
   getWeek(from: Date, to: Date) {
     const range = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
     return this.call<Week>('GET', `/api/schedule/week?${range}`);
+  }
+
+  /** Everything the overview screens show: about 30 days back to 200 days ahead, plus undated items. */
+  getOverview() {
+    return this.call<Overview>('GET', '/api/schedule/overview');
+  }
+
+  /** Deletes the account on the server, then forgets the device token. A failure keeps the token. */
+  async deleteAccount(): Promise<void> {
+    await this.call<void>('DELETE', '/api/account');
+    await this.forgetDevice();
+  }
+
+  /** Forgets the stored device token, so the next `ensureAccount()` creates a new account. */
+  async forgetDevice(): Promise<void> {
+    this.token = null;
+    this.generation++;
+    await this.store.removeItem(TOKEN_KEY);
   }
 
   getPlannerSettings() {
@@ -164,18 +235,18 @@ export class ApiClient {
 
   private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
     if (!this.token) await this.ensureAccount();
+    const sentWith = this.token;
     try {
       return (await this.raw(method, path, body, true)) as T;
     } catch (err) {
-      // The server no longer knows this device (for example, its database was reset):
-      // start a fresh anonymous account once and retry.
-      if (err instanceof ApiError && err.status === 401) {
-        await this.store.removeItem(TOKEN_KEY);
-        this.token = null;
-        await this.ensureAccount();
-        return (await this.raw(method, path, body, true)) as T;
-      }
-      throw err;
+      if (!(err instanceof ApiError && err.status === 401)) throw err;
+      // The server no longer knows this device (for example, its database was reset): start a fresh
+      // anonymous account once and retry. But if the token changed since this request was sent (a login
+      // switched accounts, or another request already started over), retry with the current one instead.
+      if (this.token === sentWith) await this.forgetDevice();
+      // A login may adopt a token while the fresh account is made; ensureAccount then keeps that one.
+      if (!this.token) await this.ensureAccount();
+      return (await this.raw(method, path, body, true)) as T;
     }
   }
 

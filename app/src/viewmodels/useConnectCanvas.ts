@@ -2,6 +2,8 @@ import { useState } from 'react';
 import * as WebBrowser from 'expo-web-browser';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
+import { setOnboarded } from '../prefs';
+import { syncTimeZone } from '../timeZone';
 
 /** View model for the Connect Canvas screen. */
 export function useConnectCanvas(initialUrl = '') {
@@ -30,7 +32,11 @@ export function useConnectCanvas(initialUrl = '') {
     setBusy(true);
     setError(null);
     try {
-      await api.connectCanvas(normalizeUrl(baseUrl), token.trim());
+      const result = await api.connectCanvas(normalizeUrl(baseUrl), token.trim());
+      // A new account has no time zone yet; not awaited, it never fails.
+      if (result.switched) syncTimeZone(api);
+      // Connected once: Welcome doesn't show again, even after a disconnect (see useCanvasLogin).
+      await setOnboarded(api.store, true).catch(() => {});
       setToken('');
       return true;
     } catch (err) {

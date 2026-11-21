@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { AccountRepository } from "../src/accounts/AccountRepository.js";
+import { hashToken } from "../src/crypto.js";
 import { migrate, openDb } from "../src/db.js";
 import { ScheduleRepository } from "../src/schedule/ScheduleRepository.js";
 
@@ -63,7 +64,7 @@ describe("migrations", () => {
     db.prepare(`INSERT INTO items (id, student_id, source, external_id, kind, title, due_at, created_at, updated_at)
                 VALUES ('i1', 's1', 'manual', 'i1', 'assignment', 'Essay', NULL, 'x', 'x')`).run();
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(2);
+    expect(db.pragma("user_version", { simple: true })).toBe(3);
     const cols = (db.prepare("PRAGMA table_info(items)").all() as { name: string }[]).map((c) => c.name);
     expect(cols).toEqual(expect.arrayContaining(["ends_at", "all_day", "study_minutes"]));
     expect(db.prepare("SELECT title, all_day FROM items").get()).toEqual({ title: "Essay", all_day: 0 });
@@ -73,7 +74,7 @@ describe("migrations", () => {
   it("runs each migration once", () => {
     const db = openDb(":memory:");
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(2);
+    expect(db.pragma("user_version", { simple: true })).toBe(3);
   });
 
   it("reads and writes the new item fields", () => {
@@ -86,15 +87,13 @@ describe("migrations", () => {
   });
 
   it("adds the login columns and keeps existing Canvas connections", () => {
-    const db = openDb(":memory:");
-    db.exec("DROP TABLE canvas_login_states");
-    db.exec("ALTER TABLE canvas_connections DROP COLUMN refresh_sealed");
-    db.exec("ALTER TABLE canvas_connections DROP COLUMN access_expires_at");
+    const db = new Database(":memory:");
+    db.exec(ORIGINAL_SCHEMA);
     db.pragma("user_version = 1");
     db.prepare("INSERT INTO students VALUES ('s1', 'h', '2026-11-01T00:00:00Z')").run();
     db.prepare("INSERT INTO canvas_connections (student_id, base_url, token_sealed, last_synced_at) VALUES ('s1', 'https://c.edu', 'sealed', '2026-11-01T00:00:00Z')").run();
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(2);
+    expect(db.pragma("user_version", { simple: true })).toBe(3);
     expect(db.prepare("SELECT * FROM canvas_connections").get()).toEqual({
       student_id: "s1",
       base_url: "https://c.edu",
@@ -103,5 +102,41 @@ describe("migrations", () => {
       refresh_sealed: null,
       access_expires_at: null,
     });
+  });
+
+  it("moves device tokens into devices and keeps every student's rows", () => {
+    const db = new Database(":memory:");
+    db.pragma("foreign_keys = ON");
+    db.exec(ORIGINAL_SCHEMA);
+    migrate(db); // build the schema at version 2 first, then rewind students to the old shape
+    db.pragma("foreign_keys = OFF");
+    db.exec(`DROP TABLE devices;
+      CREATE TABLE students_old (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
+      DROP TABLE students; ALTER TABLE students_old RENAME TO students;`);
+    db.pragma("foreign_keys = ON");
+    db.pragma("user_version = 2");
+    const token = "known-token";
+    db.prepare("INSERT INTO students VALUES ('s1', ?, '2026-11-01T00:00:00Z')").run(hashToken(token));
+    db.prepare("INSERT INTO courses (id, student_id, source, external_id, name) VALUES ('c1', 's1', 'manual', NULL, 'Math')").run();
+    db.prepare(`INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, created_at, updated_at)
+                VALUES ('i1', 's1', 'c1', 'manual', 'i1', 'assignment', 'Essay', 'x', 'x')`).run();
+    db.prepare("INSERT INTO study_blocks VALUES ('b1', 's1', 'i1', 'a', 'b', 'proposed', 'x', 'x')").run();
+    db.prepare("INSERT INTO planner_settings (student_id, time_zone, daily_limit_minutes, windows) VALUES ('s1', 'UTC', 60, '[]')").run();
+    db.prepare("INSERT INTO canvas_connections (student_id, base_url, token_sealed) VALUES ('s1', 'https://c.edu', 'sealed')").run();
+    const tables = ["courses", "items", "study_blocks", "planner_settings", "canvas_connections"];
+    const count = (t: string) => (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n;
+    const before = tables.map(count);
+
+    migrate(db);
+
+    expect(new AccountRepository(db).findByToken(token)).toBe("s1");
+    expect(tables.map(count)).toEqual(before);
+    expect(before).toEqual([1, 1, 1, 1, 1]);
+    expect(db.pragma("foreign_key_check")).toEqual([]);
+    expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
+    const cols = (db.prepare("PRAGMA table_info(students)").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain("canvas_identity");
+    expect(cols).not.toContain("token_hash");
+    expect(new AccountRepository(db).identityOf("s1")).toBeNull();
   });
 });

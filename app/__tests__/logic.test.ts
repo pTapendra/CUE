@@ -6,9 +6,10 @@ import { useCanvasLogin } from '../src/viewmodels/useCanvasLogin';
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item, StudyBlock, StudyWindow } from '../src/api/types';
 import { serverUrl } from '../src/config';
-import { fromInput, rangeLabel, startOfWeek, toInput } from '../src/dates';
+import { monthTitle, parseDay, rangeLabel, startOfWeek } from '../src/dates';
 import { deadlinesFor, gridRange, placeInDay, timedEventsFor } from '../src/viewmodels/grid';
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
+import { pageStart } from '../src/viewmodels/useSchedule';
 import { syncTimeZone, withDeviceTimeZone } from '../src/timeZone';
 import { buildDates } from '../src/viewmodels/useSyncReview';
 import { rangeText, windowError } from '../src/viewmodels/useStudyTimes';
@@ -21,25 +22,15 @@ describe('dates', () => {
     expect([mon.getFullYear(), mon.getMonth(), mon.getDate(), mon.getHours()]).toEqual([2026, 10, 2, 0]);
     expect(startOfWeek(new Date(2026, 10, 8)).getDate()).toBe(2); // Sunday belongs to the same week
   });
-
-  it('round-trips the date field', () => {
-    const iso = fromInput('2026-11-06 14:05')!;
-    expect(toInput(iso)).toBe('2026-11-06 14:05');
-    expect(toInput(fromInput('2026-11-06')!)).toBe('2026-11-06 23:59');
-  });
-
-  it('rejects impossible or badly formed dates', () => {
-    expect(fromInput('')).toBeNull();
-    expect(fromInput('2026-02-30')).toBeUndefined();
-    expect(fromInput('2026-11-06 25:00')).toBeUndefined();
-    expect(fromInput('next friday')).toBeUndefined();
-  });
 });
 
 describe('view model helpers', () => {
-  it('sends typed dates only for accepted items', () => {
-    const dates = buildDates({ x: '2026-11-06 10:00', y: '2026-11-07 10:00', z: '' }, new Set(['x', 'z']));
-    expect(Object.keys(dates)).toEqual(['x']);
+  it('sends picked dates only for accepted items, and none that were cleared', () => {
+    const dates = buildDates(
+      { x: '2026-11-06T10:00:00.000Z', y: '2026-11-07T10:00:00.000Z', z: null },
+      new Set(['x', 'z']),
+    );
+    expect(dates).toEqual({ x: '2026-11-06T10:00:00.000Z' });
   });
 
   it('adds https:// to a bare Canvas address', () => {
@@ -78,6 +69,189 @@ describe('ApiClient', () => {
     expect(server.state.calls.at(-1)!.auth).toBe('Bearer device-1');
   });
 
+  it('adopts the device token a login reply carries', async () => {
+    const server = fakeServer();
+    server.state.switchToken = 'device-9';
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    const result = await api.finishCanvasLogin('good-code', 's1');
+    expect(result.switched).toBe(true);
+    expect(result).not.toHaveProperty('deviceToken');
+    expect(store.map.get('cue.deviceToken')).toBe('device-9');
+    await api.getConnection();
+    expect(server.state.calls.at(-1)!.auth).toBe('Bearer device-9');
+  });
+
+  it('a login reply without a device token is not a switch', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    expect((await api.finishCanvasLogin('good-code', 's1')).switched).toBe(false);
+    expect((await api.connectCanvas('https://s.instructure.com', 'good-token-123')).switched).toBe(false);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+  });
+
+  it("a request still in flight with the old token doesn't start a fresh account", async () => {
+    const server = fakeServer();
+    server.state.switchToken = 'device-9';
+    const store = memoryStore();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held = false;
+    const gated = (async (url: string, init?: RequestInit) => {
+      // Hold the first overview request; the server answers it after the switch, so it gets a 401.
+      if (new URL(url).pathname === '/api/schedule/overview' && !held) {
+        held = true;
+        await gate;
+      }
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const api = new ApiClient('http://cue.test', store, gated);
+    await api.getConnection(); // device-1
+    const pending = api.getOverview();
+    await api.finishCanvasLogin('good-code', 's1'); // switches to device-9
+    release();
+    await pending;
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-9');
+    const overview = server.state.calls.filter((c) => c.path === '/api/schedule/overview');
+    expect(overview.map((c) => c.auth)).toEqual(['Bearer device-1', 'Bearer device-9']);
+  });
+
+  it('a 401 with the current token still starts a fresh account', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    await store.setItem('cue.deviceToken', 'unknown-token');
+    const unknown = (async (url: string, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>).Authorization;
+      if (auth === 'Bearer unknown-token') {
+        return { ok: false, status: 401, json: async () => ({ error: 'unauthorized', message: 'x' }) } as Response;
+      }
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const api = new ApiClient('http://cue.test', store, unknown);
+    await api.getConnection();
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+  });
+
+  it('a 401 that arrives before the switch reply keeps the token the login adopts', async () => {
+    // The server commits the switch, so a request sent with the old token gets a 401 before the login's
+    // reply arrives; the switch reply then lands while the 401 recovery is still making a fresh account.
+    const store = memoryStore();
+    await store.setItem('cue.deviceToken', 'old');
+    const valid = new Set(['old']);
+    const created: string[] = [];
+    const calls: { path: string; auth: string | null }[] = [];
+    let answerLogin!: () => void;
+    const loginAnswered = new Promise<void>((resolve) => (answerLogin = resolve));
+    let answerDevices!: () => void;
+    const devicesAnswered = new Promise<void>((resolve) => (answerDevices = resolve));
+    let devicesAsked!: () => void;
+    const freshAccountAsked = new Promise<void>((resolve) => (devicesAsked = resolve));
+    const reply = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body }) as Response;
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      const auth = (init?.headers as Record<string, string>).Authorization?.slice('Bearer '.length) ?? null;
+      calls.push({ path, auth });
+      if (path === '/api/devices') {
+        devicesAsked();
+        await devicesAnswered;
+        const token = `fresh-${created.length + 1}`;
+        created.push(token);
+        valid.add(token);
+        return reply(201, { deviceToken: token });
+      }
+      if (!auth || !valid.has(auth)) return reply(401, { error: 'unauthorized', message: 'x' });
+      if (path === '/api/canvas/login/finish') {
+        valid.delete('old'); // the switch commits
+        valid.add('switched');
+        await loginAnswered;
+        return reply(200, {
+          connected: true,
+          baseUrl: 'https://canvas.test',
+          lastSyncedAt: null,
+          loginAvailable: true,
+          linked: true,
+          deviceToken: 'switched',
+        });
+      }
+      return reply(200, { items: [], undated: [], blocks: [], shortfalls: [] });
+    }) as unknown as typeof fetch;
+
+    const api = new ApiClient('http://cue.test', store, fetchImpl);
+    await api.ensureAccount();
+    const login = api.finishCanvasLogin('good-code', 's1');
+    await Promise.resolve();
+    const stale = api.getOverview(); // sent with the old token after the commit: a 401
+    await freshAccountAsked; // the 401 recovery is making a fresh account
+    answerLogin(); // the switch reply lands first
+    expect((await login).switched).toBe(true);
+    answerDevices(); // the fresh account's reply lands last
+    await stale;
+
+    expect(store.map.get('cue.deviceToken')).toBe('switched');
+    expect(created.length).toBeLessThanOrEqual(1);
+    await api.getOverview();
+    const overview = calls.filter((c) => c.path === '/api/schedule/overview').map((c) => c.auth);
+    expect(overview).toEqual(['old', 'switched', 'switched']);
+  });
+
+  it('requests made together before there is a token share one new account', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await Promise.all([api.ensureAccount(), api.ensureAccount(), api.getConnection(), api.getOverview()]);
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+    const others = server.state.calls.filter((c) => c.path !== '/api/devices');
+    expect(others.map((c) => c.auth)).toEqual(['Bearer device-1', 'Bearer device-1']);
+  });
+
+  it('two requests that get a 401 with the current token start one fresh account', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    await store.setItem('cue.deviceToken', 'unknown-token');
+    const unknown = (async (url: string, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>).Authorization;
+      if (auth === 'Bearer unknown-token') {
+        return { ok: false, status: 401, json: async () => ({ error: 'unauthorized', message: 'x' }) } as Response;
+      }
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const api = new ApiClient('http://cue.test', store, unknown);
+    await api.ensureAccount();
+    await Promise.all([api.getConnection(), api.getOverview()]);
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(1);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+  });
+
+  it('logout forgets the token on 204 and on 401, and keeps it on 500', async () => {
+    const server = fakeServer();
+    server.state.linked = true;
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await api.ensureAccount();
+    await api.logout();
+    expect(server.state.calls.at(-1)).toMatchObject({ method: 'DELETE', path: '/api/device', auth: 'Bearer device-1' });
+    expect(store.map.has('cue.deviceToken')).toBe(false);
+
+    await api.ensureAccount();
+    server.state.logoutUnauthorized = true;
+    await api.logout();
+    expect(store.map.has('cue.deviceToken')).toBe(false);
+    // The 401 did not start a fresh account and retry: only the two accounts made by ensureAccount exist.
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(2);
+    expect(server.state.calls.filter((c) => c.method === 'DELETE')).toHaveLength(2);
+
+    await api.ensureAccount();
+    server.state.logoutUnauthorized = false;
+    server.state.linked = false; // 409 account_not_linked
+    const err = await api.logout().catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(store.map.get('cue.deviceToken')).toBe('device-3');
+  });
+
   it('turns server errors into messages a student can act on', async () => {
     const server = fakeServer();
     const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
@@ -97,6 +271,49 @@ describe('ApiClient', () => {
     });
     expect(week.blocks).toEqual([]);
     expect(week.to).toBe('2026-11-20T06:00:00.000Z');
+  });
+
+  it('getOverview calls GET /api/schedule/overview', async () => {
+    const server = fakeServer();
+    const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    const overview = await api.getOverview();
+    expect(server.state.calls.at(-1)).toMatchObject({ method: 'GET', path: '/api/schedule/overview' });
+    expect(overview).toEqual({ items: [], undated: [], blocks: [], shortfalls: [] });
+  });
+
+  it('deleteAccount forgets the device token only after the server agrees', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await api.getConnection();
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+
+    server.state.deleteFails = true;
+    await expect(api.deleteAccount()).rejects.toBeInstanceOf(ApiError);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+
+    const offline = (async () => {
+      throw new TypeError('Network request failed');
+    }) as unknown as typeof fetch;
+    const lost = new ApiClient('http://cue.test', store, offline);
+    await expect(lost.deleteAccount()).rejects.toBeInstanceOf(TypeError);
+    expect(store.map.get('cue.deviceToken')).toBe('device-1');
+
+    server.state.deleteFails = false;
+    await api.deleteAccount();
+    expect(server.state.calls.at(-1)).toMatchObject({ method: 'DELETE', path: '/api/account' });
+    expect(store.map.has('cue.deviceToken')).toBe(false);
+    await api.ensureAccount();
+    expect(server.state.calls.filter((c) => c.path === '/api/devices')).toHaveLength(2);
+  });
+
+  it('forgetDevice removes the stored device token', async () => {
+    const server = fakeServer();
+    const store = memoryStore();
+    const api = new ApiClient('http://cue.test', store, server.fetchImpl);
+    await api.getConnection();
+    await api.forgetDevice();
+    expect(store.map.has('cue.deviceToken')).toBe(false);
   });
 
   it('explains a refused move', () => {
@@ -220,8 +437,36 @@ describe('grid layout', () => {
     expect(placeInDay(day, timed, { startHour: 8, endHour: 22 }).map((p) => p.height)).toEqual([50, 50]);
   });
 
-  it('labels a range of days', () => {
+  it('labels a range of days, and a single day', () => {
     expect(rangeLabel(new Date(2026, 10, 2), 3)).toBe('Mon 2 Nov – Wed 4 Nov');
+    expect(rangeLabel(new Date(2026, 10, 2), 1)).toBe('Mon 2 Nov');
+  });
+
+  it('titles a page by its month, naming the year only when it is not this year', () => {
+    const now = new Date(2026, 10, 2, 9, 0);
+    expect(monthTitle(new Date(2026, 10, 2), new Date(2026, 10, 8), now)).toBe('November');
+    expect(monthTitle(new Date(2026, 9, 26), new Date(2026, 10, 1), now)).toBe('Oct – Nov');
+    expect(monthTitle(new Date(2027, 0, 4), new Date(2027, 0, 10), now)).toBe('January 2027');
+    expect(monthTitle(new Date(2026, 11, 28), new Date(2027, 0, 3), now)).toBe('Dec 2026 – Jan 2027');
+  });
+
+  it("reads a route's date as a local day", () => {
+    const wed = new Date(2026, 10, 4);
+    expect(parseDay('2026-11-04')).toEqual(wed); // a date alone is a local date, not UTC midnight
+    expect(parseDay(new Date(2026, 10, 4, 23, 30).toISOString())).toEqual(wed);
+    expect(parseDay('next friday')).toBeNull();
+    expect(parseDay('2026-02-30')).toBeNull();
+    expect(parseDay(undefined)).toBeNull();
+  });
+
+  it('starts a week page on Monday and other pages on the day, at local midnight', () => {
+    const sundayNight = new Date(2026, 10, 8, 23, 30);
+    expect(pageStart('week', sundayNight)).toEqual(new Date(2026, 10, 2));
+    expect(pageStart('week', new Date(2026, 10, 2, 0, 0))).toEqual(new Date(2026, 10, 2));
+    expect(pageStart('3days', sundayNight)).toEqual(new Date(2026, 10, 8));
+    expect(pageStart('day', sundayNight)).toEqual(new Date(2026, 10, 8));
+    // The week with the clock change (Sunday 1 November in North America) still starts at midnight.
+    expect(pageStart('week', new Date(2026, 10, 1, 12, 0))).toEqual(new Date(2026, 9, 26));
   });
 });
 
