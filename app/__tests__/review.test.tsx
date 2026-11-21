@@ -121,6 +121,22 @@ describe('Check what Cue found', () => {
     expect(texts(root)).toContain('2 items saved from Canvas');
   });
 
+  it("Remove date takes an exam's date away again, back to Add date", async () => {
+    const { server, root } = await openReview();
+    expect(texts(root)).toContain('Add date');
+    expect(texts(root)).not.toContain('Remove date');
+    await pickDate(root, 'Due date for Midterm Exam', new Date(2026, 10, 6, 10, 0));
+    expect(texts(root)).not.toContain('Add date');
+
+    await tap(root, 'Remove date');
+    expect(texts(root)).toContain('Add date');
+    expect(texts(root)).toContain('or add it later');
+    await press(root, 'Save 2 items');
+    await flush();
+    const confirm = server.state.calls.find((c) => c.path === '/api/canvas/sync/confirm')!;
+    expect(confirm.body.dates).toEqual({});
+  });
+
   it('saves an exam left without a date, and drops the date of an unticked exam', async () => {
     const { server, root } = await openReview();
     await pickDate(root, 'Due date for Midterm Exam', new Date(2026, 10, 6, 10, 0));

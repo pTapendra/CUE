@@ -9,7 +9,7 @@ import type { PlannerSettings } from '../../api/types';
 import type { RootScreenProps } from '../../navigation/types';
 import { setSkippedCanvas } from '../../prefs';
 import { syncTimeZone } from '../../timeZone';
-import { ErrorBanner, ListRow, SectionHeader, Tag } from '../../ui/kit';
+import { ErrorBanner, ListRow, ripple, SectionHeader, Tag } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
 import { syncedLabel } from '../../viewmodels/today';
 import { hoursText, studyTimesSummary } from '../../viewmodels/useStudyTimes';
@@ -175,7 +175,8 @@ function Action({ title, onPress, danger = false, busy = false }: { title: strin
       accessibilityState={{ disabled: busy, busy }}
       disabled={busy}
       onPress={onPress}
-      style={[styles.action, { borderBottomColor: colors.line }]}
+      android_ripple={ripple(danger ? colors.danger : colors.accent)}
+      style={({ pressed }) => [styles.action, { borderBottomColor: colors.line }, pressed && { backgroundColor: colors.bg2 }]}
     >
       <Text style={[type.bodyStrong, { color: danger ? colors.danger : colors.accent }]}>{title}</Text>
     </Pressable>

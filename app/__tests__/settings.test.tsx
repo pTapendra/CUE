@@ -5,9 +5,10 @@ import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { StudyBlock } from '../src/api/types';
 import { deviceTimeZone } from '../src/timeZone';
+import { lightColors } from '../src/ui/tokens';
 import { studyTimesSummary } from '../src/viewmodels/useStudyTimes';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, press, tap, texts } from '../test-support/ui';
+import { flush, press, styleOf, tap, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -141,6 +142,18 @@ describe('Settings', () => {
     await tap(tree!.root, 'Settings');
     await flush();
     expect(texts(tree!.root)).toContain('Weekdays 18–22');
+  });
+
+  it('its action rows darken while pressed, and ripple on Android', async () => {
+    const { root } = await openSettings();
+    for (const title of ['Sync now', 'Disconnect Canvas', 'Delete all my data']) {
+      const action = root.find(
+        (n) => typeof n.props.onPress === 'function' && typeof n.props.style === 'function' && texts(n).includes(title),
+      );
+      expect(styleOf(action, true).backgroundColor).toBe(lightColors.bg2);
+      expect(styleOf(action).backgroundColor).not.toBe(lightColors.bg2);
+      expect(action.props.android_ripple).toBeDefined();
+    }
   });
 
   it('Done goes back to Today', async () => {

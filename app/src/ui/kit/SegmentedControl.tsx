@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { radius, space, type, useTokens } from '../tokens';
+import { ripple } from './feedback';
 
 type Props<T extends string> = {
   options: { value: T; label: string }[];
@@ -21,7 +22,11 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
             accessibilityLabel={o.label}
             accessibilityState={{ selected }}
             onPress={() => onChange(o.value)}
-            style={[styles.segment, selected && { backgroundColor: colors.bg }]}
+            android_ripple={ripple(colors.text)}
+            style={({ pressed }) => [
+              styles.segment,
+              selected ? { backgroundColor: colors.bg } : pressed && { backgroundColor: colors.line },
+            ]}
           >
             <Text style={[type.bodyStrong, { color: selected ? colors.text : colors.text2 }]}>{o.label}</Text>
           </Pressable>

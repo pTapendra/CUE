@@ -13,7 +13,7 @@ import { deviceTimeZone } from '../src/timeZone';
 import { lightColors, lightCourses, lightUnknown } from '../src/ui/tokens';
 import { HOUR_HEIGHT } from '../src/viewmodels/grid';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, onScreen, press, tap, texts, type } from '../test-support/ui';
+import { comeBackToApp, flush, onScreen, press, styleOf, tap, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -125,7 +125,7 @@ function boxStyle(root: Node, label: string) {
     (n) => typeof n.props.onPress === 'function' && String(n.props.accessibilityLabel ?? '').startsWith(label),
   )[0];
   if (!box) throw new Error(`No box "${label}"`);
-  return StyleSheet.flatten(box.props.style);
+  return styleOf(box);
 }
 
 /** The style of the pressable that shows `text`. */
@@ -135,7 +135,7 @@ function pressableWith(root: Node, text: string) {
     (n) => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function' && texts(n).includes(text),
   )[0];
   if (!found) throw new Error(`No pressable with "${text}"`);
-  return StyleSheet.flatten(found.props.style);
+  return styleOf(found);
 }
 
 /** The colour of the text that reads exactly `text`. */
@@ -546,39 +546,31 @@ describe('Sync', () => {
 });
 
 describe('time zone', () => {
-  /** What React Native does when the student leaves the app and comes back to it. */
-  async function leaveAndComeBack() {
-    const listeners = (AppState.addEventListener as jest.Mock).mock.calls.filter(([event]) => event === 'change');
-    const onChange = listeners.at(-1)![1];
-    await act(async () => {
-      onChange('background');
-      onChange('active');
-    });
-    await flush();
-  }
-
-  it('sends a changed time zone when the app comes back to the front, then reloads the page', async () => {
+  it('sends a changed time zone once when the app comes back to the front, then reloads the page', async () => {
     const { server } = await openSchedule();
     const weekLoads = () => server.state.calls.filter((c) => c.path === '/api/schedule/week').length;
     const zoneSaves = () => server.state.calls.filter((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
     const loads = weekLoads();
     const saves = zoneSaves().length;
 
-    await leaveAndComeBack();
+    await comeBackToApp();
     expect(zoneSaves()).toHaveLength(saves); // the server already has the phone's zone
     expect(weekLoads()).toBe(loads);
 
     server.state.settings.timeZone = 'Antarctica/Troll'; // saved before the phone moved
-    await leaveAndComeBack();
+    await comeBackToApp();
     expect(zoneSaves()).toHaveLength(saves + 1);
     expect(zoneSaves().at(-1)!.body.timeZone).toBe(deviceTimeZone());
     expect(weekLoads()).toBe(loads + 1);
 
-    const subscription = (AppState.addEventListener as jest.Mock).mock.results.at(-1)!.value;
+    const live = (AppState.addEventListener as jest.Mock).mock.results
+      .map((r) => r.value)
+      .filter((subscription) => subscription.remove.mock.calls.length === 0);
+    expect(live.length).toBeGreaterThan(0);
     await act(async () => {
       tree!.unmount();
     });
     tree = undefined;
-    expect(subscription.remove).toHaveBeenCalled();
+    for (const subscription of live) expect(subscription.remove).toHaveBeenCalled();
   });
 });

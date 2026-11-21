@@ -307,7 +307,7 @@ describe('item sheet', () => {
     expect(isDisabled(root, 'Save')).toBe(true);
 
     // Clearing the end means it has no set end.
-    await tap(root, 'No end');
+    await tap(root, 'Remove end');
     expect(texts(root)).not.toContain('Ends must be after the start');
     await press(root, 'Save');
     await flush();
@@ -335,11 +335,12 @@ describe('item sheet', () => {
     expect(post!.body).not.toHaveProperty('studyMinutes');
   });
 
-  it('clears the due date with No date and sends null', async () => {
+  it('clears the due date with Remove date and sends null', async () => {
     const { server, root } = await openWeek([exam(360)]);
     await press(root, 'Exam: Chem exam');
 
-    await tap(root, 'No date');
+    await tap(root, 'Remove date');
+    expect(texts(root)).toContain('No date');
     await press(root, 'Save');
     await flush();
 

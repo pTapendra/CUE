@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
 import type { Course, Shortfall, StudyBlock, StudyWindow, Week } from '../api/types';
 import { addDays, dayLabel, startOfDay, startOfWeek } from '../dates';
-import { syncTimeZone } from '../timeZone';
+import { onTimeZoneSaved } from '../timeZone';
 import { gridRange, timedEventsFor } from './grid';
 import { useItemActions } from './useItemActions';
 
@@ -84,7 +83,7 @@ export function useSchedule(open: { view: ScheduleView; date: Date }) {
     }
   }, [api, from, count]);
 
-  // Actions and the time zone handler outlive the page they began on: they must reload the page
+  // Actions and a new time zone outlive the page they began on: they must reload the page
   // on screen when they finish, not the one whose `load` they were created with.
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -98,17 +97,9 @@ export function useSchedule(open: { view: ScheduleView; date: Date }) {
     load();
   }, [load, clearError]);
 
-  // The phone may be in another time zone when the student comes back to the app.
-  // When the server gets a new zone it re-plans, so load the page again.
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return;
-      syncTimeZone(api).then((changed) => {
-        if (changed) reloadCurrent();
-      });
-    });
-    return () => subscription.remove();
-  }, [api, reloadCurrent]);
+  // The app sends a new time zone when the student comes back to it (see App.tsx); the server then
+  // re-plans, so load the page again.
+  useEffect(() => onTimeZoneSaved(reloadCurrent), [reloadCurrent]);
 
   /** Opens the page with `date` in `view` (or the current view). */
   const show = useCallback((nextView: ScheduleView | undefined, date: Date) => {

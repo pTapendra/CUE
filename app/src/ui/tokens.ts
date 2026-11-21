@@ -8,6 +8,8 @@ export type Colors = {
   bg: string;
   bg2: string;
   accent: string;
+  /** A filled accent control while pressed. */
+  accentPressed: string;
   onAccent: string;
   accentTint: string;
   exam: string;
@@ -17,6 +19,8 @@ export type Colors = {
   warn: string;
   danger: string;
   dangerTint: string;
+  /** A danger button (on `dangerTint`) while pressed. */
+  dangerPressed: string;
   now: string;
 };
 
@@ -28,6 +32,7 @@ export const lightColors: Colors = {
   bg: '#FFFFFF',
   bg2: '#F5F5F7',
   accent: '#4338CA',
+  accentPressed: '#3730A3',
   onAccent: '#FFFFFF',
   accentTint: '#EEF0FF',
   exam: '#B42340',
@@ -37,6 +42,7 @@ export const lightColors: Colors = {
   warn: '#A15C00',
   danger: '#C0262D',
   dangerTint: '#FDECEA',
+  dangerPressed: '#FBE0DD',
   now: '#E5484D',
 };
 
@@ -48,6 +54,7 @@ export const darkColors: Colors = {
   bg: '#121216',
   bg2: '#1C1C22',
   accent: '#A5A0FF',
+  accentPressed: '#8F89F5',
   onAccent: '#121216',
   accentTint: '#262552',
   exam: '#FF8FA3',
@@ -57,6 +64,7 @@ export const darkColors: Colors = {
   warn: '#F2A93B',
   danger: '#FF8A8F',
   dangerTint: '#3A1D1F',
+  dangerPressed: '#4A2427',
   now: '#FF6B70',
 };
 

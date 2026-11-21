@@ -1,12 +1,13 @@
 import React from 'react';
-import { ActivityIndicator, AppState, StyleSheet } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { Course, Item, StudyBlock } from '../src/api/types';
+import { deviceTimeZone } from '../src/timeZone';
 import { lightColors, lightCourses } from '../src/ui/tokens';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, lowestOpacity, onScreen, press, tap, textColor, texts } from '../test-support/ui';
+import { comeBackToApp, flush, lowestOpacity, onScreen, press, styleOf, tap, textColor, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -121,6 +122,10 @@ function selectedView(root: Node): string | undefined {
 const statuses = (server: Server, id: string) =>
   server.state.calls.filter((c) => c.method === 'PUT' && c.path === `/api/items/${id}/status`).map((c) => c.body.status);
 
+/** The check circle on screen labelled `label`. */
+const checkCircle = (root: Node, label: string) =>
+  onScreen(root, (n) => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function')[0];
+
 const overviewLoads = (server: Server) => server.state.calls.filter((c) => c.path === '/api/schedule/overview').length;
 
 /** Picks `date` in the open date field labelled `label`, as the phone's picker would. */
@@ -211,6 +216,32 @@ describe('Today', () => {
     expect(texts(root)).not.toContain('Marked done');
   });
 
+  it('ticks a row at once, and unticks it with the message when the change fails', async () => {
+    let answer!: (ok: boolean) => void;
+    const { server, root } = await openToday(aWeekOfWork, (fetchImpl) =>
+      (async (url: string, init?: RequestInit) => {
+        if (new URL(url).pathname === '/api/items/item-sql/status') {
+          if (!(await new Promise<boolean>((resolve) => (answer = resolve)))) throw new TypeError('Network request failed');
+        }
+        return fetchImpl(url, init);
+      }) as unknown as typeof fetch,
+    );
+    const box = () => checkCircle(root, 'Mark SQL homework done');
+
+    await act(async () => {
+      box().props.onPress();
+    });
+    await flush();
+    expect(box().props.accessibilityState.checked).toBe(true); // before the server has answered
+
+    await act(async () => answer(false));
+    await flush();
+    expect(box().props.accessibilityState.checked).toBe(false);
+    expect(texts(root)).toContain('Cannot reach the Cue server. Check your connection and try again.');
+    expect(texts(root)).not.toContain('Marked done');
+    expect(server.state.items.find((i) => i.id === 'item-sql')!.status).toBe('in_progress');
+  });
+
   it('tapping a row opens it in the item sheet', async () => {
     const { root } = await openToday(aWeekOfWork);
 
@@ -236,10 +267,6 @@ describe('Today', () => {
     expect(patch!.body.dueAt).toBe(nov(20, 10).toISOString());
     expect(texts(root)).not.toContain('Final exam'); // due in 18 days: no longer under No date, not yet due soon
   });
-
-  /** The check circle on screen labelled `label`. */
-  const checkCircle = (root: Node, label: string) =>
-    onScreen(root, (n) => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function')[0];
 
   it('keeps a done item without a date at the end of No date, dimmed and ticked, and reopens it', async () => {
     const { server, root } = await openToday((s) => {
@@ -381,17 +408,31 @@ describe('Today', () => {
 
     // The phone was left on Today overnight; it is now 00:30 on Sunday 8 Nov, the last day of that week.
     jest.setSystemTime(new Date(2026, 10, 8, 0, 30));
-    const listeners = (AppState.addEventListener as jest.Mock).mock.calls.filter(([event]) => event === 'change');
-    await act(async () => {
-      listeners.forEach(([, onChange]) => onChange('active'));
-    });
-    await flush();
+    await comeBackToApp();
 
     expect(overviewLoads(server)).toBe(loads + 1);
     expect(texts(root)).toContain('Sun 8 Nov');
     expect(texts(root)).not.toContain('Mon 2 Nov');
     expect(texts(root)).toContain('Due next Monday'); // now inside the Due soon window
     jest.setSystemTime(new Date(2026, 10, 2, 9, 0));
+  });
+
+  it('sends a changed time zone when the app comes back to the front, without Schedule ever opened, then loads again', async () => {
+    const { server } = await openToday(aWeekOfWork);
+    const zoneSaves = () => server.state.calls.filter((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
+    const saves = zoneSaves().length;
+
+    await comeBackToApp();
+    expect(zoneSaves()).toHaveLength(saves); // the server already has the phone's zone
+
+    server.state.settings.timeZone = 'Antarctica/Troll'; // saved before the phone moved
+    await comeBackToApp();
+    expect(zoneSaves()).toHaveLength(saves + 1);
+    expect(zoneSaves().at(-1)!.body.timeZone).toBe(deviceTimeZone());
+    expect(server.state.calls.filter((c) => c.path === '/api/schedule/week')).toHaveLength(0);
+    // The server re-plans with the new zone: Today loads again after it has.
+    const saved = server.state.calls.indexOf(zoneSaves().at(-1)!);
+    expect(server.state.calls.slice(saved + 1).some((c) => c.path === '/api/schedule/overview')).toBe(true);
   });
 
   it('shows "Nothing due this week" when there is nothing to do', async () => {
@@ -445,7 +486,7 @@ describe('Today', () => {
     const { root } = await openToday(aWeekOfWork);
 
     const add = onScreen(root, (n) => n.props.accessibilityLabel === 'Add' && typeof n.props.onPress === 'function')[0];
-    const addStyle = StyleSheet.flatten(add.props.style);
+    const addStyle = styleOf(add);
     const list = onScreen(root, (n) => n.props.refreshControl !== undefined && n.props.contentContainerStyle !== undefined)[0];
     const content = StyleSheet.flatten(list.props.contentContainerStyle);
     expect(content.paddingBottom).toBeGreaterThanOrEqual(Number(addStyle.height) + Number(addStyle.bottom));

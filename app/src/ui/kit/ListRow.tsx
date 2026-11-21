@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { space, type, useTokens } from '../tokens';
+import { ripple } from './feedback';
 
 type Props = {
   title: string;
@@ -40,7 +41,12 @@ export function ListRow({ title, meta, metaLeading, onPress, leading, trailing, 
   const style = [styles.row, { borderBottomColor: colors.line }];
   if (!onPress) return <View style={style}>{body}</View>;
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={style}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      android_ripple={ripple(colors.text)}
+      style={({ pressed }) => [style, pressed && { backgroundColor: colors.bg2 }]}
+    >
       {body}
     </Pressable>
   );

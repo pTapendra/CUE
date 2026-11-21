@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StatusBar, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, AppState, StatusBar, StyleSheet, Text } from 'react-native';
 import { initialWindowMetrics, SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { ApiProvider } from './src/api/ApiContext';
 import { ApiClient, friendlyMessage } from './src/api/client';
@@ -54,6 +54,18 @@ function Root({ api }: { api: ApiClient }) {
       cancelled = true;
     };
   }, [api, attempt]);
+
+  // The phone may be in another time zone when the student comes back to the app, whichever screen
+  // is open: tell the server, which re-plans (screens with study blocks load again; see onTimeZoneSaved).
+  // Only once start-up has made the account and sent the zone the first time.
+  const ready = started !== null;
+  useEffect(() => {
+    if (!ready) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncTimeZone(api);
+    });
+    return () => subscription.remove();
+  }, [api, ready]);
 
   return (
     <>

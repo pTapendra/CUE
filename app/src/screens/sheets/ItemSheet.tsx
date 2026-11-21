@@ -120,13 +120,28 @@ export function ItemSheet({
 
           <View style={styles.group}>
             {label('Due or exam date')}
-            <DateTimeField label="Due or exam date" mode="datetime" value={due} onChange={setDue} allowClear />
+            <DateTimeField
+              label="Due or exam date"
+              mode="datetime"
+              value={due}
+              onChange={setDue}
+              allowClear
+              clearButtonLabel="Remove date"
+            />
           </View>
 
           {kind === 'event' ? (
             <View style={styles.group}>
               {label('Ends')}
-              <DateTimeField label="Ends" mode="datetime" value={ends} onChange={setEnds} allowClear clearLabel="No end" />
+              <DateTimeField
+                label="Ends"
+                mode="datetime"
+                value={ends}
+                onChange={setEnds}
+                allowClear
+                clearLabel="No end"
+                clearButtonLabel="Remove end"
+              />
               {endsError ? <Text style={[type.bodyStrong, { color: colors.danger }]}>{endsError}</Text> : null}
             </View>
           ) : null}

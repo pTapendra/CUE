@@ -12,7 +12,10 @@ type Props = {
   mode: Mode;
   onChange: (iso: string | null) => void;
   allowClear?: boolean;
+  /** What the field reads while it has no value. */
   clearLabel?: string;
+  /** The text and screen-reader label of the button that clears the value (with `allowClear`). */
+  clearButtonLabel?: string;
 };
 
 function format(d: Date, mode: Mode): string {
@@ -21,7 +24,15 @@ function format(d: Date, mode: Mode): string {
   return `${dayLabel(d)} · ${timeLabel(d)}`;
 }
 
-export function DateTimeField({ label, value, mode, onChange, allowClear = false, clearLabel = 'No date' }: Props) {
+export function DateTimeField({
+  label,
+  value,
+  mode,
+  onChange,
+  allowClear = false,
+  clearLabel = 'No date',
+  clearButtonLabel = 'Clear',
+}: Props) {
   const { colors } = useTokens();
   // 'closed', or the picker currently showing (Android shows date, then time).
   const [open, setOpen] = useState<'closed' | 'date' | 'time' | 'datetime'>('closed');
@@ -72,8 +83,13 @@ export function DateTimeField({ label, value, mode, onChange, allowClear = false
         </Text>
       </Pressable>
       {allowClear && current ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={clearLabel} onPress={() => onChange(null)} style={styles.clear}>
-          <Text style={[type.bodyStrong, { color: colors.accent }]}>{clearLabel}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={clearButtonLabel}
+          onPress={() => onChange(null)}
+          style={styles.clear}
+        >
+          <Text style={[type.bodyStrong, { color: colors.accent }]}>{clearButtonLabel}</Text>
         </Pressable>
       ) : null}
       {Platform.OS === 'ios' ? (

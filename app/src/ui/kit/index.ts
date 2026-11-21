@@ -7,6 +7,7 @@ export { DateTimeField } from './DateTimeField';
 export { DayStrip } from './DayStrip';
 export { EmptyState } from './EmptyState';
 export { ErrorBanner } from './ErrorBanner';
+export { ripple } from './feedback';
 export { IconButton } from './IconButton';
 export type { IoniconName } from './icons';
 export { ListRow } from './ListRow';

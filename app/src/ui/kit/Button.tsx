@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { radius, space, type, useTokens } from '../tokens';
+import { ripple } from './feedback';
 import type { IoniconName } from './icons';
 
 type Props = {
@@ -15,11 +16,12 @@ type Props = {
 
 export function Button({ title, onPress, variant = 'primary', busy = false, disabled = false, icon }: Props) {
   const { colors } = useTokens();
-  const look = {
-    primary: { bg: colors.accent, fg: colors.onAccent, border: colors.accent },
-    secondary: { bg: colors.bg, fg: colors.accent, border: colors.line },
-    danger: { bg: colors.dangerTint, fg: colors.danger, border: colors.dangerTint },
-    plain: { bg: 'transparent', fg: colors.accent, border: 'transparent' },
+  // `border`, when set, stays while pressed; otherwise the border follows the background.
+  const look: { bg: string; pressed: string; fg: string; border?: string } = {
+    primary: { bg: colors.accent, pressed: colors.accentPressed, fg: colors.onAccent },
+    secondary: { bg: colors.bg, pressed: colors.bg2, fg: colors.accent, border: colors.line },
+    danger: { bg: colors.dangerTint, pressed: colors.dangerPressed, fg: colors.danger },
+    plain: { bg: 'transparent', pressed: colors.line, fg: colors.accent },
   }[variant];
   const off = disabled || busy;
   return (
@@ -29,11 +31,11 @@ export function Button({ title, onPress, variant = 'primary', busy = false, disa
       accessibilityState={{ disabled: off, busy }}
       disabled={off}
       onPress={onPress}
-      style={[
-        styles.base,
-        { backgroundColor: look.bg, borderColor: look.border },
-        disabled && styles.dim,
-      ]}
+      android_ripple={ripple(look.fg)}
+      style={({ pressed }) => {
+        const fill = pressed ? look.pressed : look.bg;
+        return [styles.base, { backgroundColor: fill, borderColor: look.border ?? fill }, disabled && styles.dim];
+      }}
     >
       <View style={styles.row}>
         {busy ? (

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { space, useTokens } from '../tokens';
+import { ripple } from './feedback';
 
 const SIZE = 56;
 const MARGIN = space.lg;
@@ -17,7 +18,8 @@ export function AddButton({ onPress }: { onPress: () => void }) {
       accessibilityRole="button"
       accessibilityLabel="Add"
       onPress={onPress}
-      style={[styles.add, { backgroundColor: colors.accent }]}
+      android_ripple={ripple(colors.onAccent, { borderless: true, radius: SIZE / 2 })}
+      style={({ pressed }) => [styles.add, { backgroundColor: pressed ? colors.accentPressed : colors.accent }]}
     >
       <Ionicons name="add" size={28} color={colors.onAccent} />
     </Pressable>

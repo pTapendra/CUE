@@ -2,16 +2,25 @@ import React from 'react';
 import { Text } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import {
+  AddButton,
+  Button,
+  Card,
+  CheckCircle,
   DateTimeField,
   DayStrip,
   ErrorBanner,
+  IconButton,
+  ListRow,
   SegmentedControl,
   Stepper,
   SyncButton,
   ToastProvider,
   useToast,
 } from '../src/ui/kit';
-import { isDisabled, press, texts } from '../test-support/ui';
+import { lightColors } from '../src/ui/tokens';
+import { isDisabled, press, styleOf, tap, texts } from '../test-support/ui';
+
+type Node = ReactTestRenderer.ReactTestInstance;
 
 jest.useFakeTimers({ now: new Date(2026, 10, 18, 9, 0) });
 
@@ -111,14 +120,40 @@ describe('DateTimeField', () => {
     expect(onChange).toHaveBeenCalledWith(date.toISOString());
   });
 
-  it('shows the value and clears to null when allowed', async () => {
+  it('shows the value and clears to null with Clear when allowed', async () => {
     const onChange = jest.fn();
     const iso = new Date(2026, 10, 20, 14, 30).toISOString();
     const r = render(<DateTimeField label="Due" value={iso} mode="datetime" onChange={onChange} allowClear />);
     expect(texts(r.root).join(' ')).toContain('Fri 20 Nov');
     expect(texts(r.root).join(' ')).toContain('14:30');
-    await press(r.root, 'No date');
+    expect(texts(r.root)).not.toContain('No date');
+    await tap(r.root, 'Clear');
     expect(onChange).toHaveBeenCalledWith(null);
+  });
+
+  it('labels its clear button apart from the empty text', async () => {
+    const onChange = jest.fn();
+    const iso = new Date(2026, 10, 20, 14, 30).toISOString();
+    const field = (value: string | null) => (
+      <DateTimeField
+        label="Due"
+        value={value}
+        mode="datetime"
+        onChange={onChange}
+        allowClear
+        clearLabel="Add date"
+        clearButtonLabel="Remove date"
+      />
+    );
+    const r = render(field(iso));
+    expect(texts(r.root)).toContain('Remove date');
+    expect(texts(r.root)).not.toContain('Add date');
+    await tap(r.root, 'Remove date');
+    expect(onChange).toHaveBeenCalledWith(null);
+
+    act(() => r.update(field(null)));
+    expect(texts(r.root)).toContain('Add date');
+    expect(texts(r.root)).not.toContain('Remove date');
   });
 
   it('has no clear button without allowClear', () => {
@@ -178,5 +213,68 @@ describe('ErrorBanner', () => {
     expect(isDisabled(r.root, 'Try again')).toBe(false);
     await press(r.root, 'Try again');
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('touch feedback', () => {
+  /** The pressable on screen labelled `label`, or holding the text `label`. */
+  function pressable(root: Node, label: string): Node {
+    const found = root.findAll(
+      (n) =>
+        typeof n.props.onPress === 'function' &&
+        typeof n.props.style === 'function' &&
+        (n.props.accessibilityLabel === label || texts(n).includes(label)),
+    );
+    if (!found[0]) throw new Error(`No pressable "${label}" with a pressed style`);
+    return found[0];
+  }
+
+  const c = lightColors;
+  it.each([
+    ['a primary button', <Button title="Go" onPress={jest.fn()} />, 'Go', c.accent, c.accentPressed],
+    ['a secondary button', <Button title="Go" variant="secondary" onPress={jest.fn()} />, 'Go', c.bg, c.bg2],
+    ['a danger button', <Button title="Go" variant="danger" onPress={jest.fn()} />, 'Go', c.dangerTint, c.dangerPressed],
+    ['a plain button', <Button title="Go" variant="plain" onPress={jest.fn()} />, 'Go', 'transparent', c.line],
+    ['a list row', <ListRow title="Row" onPress={jest.fn()} />, 'Row', undefined, c.bg2],
+    ['a card', <Card onPress={jest.fn()}><Text>Card</Text></Card>, 'Card', c.bg, c.bg2],
+    ['an icon button', <IconButton icon="add" label="Add one" onPress={jest.fn()} />, 'Add one', undefined, c.accentTint],
+    ['a soft icon button', <IconButton icon="add" label="Add one" tone="soft" onPress={jest.fn()} />, 'Add one', c.accentTint, c.line],
+    ['a check circle', <CheckCircle checked={false} label="Tick" onPress={jest.fn()} />, 'Tick', undefined, c.bg2],
+    [
+      'a segment',
+      <SegmentedControl options={[{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]} value="a" onChange={jest.fn()} />,
+      'B',
+      undefined,
+      c.line,
+    ],
+    ['the Sync button', <SyncButton busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />, 'Sync', c.accent, c.accentPressed],
+    [
+      'the soft Sync button',
+      <SyncButton variant="soft" busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />,
+      'Sync',
+      c.accentTint,
+      c.line,
+    ],
+    ['the + button', <AddButton onPress={jest.fn()} />, 'Add', c.accent, c.accentPressed],
+  ])('%s darkens its background while pressed, and ripples on Android', (_name, element, label, idle, pressed) => {
+    const r = render(element);
+    const node = pressable(r.root, label);
+    expect(styleOf(node).backgroundColor).toBe(idle);
+    expect(styleOf(node, true).backgroundColor).toBe(pressed);
+    expect(node.props.android_ripple).toEqual(expect.objectContaining({ color: expect.any(String) }));
+  });
+
+  it('a check circle shows the new state at once, and goes back to what it is told when the change is over', async () => {
+    let finish!: () => void;
+    const onPress = jest.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const r = render(<CheckCircle checked={false} label="Tick" onPress={onPress} />);
+    const box = () => r.root.findAll((n) => n.props.accessibilityLabel === 'Tick' && typeof n.props.onPress === 'function')[0];
+
+    await act(async () => {
+      box().props.onPress();
+    });
+    expect(box().props.accessibilityState.checked).toBe(true);
+    await act(async () => finish()); // the change failed: the parent still says not checked
+    expect(box().props.accessibilityState.checked).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { radius, space, type, useTokens } from '../tokens';
+import { ripple } from './feedback';
 
 type Props = {
   busy: boolean;
@@ -14,6 +15,7 @@ type Props = {
 export function SyncButton({ busy, connected, onSync, onConnect, variant = 'filled' }: Props) {
   const { colors } = useTokens();
   const bg = variant === 'filled' ? colors.accent : colors.accentTint;
+  const pressedBg = variant === 'filled' ? colors.accentPressed : colors.line;
   const fg = variant === 'filled' ? colors.onAccent : colors.accent;
   const title = !connected ? 'Connect Canvas' : busy ? 'Syncing…' : 'Sync';
   return (
@@ -23,7 +25,8 @@ export function SyncButton({ busy, connected, onSync, onConnect, variant = 'fill
       accessibilityState={{ disabled: busy, busy }}
       disabled={busy}
       onPress={connected ? onSync : onConnect}
-      style={[styles.base, { backgroundColor: bg }]}
+      android_ripple={ripple(fg)}
+      style={({ pressed }) => [styles.base, { backgroundColor: pressed ? pressedBg : bg }]}
     >
       <View style={styles.row}>
         {busy ? <ActivityIndicator color={fg} /> : <Ionicons name="sync" size={16} color={fg} />}

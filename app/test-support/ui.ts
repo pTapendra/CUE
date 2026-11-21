@@ -1,5 +1,5 @@
 import ReactTestRenderer, { act } from 'react-test-renderer';
-import { StyleSheet, Text } from 'react-native';
+import { AppState, StyleSheet, Text } from 'react-native';
 
 type Node = ReactTestRenderer.ReactTestInstance;
 
@@ -89,4 +89,29 @@ export function lowestOpacity(node: Node): number {
 export function textColor(root: Node, content: string): string | undefined {
   const node = onScreen(root, (n) => n.type === Text && texts(n).includes(content) && n.props.children === content)[0];
   return node ? StyleSheet.flatten(node.props.style)?.color : undefined;
+}
+
+/**
+ * The flattened style of `node`. A Pressable's style may be a function of its state: it is called
+ * with `pressed` (false unless asked), as React Native does while the finger is down.
+ */
+export function styleOf(node: Node, pressed = false) {
+  const style = node.props.style;
+  return StyleSheet.flatten(typeof style === 'function' ? style({ pressed, hovered: false }) : style) ?? {};
+}
+
+/**
+ * What React Native does when the student leaves the app and comes back to it: every AppState
+ * listener still subscribed hears "background", then "active".
+ */
+export async function comeBackToApp() {
+  const add = AppState.addEventListener as jest.Mock;
+  const live = add.mock.calls
+    .map(([event, listener], i) => ({ event, listener, subscription: add.mock.results[i]?.value }))
+    .filter(({ event, subscription }) => event === 'change' && subscription?.remove.mock.calls.length === 0);
+  await act(async () => {
+    live.forEach(({ listener }) => listener('background'));
+    live.forEach(({ listener }) => listener('active'));
+  });
+  await flush();
 }
