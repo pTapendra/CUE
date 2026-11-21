@@ -53,7 +53,7 @@ Changes two decisions in the local Canvas design: it said "no sample courses" (n
   - at least one item older than yesterday (Cue skips it).
 - **Calendar events:**
   - a final exam with a room in the title and a 2-hour slot;
-  - an exam review session with an end time;
+  - a review session with an end time (its title has no exam word, so Cue lists it as an event);
   - an all-day project demo day.
 - Times are in the Mac's time zone.
 

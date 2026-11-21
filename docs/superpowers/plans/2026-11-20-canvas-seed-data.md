@@ -61,7 +61,7 @@
   - nothing due later than day +70.
 - **Calendar events**, matched by course + title:
   - `CS 4513`: `Final exam (Room 210)`, day +62, 10:00–12:00;
-  - `CS 4350`: `Exam review session`, day +27, 16:00–17:30;
+  - `CS 4350`: `Review session (Room 115)`, day +27, 16:00–17:30 (no exam word, so Cue lists it as an event);
   - `STAT 3303`: `Project demo day`, all day on day +40.
 - **Conflicts:** before changing anything, check every seed email. If a pseudonym with that `unique_id` exists without the matching `cue-demo-` SIS ID, `abort` with `<email> already belongs to a Canvas user the seed didn't create; rename or delete that user first.`
 - **Output:** print the account lines and the course count at the end.
