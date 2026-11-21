@@ -156,6 +156,22 @@ describe('Log in with Canvas', () => {
     return { server, tree: tree!, root, webView };
   }
 
+  it("shows a spinner while Canvas's pages load", async () => {
+    const { root, tree, webView } = await openLogin();
+    expect(texts(root)).toContain('Loading Canvas…');
+    await act(async () => {
+      webView().props.onLoadEnd({ nativeEvent: {} });
+    });
+    expect(texts(root)).not.toContain('Loading Canvas…');
+    await act(async () => {
+      webView().props.onLoadStart({ nativeEvent: {} });
+    });
+    expect(texts(root)).toContain('Loading Canvas…');
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
   it('logs in with Canvas and goes to the review screen', async () => {
     const server = fakeServer();
     server.state.loginAvailable = true;

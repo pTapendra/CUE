@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Modal, Platform, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +19,8 @@ export function CanvasLoginScreen({
   onCancel: () => void;
 }) {
   const t = useTheme();
+  // Canvas's pages can take a few seconds through ngrok: show that something is happening.
+  const [loading, setLoading] = useState(true);
   return (
     <Modal animationType="slide" onRequestClose={busy ? undefined : onCancel}>
       {/* A Modal is a separate native view tree, out of reach of the app's provider; without its own, iOS puts the header under the status bar. */}
@@ -37,10 +39,13 @@ export function CanvasLoginScreen({
               onNavigationStateChange={s => {
                 onNavigate(s.url);
               }}
+              onLoadStart={() => setLoading(true)}
+              onLoadEnd={() => setLoading(false)}
             />
-            {busy ? (
+            {busy || loading ? (
               <View style={[styles.spinner, { backgroundColor: t.background }]}>
-                <ActivityIndicator color={t.primary} />
+                <ActivityIndicator size="large" color={t.primary} />
+                {busy ? null : <Text style={[styles.spinnerText, { color: t.muted }]}>Loading Canvas…</Text>}
               </View>
             ) : null}
           </View>
@@ -59,5 +64,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
   },
+  spinnerText: { fontSize: 15 },
 });
