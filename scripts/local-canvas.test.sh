@@ -427,6 +427,7 @@ exit 0'
   assert_contains "sets up login before showing the address" "Restart Cue's server" "${out%%Canvas is reachable*}"
   assert_eq "login settings written" "https://my-name.ngrok-free.dev" "$(env_get "$T/server.env" CUE_CANVAS_URL)"
   assert_contains "tells students how to connect" 'with "Log in with Canvas"' "$out"
+  assert_contains "explains ngrok's warning in the login screen" "may appear on each login" "$out"
   case "$out" in *s3cr*) assert_eq "secret not printed" "hidden" "printed" ;; esac
   # A background job ignores SIGINT, so send TERM, which the same trap handles
   # (in a terminal, Ctrl+C sends INT to the script in the foreground).
@@ -435,6 +436,33 @@ exit 0'
   assert_eq "Ctrl+C exits cleanly" "0" "$?"
   assert_false "ngrok stopped" kill -0 "$(cat "$T/ngrok.pid")" 2>/dev/null
   assert_contains "says Canvas is off the internet" "off the internet" "$(cat "$T/out")"
+}
+
+# When the login setup fails, Canvas stays up and the closing text points
+# students to an access token instead of the login button.
+test_start_with_ngrok_when_login_setup_fails() {
+  export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  export CUE_SERVER_ENV="$T/server.env"
+  mkdir -p "$T/canvas"
+  settings_save "$T/canvas" ""
+  printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  stub docker 'echo "docker $*" >>"$T/docker.log"
+exit 0'
+  stub_ngrok_world
+  printf 'y\n' | bash "$SCRIPT" start >"$T/out" 2>&1 &
+  local pid=$! i
+  for i in $(seq 1 50); do
+    grep -q "Keep this window open" "$T/out" 2>/dev/null && break
+    sleep 0.2
+  done
+  local out
+  out="$(cat "$T/out")"
+  assert_contains "warns" "Couldn't set up Canvas login for Cue." "$out"
+  assert_contains "prints the address" "https://my-name.ngrok-free.dev" "$out"
+  assert_contains "students use an access token" "Students connect with an" "$out"
+  case "$out" in *'with "Log in with Canvas"'*) assert_eq "no login wording" "absent" "present" ;; esac
+  kill -TERM "$pid" 2>/dev/null
+  wait "$pid"
 }
 
 test_start_stops_ngrok_when_canvas_fails_to_restart() {
@@ -620,6 +648,22 @@ test_ensure_server_env_creates_the_file_with_a_secret_key() {
   assert_eq "leaves an existing file's mode alone" "644" "$(stat -f %Lp "$T/own.env")"
 }
 
+test_ensure_server_env_creates_the_file_private_from_the_start() {
+  export CUE_SERVER_ENV="$T/server.env"
+  stub cp 'umask >"$T/umask"; exec /bin/cp "$@"'
+  ensure_server_env
+  assert_eq "created under umask 077" "0077" "$(cat "$T/umask")"
+}
+
+test_scopes_match_the_servers() {
+  local ts script
+  ts="$(sed -n '/CANVAS_SCOPES = \[/,/\] as const/p' "$HERE/../server/src/canvas/CanvasLogin.ts" |
+    sed -n 's/^ *"\(url:[^"]*\)",$/\1/p' | sort)"
+  script="$(printf '%s\n' $CUE_SCOPES | sort)"
+  assert_eq "three scopes found" "3" "$(printf '%s\n' "$ts" | wc -l | tr -d ' ')"
+  assert_eq "same scopes" "$ts" "$script"
+}
+
 test_cue_key_known() {
   stub curl 'echo "$*" >>"$T/curl.log"; printf 401'
   assert_false "unknown key" cue_key_known "https://my-name.ngrok-free.dev" 10000000000001
@@ -637,6 +681,9 @@ test_ensure_cue_login_writes_settings_and_never_prints_the_secret() {
   assert_eq "status" "0" "$?"
   assert_eq "url" "https://my-name.ngrok-free.dev" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
   assert_eq "client id" "10000000000001" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_ID)"
+  assert_true "address is written last, so its presence means fully configured" \
+    test "$(grep -n '^CUE_CANVAS_URL=' "$CUE_SERVER_ENV" | cut -d: -f1)" -gt "$(grep -n '^CUE_CANVAS_CLIENT_SECRET=' "$CUE_SERVER_ENV" | cut -d: -f1)"
+  assert_eq "login ready" "1" "$CUE_LOGIN_READY"
   assert_eq "secret" "s3cr/t+=" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_SECRET)"
   local log
   log="$(cat "$T/docker.log")"
@@ -661,6 +708,7 @@ test_ensure_cue_login_skips_when_already_set_up() {
   ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >"$T/out" 2>&1
   assert_eq "status" "0" "$?"
   assert_eq "says so" "Canvas login for Cue is already set up." "$(cat "$T/out")"
+  assert_eq "login ready" "1" "$CUE_LOGIN_READY"
   assert_eq "docker not called" "" "$(cat "$T/docker.log" 2>/dev/null)"
   assert_eq "file unchanged" "$before" "$(cat "$CUE_SERVER_ENV")"
 }
@@ -689,6 +737,7 @@ exit 1'
   stub curl 'printf 302'
   ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >"$T/out" 2>&1
   assert_eq "status" "0" "$?"
+  assert_eq "login not ready" "0" "$CUE_LOGIN_READY"
   assert_contains "warns" "Couldn't set up Canvas login for Cue. Students can still connect with an access token." "$(cat "$T/out")"
   assert_contains "shows Canvas's message" "Scopes cannot contain url:GET|/nope" "$(cat "$T/out")"
   assert_eq "no login settings" "" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"

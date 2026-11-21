@@ -551,8 +551,14 @@ expose_with_ngrok() {
   say ""
   say "    $NGROK_URL"
   say ""
-  say "Students connect from Cue's Connect screen with \"Log in with Canvas\"."
-  say "The first time a phone opens Canvas, ngrok shows a warning page: tap \"Visit Site\"."
+  if [ "$CUE_LOGIN_READY" = "1" ]; then
+    say "Students connect from Cue's Connect screen with \"Log in with Canvas\"."
+    say "The first time a phone opens Canvas, ngrok shows a warning page: tap \"Visit Site\"."
+    say "Inside Cue's login screen it may appear on each login: tap \"Visit Site\" there too."
+  else
+    say "In Cue, open Canvas connection and enter that address. Students connect with an"
+    say "access token. The first time a phone opens it, ngrok shows a warning page: tap \"Visit Site\"."
+  fi
   say "Keep this window open. Press Ctrl+C to take Canvas off the internet."
   wait "$NGROK_PID"
   warn "ngrok stopped by itself. What it said:"
@@ -622,12 +628,13 @@ env_set() { # file key value
 # Creates server/.env from server/.env.example if there isn't one, readable by
 # this user only since it holds secrets, and gives it a CUE_SECRET_KEY (32
 # random bytes, base64) if it has none, so saved Canvas tokens stay readable
-# after Cue's server restarts. An existing file's permissions are left alone.
+# after Cue's server restarts (created under umask 077, so never readable by
+# others, even briefly). An existing file's permissions are left alone.
 ensure_server_env() {
   local file key
   file="$(server_env_file)"
   if [ ! -f "$file" ]; then
-    cp "$(repo_dir)/server/.env.example" "$file" && chmod 600 "$file" || return 1
+    (umask 077 && cp "$(repo_dir)/server/.env.example" "$file") && chmod 600 "$file" || return 1
   fi
   [ -n "$(env_get "$file" CUE_SECRET_KEY)" ] && return 0
   key="$(openssl rand -base64 32)" && [ -n "$key" ] || return 1
@@ -663,20 +670,23 @@ create_cue_developer_key() { # canvas_dir
 # address and Canvas still knows the key. A failure only warns: Canvas stays up.
 ensure_cue_login() { # canvas_dir ngrok_url
   local file id creds
+  CUE_LOGIN_READY=0 # set to 1 when login is set up, for the closing text of start
   if ensure_server_env; then
     file="$(server_env_file)"
     id="$(env_get "$file" CUE_CANVAS_CLIENT_ID)"
     if [ "$(env_get "$file" CUE_CANVAS_URL)" = "$2" ] && [ -n "$id" ] &&
       [ -n "$(env_get "$file" CUE_CANVAS_CLIENT_SECRET)" ] && cue_key_known "$2" "$id"; then
       say "Canvas login for Cue is already set up."
+      CUE_LOGIN_READY=1
       return 0
     fi
     say "Setting up Canvas login for Cue (about a minute)..."
     if creds="$(create_cue_developer_key "$1")" &&
-      env_set "$file" CUE_CANVAS_URL "$2" &&
       env_set "$file" CUE_CANVAS_CLIENT_ID "${creds%% *}" &&
-      env_set "$file" CUE_CANVAS_CLIENT_SECRET "${creds#* }"; then
+      env_set "$file" CUE_CANVAS_CLIENT_SECRET "${creds#* }" &&
+      env_set "$file" CUE_CANVAS_URL "$2"; then
       say "Restart Cue's server so it picks up Canvas login."
+      CUE_LOGIN_READY=1
       return 0
     fi
   fi
