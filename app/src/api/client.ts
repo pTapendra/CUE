@@ -69,7 +69,8 @@ export class ApiClient {
 
   constructor(
     private readonly baseUrl: string,
-    private readonly store: TokenStore,
+    /** Where the device token is kept; the app keeps its small preferences there too (see prefs.ts). */
+    readonly store: TokenStore,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 

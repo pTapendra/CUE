@@ -28,7 +28,7 @@ const statsBlock: StudyBlock = {
 
 let tree: ReactTestRenderer.ReactTestRenderer | undefined;
 
-/** Opens the app on the Week screen with one suggested block and one short item. */
+/** Opens the app on the week (in the Schedule tab) with one suggested block and one short item. */
 async function openWeek(items: Item[] = []) {
   const server = fakeServer();
   server.state.items = items;
@@ -47,6 +47,9 @@ async function openWeek(items: Item[] = []) {
   await act(async () => {
     tree = ReactTestRenderer.create(<App client={client} />);
   });
+  await flush();
+  // The week is in the Schedule tab.
+  await press(tree!.root, 'Schedule');
   await flush();
   return { server, root: tree!.root };
 }

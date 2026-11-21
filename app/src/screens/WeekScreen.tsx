@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import type { Item } from '../api/types';
 import { rangeLabel, timeLabel } from '../dates';
 import { Button, ErrorBanner } from '../ui/components';
@@ -7,22 +8,13 @@ import { useTheme } from '../ui/theme';
 import { DAYS_PER_PAGE, useWeek } from '../viewmodels/useWeek';
 import { BlockSheet } from './BlockSheet';
 import { ItemEditor, STATUSES } from './ItemEditor';
-import { SettingsMenu } from './SettingsMenu';
 import { TimeGrid } from './TimeGrid';
 
-export function WeekScreen({
-  onSync,
-  onCanvasSettings,
-  onStudyTimes,
-}: {
-  onSync: () => void;
-  onCanvasSettings: () => void;
-  onStudyTimes: () => void;
-}) {
+export function WeekScreen({ onSync, onSettings }: { onSync: () => void; onSettings: () => void }) {
   const t = useTheme();
   const vm = useWeek();
   const [editing, setEditing] = useState<Item | null | 'new'>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  useReloadOnReturn(vm.reload);
   const openBlock = vm.openBlock;
   const suggested = vm.suggestedCount;
   const hasBanners = !!vm.error || vm.undated.length > 0 || vm.shortfalls.length > 0 || suggested > 0;
@@ -90,21 +82,8 @@ export function WeekScreen({
         <View style={styles.footerButton}>
           <Button title="Sync Canvas" variant="secondary" onPress={onSync} />
         </View>
-        <Button title="⚙" variant="secondary" onPress={() => setMenuOpen(true)} />
+        <Button title="⚙" variant="secondary" onPress={onSettings} />
       </View>
-
-      <SettingsMenu
-        visible={menuOpen}
-        onStudyTimes={() => {
-          setMenuOpen(false);
-          onStudyTimes();
-        }}
-        onCanvas={() => {
-          setMenuOpen(false);
-          onCanvasSettings();
-        }}
-        onClose={() => setMenuOpen(false)}
-      />
 
       {openBlock ? (
         <BlockSheet
@@ -132,6 +111,19 @@ export function WeekScreen({
         />
       ) : null}
     </View>
+  );
+}
+
+/** Loads the week again each time the screen comes back into view, after a sync or new study times. */
+function useReloadOnReturn(reload: () => Promise<void>) {
+  const latest = useRef(reload);
+  latest.current = reload;
+  const seen = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (seen.current) latest.current();
+      seen.current = true;
+    }, []),
   );
 }
 
