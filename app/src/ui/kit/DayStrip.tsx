@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { addDays, dayLabel, sameDay, startOfWeek } from '../../dates';
+import { addDays, dayKey, dayLabel, sameDay, startOfWeek } from '../../dates';
 import { radius, type, useTokens } from '../tokens';
 
 type Props = {
@@ -13,11 +13,6 @@ type Props = {
 
 const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-function key(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 export function DayStrip({ weekOf, today, marks, onDay }: Props) {
   const { colors } = useTokens();
   const monday = startOfWeek(weekOf);
@@ -25,7 +20,7 @@ export function DayStrip({ weekOf, today, marks, onDay }: Props) {
     <View style={styles.row}>
       {LETTERS.map((letter, i) => {
         const day = addDays(monday, i);
-        const k = key(day);
+        const k = dayKey(day);
         const isToday = sameDay(day, today);
         return (
           <Pressable

@@ -27,8 +27,8 @@ const statsBlock: StudyBlock = {
 
 let tree: ReactTestRenderer.ReactTestRenderer | undefined;
 
-/** Opens the app on the Schedule tab with one suggested block. */
-async function openSchedule() {
+/** Opens the app on Today with one suggested block. */
+async function openToday() {
   const server = fakeServer();
   server.state.connected = true;
   server.state.blocks = [{ ...statsBlock }];
@@ -36,8 +36,6 @@ async function openSchedule() {
   await act(async () => {
     tree = ReactTestRenderer.create(<App client={client} />);
   });
-  await flush();
-  await press(tree!.root, 'Schedule');
   await flush();
   return { server, root: tree!.root };
 }
@@ -51,10 +49,10 @@ afterEach(async () => {
 
 describe('study times', () => {
   it("saves with the phone's current time zone", async () => {
-    const { server, root } = await openSchedule();
+    const { server, root } = await openToday();
     server.state.settings.timeZone = 'Antarctica/Troll'; // saved before the phone moved
 
-    // Settings opens from the gear on Schedule.
+    // Settings opens from the gear on Today.
     await tap(root, 'Settings');
     await press(root, 'Study times');
     await flush();
@@ -67,9 +65,9 @@ describe('study times', () => {
   });
 
   it('switches Friday off and saves', async () => {
-    const { server, root } = await openSchedule();
+    const { server, root } = await openToday();
 
-    // Settings opens from the gear on Schedule.
+    // Settings opens from the gear on Today.
     await tap(root, 'Settings');
     await press(root, 'Study times');
     await flush();
@@ -84,7 +82,7 @@ describe('study times', () => {
 
     const put = server.state.calls.filter((c) => c.method === 'PUT' && c.path === '/api/planner/settings').pop();
     expect(put!.body.windows.find((w: { weekday: number }) => w.weekday === 5).enabled).toBe(false);
-    expect(texts(root)).toContain('3 days'); // back on Schedule
+    expect(texts(root)).toContain('1 suggested study block'); // back on Today
     expect(texts(root)).not.toContain('Save and plan');
   });
 });

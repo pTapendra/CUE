@@ -9,7 +9,7 @@ export function SectionHeader({ title, actionLabel, onAction }: Props) {
   return (
     <View style={styles.row}>
       <Text accessibilityRole="header" style={[type.section, styles.title, { color: colors.text3 }]}>
-        {title.toUpperCase()}
+        {title}
       </Text>
       {actionLabel && onAction ? (
         <Pressable accessibilityRole="button" accessibilityLabel={actionLabel} onPress={onAction} style={styles.action}>
@@ -22,6 +22,7 @@ export function SectionHeader({ title, actionLabel, onAction }: Props) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.lg },
-  title: { flex: 1, letterSpacing: 0.6 },
+  // Shown in capitals; screen readers still read the words.
+  title: { flex: 1, letterSpacing: 0.6, textTransform: 'uppercase' },
   action: { minHeight: 44, justifyContent: 'center', paddingLeft: space.md },
 });

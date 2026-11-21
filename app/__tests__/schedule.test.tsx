@@ -13,7 +13,7 @@ import { deviceTimeZone } from '../src/timeZone';
 import { lightColors, lightCourses, lightUnknown } from '../src/ui/tokens';
 import { HOUR_HEIGHT } from '../src/viewmodels/grid';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, press, tap, texts, type } from '../test-support/ui';
+import { flush, onScreen, press, tap, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -103,22 +103,25 @@ function lastRange(server: Server) {
 
 /** The days the grid shows, as a screen reader reads their headers. */
 function dayHeaders(root: Node): string[] {
-  const labels = root
-    .findAll((n) => n.props.accessibilityRole === 'header' && typeof n.props.accessibilityLabel === 'string')
-    .map((n) => n.props.accessibilityLabel as string);
+  const labels = onScreen(
+    root,
+    (n) => n.props.accessibilityRole === 'header' && typeof n.props.accessibilityLabel === 'string',
+  ).map((n) => n.props.accessibilityLabel as string);
   return [...new Set(labels)];
 }
 
 /** The selected view in the segmented control. */
 function selectedView(root: Node): string | undefined {
-  return root.findAll(
+  return onScreen(
+    root,
     (n) => n.props.accessibilityRole === 'tab' && n.props.accessibilityState?.selected && VIEWS.includes(n.props.accessibilityLabel),
   )[0]?.props.accessibilityLabel;
 }
 
 /** The style of the pressable whose accessibility label starts with `label`. */
 function boxStyle(root: Node, label: string) {
-  const box = root.findAll(
+  const box = onScreen(
+    root,
     (n) => typeof n.props.onPress === 'function' && String(n.props.accessibilityLabel ?? '').startsWith(label),
   )[0];
   if (!box) throw new Error(`No box "${label}"`);
@@ -127,7 +130,8 @@ function boxStyle(root: Node, label: string) {
 
 /** The style of the pressable that shows `text`. */
 function pressableWith(root: Node, text: string) {
-  const found = root.findAll(
+  const found = onScreen(
+    root,
     (n) => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function' && texts(n).includes(text),
   )[0];
   if (!found) throw new Error(`No pressable with "${text}"`);
@@ -136,13 +140,13 @@ function pressableWith(root: Node, text: string) {
 
 /** The colour of the text that reads exactly `text`. */
 function textColor(root: Node, text: string) {
-  const found = root.findAllByType(Text).find((t) => texts(t).includes(text) && texts(t).length === 1);
+  const found = onScreen(root, (n) => n.type === Text).find((t) => texts(t).includes(text) && texts(t).length === 1);
   if (!found) throw new Error(`No text "${text}"`);
   return StyleSheet.flatten(found.props.style).color;
 }
 
 function nowLines(root: Node) {
-  return root.findAll((n) => n.props.testID === 'now' && typeof n.type === 'string');
+  return onScreen(root, (n) => n.props.testID === 'now' && typeof n.type === 'string');
 }
 
 describe('the grid', () => {
@@ -425,7 +429,7 @@ describe('drawing', () => {
 
     const add = boxStyle(root, 'Add');
     // The grid's scroll view is the one with pull to refresh.
-    const grid = root.findAll((n) => n.props.refreshControl !== undefined && n.props.contentContainerStyle !== undefined)[0];
+    const grid = onScreen(root, (n) => n.props.refreshControl !== undefined && n.props.contentContainerStyle !== undefined)[0];
     const content = StyleSheet.flatten(grid.props.contentContainerStyle);
     expect(content.paddingBottom).toBeGreaterThanOrEqual(Number(add.height) + Number(add.bottom));
   });
@@ -505,7 +509,7 @@ describe('Sync', () => {
 
     await press(root, 'Connect Canvas');
     await flush();
-    expect(root.findAll((n) => n.props.placeholder === 'Paste your token').length).toBeGreaterThan(0);
+    expect(onScreen(root, (n) => n.props.placeholder === 'Paste your token').length).toBeGreaterThan(0);
     await type(root, 'yourschool.instructure.com', 's.instructure.com');
     await type(root, 'Paste your token', 'good-token-123');
     await press(root, 'Connect and sync');

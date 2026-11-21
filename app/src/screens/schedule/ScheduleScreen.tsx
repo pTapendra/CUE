@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { Item } from '../../api/types';
 import { monthTitle, parseDay, rangeLabel } from '../../dates';
 import type { TabScreenProps } from '../../navigation/types';
-import { Button, ErrorBanner, IconButton, SegmentedControl, SyncButton } from '../../ui/kit';
+import { ADD_BUTTON_CLEARANCE, AddButton, Button, ErrorBanner, IconButton, SegmentedControl, SyncButton } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
 import { type ScheduleView, useSchedule } from '../../viewmodels/useSchedule';
 import { useSync } from '../../viewmodels/useSync';
@@ -66,8 +66,6 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
             onConnect={sync.connect}
           />
           <IconButton icon="locate-outline" label="Today" onPress={vm.goToday} />
-          {/* Settings opens from here until Today has its own gear. */}
-          <IconButton icon="settings-outline" label="Settings" onPress={() => navigation.navigate('Settings')} />
         </View>
       </View>
 
@@ -112,17 +110,10 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
         onBlock={vm.showBlock}
         onItem={setEditing}
         refreshControl={<RefreshControl refreshing={vm.loading} onRefresh={vm.reload} />}
-        bottomInset={ADD_CLEARANCE}
+        bottomInset={ADD_BUTTON_CLEARANCE}
       />
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Add"
-        onPress={() => setEditing('new')}
-        style={[styles.add, { backgroundColor: colors.accent }]}
-      >
-        <Ionicons name="add" size={28} color={colors.onAccent} />
-      </Pressable>
+      <AddButton onPress={() => setEditing('new')} />
 
       <CanvasLoginSheet login={sync.login} />
 
@@ -168,11 +159,6 @@ function useReloadOnReturn(reload: () => Promise<void>) {
   );
 }
 
-const ADD_SIZE = 56;
-const ADD_MARGIN = space.lg;
-/** How far the grid's last hour must scroll up to clear the + button, with a gap above it. */
-const ADD_CLEARANCE = ADD_SIZE + 2 * ADD_MARGIN;
-
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
@@ -199,16 +185,5 @@ const styles = StyleSheet.create({
     gap: space.sm,
     borderRadius: radius.md,
     paddingLeft: space.md,
-  },
-  add: {
-    position: 'absolute',
-    right: ADD_MARGIN,
-    bottom: ADD_MARGIN,
-    width: ADD_SIZE,
-    height: ADD_SIZE,
-    borderRadius: ADD_SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 3,
   },
 });

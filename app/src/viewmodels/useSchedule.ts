@@ -26,7 +26,7 @@ function keep(current: Page, next: Page): Page {
 }
 
 /** "DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours." */
-function shortfallText(s: Shortfall): string {
+export function shortfallText(s: Shortfall): string {
   const fit = `${s.plannedMinutes / 60} of ${s.neededMinutes / 60} hours fit`;
   return `${s.itemTitle}: ${fit} before ${dayLabel(new Date(s.dueAt))}. Add study times or lower the hours.`;
 }

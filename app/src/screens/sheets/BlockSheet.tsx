@@ -7,11 +7,15 @@ import { radius, space, type, useTokens } from '../../ui/tokens';
 
 const MAX_HOURS = 40;
 
-/** What you can do with one study block: accept it, move it, ask for another slot, or change the study time. */
+/**
+ * What you can do with one study block: accept it, move it, ask for another slot, or change the study time.
+ * `startMoving` opens it with the time picker for moving already shown (Today's Move).
+ */
 export function BlockSheet({
   block,
   studyHours,
   error,
+  startMoving = false,
   onAccept,
   onReject,
   onMove,
@@ -21,6 +25,7 @@ export function BlockSheet({
   block: StudyBlock;
   studyHours: number;
   error?: string | null;
+  startMoving?: boolean;
   onAccept: () => Promise<boolean>;
   onReject: () => Promise<boolean>;
   onMove: (startsAtIso: string) => Promise<boolean>;
@@ -28,7 +33,7 @@ export function BlockSheet({
   onClose: () => void;
 }) {
   const { colors } = useTokens();
-  const [moving, setMoving] = useState(false);
+  const [moving, setMoving] = useState(startMoving);
   const [newStart, setNewStart] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 

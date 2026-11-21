@@ -202,6 +202,42 @@ describe('block sheet', () => {
     await act(async () => r.unmount());
   });
 
+  it('opens with the time picker shown when it is opened to move the block', async () => {
+    const noop = async () => true;
+    const moved: string[] = [];
+    const sheet = (startMoving?: boolean) => (
+      <BlockSheet
+        block={{ ...statsBlock, state: 'accepted' }}
+        studyHours={6}
+        startMoving={startMoving}
+        onAccept={noop}
+        onReject={noop}
+        onMove={async (iso) => {
+          moved.push(iso);
+          return true;
+        }}
+        onStudyHours={noop}
+        onClose={() => {}}
+      />
+    );
+    let r!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      r = ReactTestRenderer.create(sheet());
+    });
+    expect(texts(r.root)).not.toContain('Move here');
+    await act(async () => r.unmount());
+
+    await act(async () => {
+      r = ReactTestRenderer.create(sheet(true));
+    });
+    expect(texts(r.root)).toContain('Move here');
+    const when = new Date(2026, 10, 4, 20, 0);
+    await pick(r.root, 'New start', when);
+    await press(r.root, 'Move here');
+    expect(moved).toEqual([when.toISOString()]);
+    await act(async () => r.unmount());
+  });
+
   it('shows a message and refreshes when the block is already gone', async () => {
     const { server, root } = await openSheet();
     server.state.blocks = [];

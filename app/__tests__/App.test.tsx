@@ -167,8 +167,7 @@ it('lets a student skip Canvas and add an exam by hand', async () => {
 
   await press(root, SKIP);
   await flush();
-  await press(root, 'Schedule');
-  await flush();
+  expect(selectedTab(root)).toBe('Today');
   await tap(root, 'Add');
   await type(root, 'e.g. Statistics midterm', 'Stats quiz');
   await press(root, 'Exam');
@@ -184,6 +183,10 @@ it('lets a student skip Canvas and add an exam by hand', async () => {
   await flush();
 
   expect(server.state.items[0]).toMatchObject({ title: 'Stats quiz', kind: 'exam' });
+  // Due on Wednesday: Today lists it as due soon, and Schedule shows it on its day.
+  expect(texts(root)).toEqual(expect.arrayContaining(['Due soon', 'Stats quiz', 'Exam', 'Wed 4 Nov, 14:00']));
+  await press(root, 'Schedule');
+  await flush();
   expect(texts(root)).toContain('Exam: Stats quiz');
 });
 
@@ -316,19 +319,12 @@ it('the login screen gets the Cue user agent for an ngrok Canvas address', async
   expect(texts(root)).toContain('demo.ngrok-free.dev');
 });
 
-describe('the Schedule tab', () => {
-  async function openSchedule(loginAvailable = false) {
+describe('Settings, from the gear on Today', () => {
+  it("the settings menu's Canvas connection opens Welcome, and the token form has the school's address", async () => {
     const server = fakeServer();
     server.state.connected = true;
-    server.state.loginAvailable = loginAvailable;
     const { root } = await launch(server);
-    await press(root, 'Schedule');
-    await flush();
-    return { server, root };
-  }
-
-  it("the settings menu's Canvas connection opens Welcome, and the token form has the school's address", async () => {
-    const { root } = await openSchedule();
+    expect(selectedTab(root)).toBe('Today');
     await tap(root, 'Settings');
     await press(root, 'Canvas connection');
     await flush();
@@ -341,6 +337,44 @@ describe('the Schedule tab', () => {
     );
     expect(address.props.value).toBe('https://s.instructure.com');
   });
+
+  it('loads Today and the schedule again after study times are saved', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    const { root } = await launch(server);
+    const loads = (path: string) => server.state.calls.filter((c) => c.path === path).length;
+    await press(root, 'Schedule');
+    await flush();
+    await press(root, 'Today');
+    await flush();
+    const overviewLoads = loads('/api/schedule/overview');
+    const weekLoads = loads('/api/schedule/week');
+
+    await tap(root, 'Settings');
+    await press(root, 'Study times');
+    await flush();
+    await press(root, 'Save and plan');
+    await flush();
+    expect(texts(root)).not.toContain('Save and plan');
+    expect(selectedTab(root)).toBe('Today');
+    expect(loads('/api/schedule/overview')).toBe(overviewLoads + 1);
+
+    await press(root, 'Schedule');
+    await flush();
+    expect(loads('/api/schedule/week')).toBe(weekLoads + 1);
+  });
+});
+
+describe('the Schedule tab', () => {
+  async function openSchedule(loginAvailable = false) {
+    const server = fakeServer();
+    server.state.connected = true;
+    server.state.loginAvailable = loginAvailable;
+    const { root } = await launch(server);
+    await press(root, 'Schedule');
+    await flush();
+    return { server, root };
+  }
 
   it.each([
     ['Save 2 items', 'Today'],
@@ -355,20 +389,5 @@ describe('the Schedule tab', () => {
     await flush();
     expect(texts(root)).not.toContain('Check what Cue found');
     expect(selectedTab(root)).toBe(tab);
-  });
-
-  it('loads the schedule again after study times are saved', async () => {
-    const { server, root } = await openSchedule();
-    const weekLoads = () => server.state.calls.filter((c) => c.path === '/api/schedule/week').length;
-    const loads = weekLoads();
-
-    await tap(root, 'Settings');
-    await press(root, 'Study times');
-    await flush();
-    await press(root, 'Save and plan');
-    await flush();
-    expect(texts(root)).not.toContain('Save and plan');
-    expect(selectedTab(root)).toBe('Schedule');
-    expect(weekLoads()).toBe(loads + 1);
   });
 });

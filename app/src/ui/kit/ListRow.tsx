@@ -6,6 +6,8 @@ import { space, type, useTokens } from '../tokens';
 type Props = {
   title: string;
   meta?: string;
+  /** Shown before the meta line, such as a course dot. */
+  metaLeading?: React.ReactNode;
   onPress?: () => void;
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
@@ -13,7 +15,7 @@ type Props = {
   dimmed?: boolean;
 };
 
-export function ListRow({ title, meta, onPress, leading, trailing, tag, dimmed }: Props) {
+export function ListRow({ title, meta, metaLeading, onPress, leading, trailing, tag, dimmed }: Props) {
   const { colors } = useTokens();
   const body = (
     <>
@@ -23,7 +25,12 @@ export function ListRow({ title, meta, onPress, leading, trailing, tag, dimmed }
           <Text style={[type.bodyStrong, styles.title, { color: colors.text }]}>{title}</Text>
           {tag}
         </View>
-        {meta ? <Text style={[type.meta, { color: colors.text2 }]}>{meta}</Text> : null}
+        {meta ? (
+          <View style={styles.metaRow}>
+            {metaLeading}
+            <Text style={[type.meta, styles.meta, { color: colors.text2 }]}>{meta}</Text>
+          </View>
+        ) : null}
       </View>
       {trailing ??
         (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.text3} /> : null)}
@@ -50,4 +57,6 @@ const styles = StyleSheet.create({
   main: { flex: 1, gap: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
   title: { flexShrink: 1 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  meta: { flexShrink: 1 },
 });

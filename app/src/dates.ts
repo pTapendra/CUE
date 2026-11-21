@@ -78,6 +78,11 @@ export function parseDay(text: string | undefined): Date | null {
   return Number.isNaN(time.getTime()) ? null : startOfDay(time);
 }
 
+/** "2026-11-02": `d`'s local date, as routes and the day strip name a day. */
+export function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** "14:30" */
 export function timeLabel(d: Date): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;

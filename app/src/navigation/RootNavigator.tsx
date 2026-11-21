@@ -10,6 +10,7 @@ import { ReviewScreen } from '../screens/review/ReviewScreen';
 import { ScheduleScreen } from '../screens/schedule/ScheduleScreen';
 import { SettingsMenu } from '../screens/SettingsMenu';
 import { StudyTimesScreen } from '../screens/StudyTimesScreen';
+import { TodayScreen } from '../screens/today/TodayScreen';
 import { WelcomeScreen } from '../screens/welcome/WelcomeScreen';
 import type { IoniconName } from '../ui/kit';
 import { space, type, useTokens } from '../ui/tokens';
@@ -87,10 +88,18 @@ function TabsNavigator() {
         tabBarIcon: TAB_ICONS[route.name],
       })}
     >
-      <Tab.Screen name="Today" component={TodayPlaceholder} />
+      <Tab.Screen name="Today" component={TodayTab} />
       <Tab.Screen name="Schedule" component={ScheduleTab} />
       <Tab.Screen name="Courses" component={CoursesPlaceholder} />
     </Tab.Navigator>
+  );
+}
+
+function TodayTab(props: TabScreenProps<'Today'>) {
+  return (
+    <Page edges={TAB_EDGES}>
+      <TodayScreen {...props} />
+    </Page>
   );
 }
 
@@ -100,10 +109,6 @@ function ScheduleTab(props: TabScreenProps<'Schedule'>) {
       <ScheduleScreen {...props} />
     </Page>
   );
-}
-
-function TodayPlaceholder() {
-  return <Placeholder title="Today" text="Your day will show here soon. For now, your week is in Schedule." />;
 }
 
 function CoursesPlaceholder() {

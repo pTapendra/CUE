@@ -9,7 +9,7 @@ import type { ProposedItem } from '../src/api/types';
 import { ApiClient, type TokenStore } from '../src/api/client';
 import { groupByCourse } from '../src/viewmodels/useSyncReview';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, isDisabled, press, tap, texts } from '../test-support/ui';
+import { flush, isDisabled, onScreen, press, tap, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -172,7 +172,7 @@ describe('Check what Cue found', () => {
     await flush();
     const shown = texts(root);
     expect(shown).toContain('Mon 2 Nov – Wed 4 Nov');
-    expect(root.findAll((n) => n.props.accessibilityLabel === 'Tue 3 Nov')).not.toHaveLength(0);
+    expect(onScreen(root, (n) => n.props.accessibilityLabel === 'Tue 3 Nov')).not.toHaveLength(0);
     expect(shown).toContain('SQL homework');
     expect(shown).not.toContain('Exam: Midterm Exam');
     expect(shown).not.toContain('Needs a date'); // items without a date are on Today
