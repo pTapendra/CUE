@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../ui/components';
 import { useTheme } from '../ui/theme';
 
@@ -20,30 +20,30 @@ export function CanvasLoginScreen({
   const t = useTheme();
   return (
     <Modal animationType="slide" onRequestClose={busy ? undefined : onCancel}>
-      <SafeAreaView style={[styles.root, { backgroundColor: t.background }]}>
-        <View style={styles.header}>
-          <Button title="Cancel" variant="secondary" disabled={busy} onPress={onCancel} />
-          <Text style={[styles.title, { color: t.text }]}>Log in to Canvas</Text>
-        </View>
-        <View style={styles.root}>
-          <WebView
-            source={{
-              uri: authorizeUrl,
-              headers: { 'ngrok-skip-browser-warning': 'true' },
-            }}
-            incognito
-            onShouldStartLoadWithRequest={r => onNavigate(r.url)}
-            onNavigationStateChange={s => {
-              onNavigate(s.url);
-            }}
-          />
-          {busy ? (
-            <View style={[styles.spinner, { backgroundColor: t.background }]}>
-              <ActivityIndicator color={t.primary} />
-            </View>
-          ) : null}
-        </View>
-      </SafeAreaView>
+      {/* A Modal is a separate native view tree, out of reach of the app's provider; without its own, iOS puts the header under the status bar. */}
+      <SafeAreaProvider>
+        <SafeAreaView style={[styles.root, { backgroundColor: t.background }]}>
+          <View style={styles.header}>
+            <Button title="Cancel" variant="secondary" disabled={busy} onPress={onCancel} />
+            <Text style={[styles.title, { color: t.text }]}>Log in to Canvas</Text>
+          </View>
+          <View style={styles.root}>
+            <WebView
+              source={{ uri: authorizeUrl }}
+              incognito
+              onShouldStartLoadWithRequest={r => onNavigate(r.url)}
+              onNavigationStateChange={s => {
+                onNavigate(s.url);
+              }}
+            />
+            {busy ? (
+              <View style={[styles.spinner, { backgroundColor: t.background }]}>
+                <ActivityIndicator color={t.primary} />
+              </View>
+            ) : null}
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
