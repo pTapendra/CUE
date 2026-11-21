@@ -82,14 +82,14 @@ export class CanvasReaderService {
   startLogin(studentId: string): { authorizeUrl: string; state: string } {
     if (!this.login) throw new LoginUnavailableError();
     const state = randomBytes(32).toString("base64url");
-    this.repo.saveLoginState(studentId, state, LOGIN_TTL);
+    this.repo.saveLoginState(studentId, state, LOGIN_TTL, this.now());
     return { authorizeUrl: this.login.authorizeUrl(state), state };
   }
 
   /** Exchanges the code, checks the access token with one read, then stores both tokens sealed. */
   async finishLogin(studentId: string, code: string, state: string): Promise<void> {
     if (!this.login) throw new LoginUnavailableError();
-    if (!this.repo.takeLoginState(studentId, state)) throw new LoginExpiredError();
+    if (!this.repo.takeLoginState(studentId, state, this.now())) throw new LoginExpiredError();
     const tokens = await this.login.exchangeCode(code);
     await this.makeClient(this.login.canvasUrl, tokens.accessToken).listCourses();
     const key = this.opts.secretKey;

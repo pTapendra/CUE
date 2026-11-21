@@ -1,12 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CANVAS, NOW, setup } from "./helpers.js";
 
 const row = (db: ReturnType<typeof setup>["db"]) =>
   db.prepare("SELECT * FROM canvas_connections").get() as Record<string, string | null>;
 
 describe("log in with Canvas", () => {
-  afterEach(() => vi.useRealTimers());
-
   it("reports loginAvailable", async () => {
     const on = await setup().newStudent();
     expect((await on.get("/api/canvas/connection").expect(200)).body.loginAvailable).toBe(true);
@@ -55,9 +53,6 @@ describe("log in with Canvas", () => {
     expect((await b.post("/api/canvas/login/finish", { code: "good-code", state }).expect(409)).body.error).toBe("login_expired");
 
     const late = (await a.post("/api/canvas/login").expect(200)).body.state;
-    // The repository stamps states with the process clock, so move that one too.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(Date.now() + 10 * 60 * 1000 + 1000);
     setClock(new Date(NOW.getTime() + 10 * 60 * 1000 + 1000));
     expect((await a.post("/api/canvas/login/finish", { code: "good-code", state: late }).expect(409)).body.error).toBe("login_expired");
   });

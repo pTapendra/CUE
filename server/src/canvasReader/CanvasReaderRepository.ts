@@ -97,8 +97,8 @@ export class CanvasReaderRepository {
     return { syncId, ...(JSON.parse(row.payload) as Omit<SyncPreview, "syncId">) };
   }
 
-  saveLoginState(studentId: string, state: string, ttlMs: number): void {
-    const now = Date.now();
+  saveLoginState(studentId: string, state: string, ttlMs: number, at: Date = new Date()): void {
+    const now = at.getTime();
     this.db.prepare("DELETE FROM canvas_login_states WHERE expires_at < ?").run(new Date(now).toISOString());
     this.db
       .prepare("INSERT INTO canvas_login_states (state_hash, student_id, expires_at) VALUES (?, ?, ?)")
@@ -106,13 +106,13 @@ export class CanvasReaderRepository {
   }
 
   /** Single use: the row is deleted whoever owns it. True only for its student, before it expires. */
-  takeLoginState(studentId: string, state: string): boolean {
+  takeLoginState(studentId: string, state: string, at: Date = new Date()): boolean {
     const hash = hashToken(state);
     const row = this.db
       .prepare("SELECT student_id, expires_at FROM canvas_login_states WHERE state_hash = ?")
       .get(hash) as { student_id: string; expires_at: string } | undefined;
     if (!row) return false;
     this.db.prepare("DELETE FROM canvas_login_states WHERE state_hash = ?").run(hash);
-    return row.student_id === studentId && Date.parse(row.expires_at) >= Date.now();
+    return row.student_id === studentId && Date.parse(row.expires_at) >= at.getTime();
   }
 }
