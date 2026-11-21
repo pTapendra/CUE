@@ -9,3 +9,10 @@ jest.mock('react-native-webview', () => {
   const { createElement } = require('react');
   return { WebView: (p) => createElement('WebView', p) };
 });
+jest.mock('@react-native-community/datetimepicker', () => {
+  const { createElement } = require('react');
+  return {
+    __esModule: true,
+    default: (p) => createElement('DateTimePicker', p),
+  };
+});
