@@ -6,8 +6,8 @@ import { rangeLabel, timeLabel } from '../dates';
 import { Button, ErrorBanner } from '../ui/components';
 import { useTheme } from '../ui/theme';
 import { DAYS_PER_PAGE, useWeek } from '../viewmodels/useWeek';
-import { BlockSheet } from './BlockSheet';
-import { ItemEditor, STATUSES } from './ItemEditor';
+import { BlockSheet } from './sheets/BlockSheet';
+import { ItemSheet, STATUSES } from './sheets/ItemSheet';
 import { TimeGrid } from './TimeGrid';
 
 export function WeekScreen({ onSync, onSettings }: { onSync: () => void; onSettings: () => void }) {
@@ -99,7 +99,7 @@ export function WeekScreen({ onSync, onSettings }: { onSync: () => void; onSetti
       ) : null}
 
       {editing !== null ? (
-        <ItemEditor
+        <ItemSheet
           key={editing === 'new' ? 'new' : editing.id}
           visible
           item={editing === 'new' ? null : editing}

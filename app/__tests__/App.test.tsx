@@ -172,7 +172,14 @@ it('lets a student skip Canvas and add an exam by hand', async () => {
   await press(root, 'Add');
   await type(root, 'e.g. Statistics midterm', 'Stats quiz');
   await press(root, 'Exam');
-  await type(root, 'YYYY-MM-DD HH:mm', '2026-11-04 14:00');
+  // The date comes from the picker, not from typing.
+  await act(async () => {
+    root.findAll((n) => n.props.accessibilityLabel === 'Due or exam date' && typeof n.props.onPress === 'function')[0].props.onPress();
+  });
+  await act(async () => {
+    root.findAllByType('DateTimePicker' as never)[0].props.onChange({ type: 'set' }, new Date(2026, 10, 4, 14, 0));
+  });
+  await press(root, 'Done');
   await press(root, 'Save');
   await flush();
 

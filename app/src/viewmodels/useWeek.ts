@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { useApi } from '../api/ApiContext';
 import { friendlyMessage } from '../api/client';
-import type { Course, ItemInput, ItemStatus, Shortfall, StudyBlock, StudyWindow, Week } from '../api/types';
-import { addDays, dayLabel, fromInput, startOfDay } from '../dates';
+import type { Course, Shortfall, StudyBlock, StudyWindow, Week } from '../api/types';
+import { addDays, dayLabel, startOfDay } from '../dates';
 import { syncTimeZone } from '../timeZone';
 import { gridRange, timedEventsFor } from './grid';
+import { useItemActions } from './useItemActions';
 
 /** Days the grid shows at once; the arrows move by this many. */
 export const DAYS_PER_PAGE = 3;
@@ -37,7 +38,7 @@ export function useWeek(today: Date = new Date()) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [opened, setOpened] = useState<StudyBlock | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,9 +60,13 @@ export function useWeek(today: Date = new Date()) {
     }
   }, [api, from]);
 
+  const actions = useItemActions(load);
+  const { clearError } = actions;
+
   useEffect(() => {
+    clearError();
     load();
-  }, [load]);
+  }, [load, clearError]);
 
   // The phone may be in another time zone when the student comes back to the app.
   // When the server gets a new zone it re-plans, so load the week again.
@@ -75,34 +80,9 @@ export function useWeek(today: Date = new Date()) {
     return () => subscription.remove();
   }, [api, load]);
 
-  /** Runs a change, then reloads the week. If it fails, reloads anyway and then shows the error; returns false. */
-  async function mutate(action: () => Promise<unknown>): Promise<boolean> {
-    setError(null);
-    try {
-      await action();
-      await load();
-      return true;
-    } catch (err) {
-      // load() clears the error, so show this one once the reload has finished.
-      await load();
-      setError(friendlyMessage(err));
-      return false;
-    }
-  }
-
-  /** Moves a block to a typed local start time, such as "2026-11-06 14:00". */
-  async function moveBlock(id: string, text: string): Promise<boolean> {
-    const startsAt = fromInput(text);
-    if (!startsAt) {
-      setError('Use the form 2026-11-06 14:00');
-      return false;
-    }
-    return mutate(() => api.moveBlock(id, startsAt));
-  }
-
   /** Saves the item's study time. The open block keeps the new amount even if the re-plan moved it away. */
   async function setStudyHours(itemId: string, hours: number): Promise<boolean> {
-    const ok = await mutate(() => api.updateItem(itemId, { studyMinutes: hours * 60 }));
+    const ok = await actions.setStudyHours(itemId, hours);
     if (ok) setOpened((b) => (b && b.itemId === itemId ? { ...b, itemStudyMinutes: hours * 60 } : b));
     return ok;
   }
@@ -124,26 +104,29 @@ export function useWeek(today: Date = new Date()) {
     windows,
     courses,
     loading,
-    error,
-    reload: load,
+    error: actions.error ?? loadError,
+    /** Loads again, as a pull to refresh does; it also clears an old message. */
+    reload: async () => {
+      clearError();
+      await load();
+    },
     previous: () => setFrom((f) => addDays(f, -DAYS_PER_PAGE)),
     next: () => setFrom((f) => addDays(f, DAYS_PER_PAGE)),
     goToday: () => setFrom(startOfDay(new Date())),
     suggestedCount: blocks.filter((b) => b.state === 'proposed').length,
-    acceptVisible: () => mutate(() => api.acceptBlocks(from, addDays(from, DAYS_PER_PAGE))),
+    acceptVisible: () => actions.run(() => api.acceptBlocks(from, addDays(from, DAYS_PER_PAGE))),
     /** The block whose sheet is open, kept up to date across reloads. */
     openBlock,
     /** Hours of study the open block's item needs. */
     openBlockHours: openBlock ? openBlock.itemStudyMinutes / 60 : 0,
     showBlock: (block: StudyBlock) => setOpened(block),
     closeBlock: () => setOpened(null),
-    acceptBlock: (id: string) => mutate(() => api.acceptBlock(id)),
-    rejectBlock: (id: string) => mutate(() => api.rejectBlock(id)),
-    moveBlock,
+    acceptBlock: actions.acceptBlock,
+    rejectBlock: actions.rejectBlock,
+    moveBlock: actions.moveBlock,
     setStudyHours,
-    saveItem: (id: string | null, input: ItemInput) =>
-      mutate(() => (id ? api.updateItem(id, input) : api.addItem(input))),
-    setStatus: (id: string, status: ItemStatus) => mutate(() => api.setStatus(id, status)),
-    deleteItem: (id: string) => mutate(() => api.deleteItem(id)),
+    saveItem: actions.saveItem,
+    setStatus: actions.setStatus,
+    deleteItem: actions.deleteItem,
   };
 }
