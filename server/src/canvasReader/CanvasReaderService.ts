@@ -60,6 +60,8 @@ export interface CanvasReaderOptions {
 export class CanvasReaderService {
   private readonly now: () => Date;
   private readonly login: CanvasLogin | null;
+  /** One in-flight renewal per student: Canvas replaces the access token in place. */
+  private readonly renewing = new Map<string, Promise<string>>();
 
   constructor(
     private readonly repo: CanvasReaderRepository,
@@ -74,7 +76,10 @@ export class CanvasReaderService {
 
   status(studentId: string) {
     const c = this.repo.getConnection(studentId);
-    return { connected: c != null, baseUrl: c?.baseUrl ?? null, lastSyncedAt: c?.lastSyncedAt ?? null,
+    return {
+      connected: c != null,
+      baseUrl: c?.baseUrl ?? null,
+      lastSyncedAt: c?.lastSyncedAt ?? null,
       loginAvailable: this.login != null,
     };
   }
@@ -92,15 +97,41 @@ export class CanvasReaderService {
     if (!this.login) throw new LoginUnavailableError();
     if (!this.repo.takeLoginState(studentId, state, this.now())) throw new LoginExpiredError();
     const tokens = await this.login.exchangeCode(code);
-    await this.makeClient(this.login.canvasUrl, tokens.accessToken).listCourses();
+    try {
+      await this.makeClient(this.login.canvasUrl, tokens.accessToken).listCourses();
+    } catch (e) {
+      await this.revokeQuietly(tokens.accessToken);
+      throw e;
+    }
     const key = this.opts.secretKey;
     const accessExpiresAt =
       tokens.expiresInSeconds == null ? null : new Date(this.now().getTime() + tokens.expiresInSeconds * 1000).toISOString();
+    const previous = this.repo.getConnection(studentId);
     this.repo.saveConnection(
       studentId,
       this.login.canvasUrl,
       encrypt(tokens.accessToken, key),
       tokens.refreshToken ? { refreshSealed: encrypt(tokens.refreshToken, key), accessExpiresAt } : null,
+    );
+    if (previous && this.isRenewable(previous)) {
+      await this.revokeQuietly(decrypt(previous.tokenSealed, key));
+    }
+  }
+
+  private async revokeQuietly(accessToken: string): Promise<void> {
+    try {
+      await this.login!.revoke(accessToken);
+    } catch {
+      // Best effort.
+    }
+  }
+
+  /** A login connection, still on the host that issued its tokens; only then may tokens be sent to Canvas. */
+  private isRenewable(conn: StoredConnection): boolean {
+    return (
+      this.login != null &&
+      conn.refreshSealed != null &&
+      new URL(conn.baseUrl).origin === new URL(this.login.canvasUrl).origin
     );
   }
 
@@ -117,12 +148,12 @@ export class CanvasReaderService {
    */
   async disconnect(studentId: string): Promise<void> {
     const conn = this.repo.getConnection(studentId);
-    if (conn && this.login && conn.refreshSealed) {
+    if (conn && this.isRenewable(conn)) {
       try {
         const access = this.needsRenewal(conn)
           ? await this.renewAccess(studentId, conn)
           : decrypt(conn.tokenSealed, this.opts.secretKey);
-        await this.login.revoke(access);
+        await this.login!.revoke(access);
       } catch {
         // Revoking is best effort; the connection is deleted regardless.
       }
@@ -132,15 +163,22 @@ export class CanvasReaderService {
 
   private needsRenewal(conn: StoredConnection): boolean {
     return (
-      this.login != null &&
-      conn.refreshSealed != null &&
+      this.isRenewable(conn) &&
       conn.accessExpiresAt != null &&
       Date.parse(conn.accessExpiresAt) - this.now().getTime() <= RENEW_WITHIN
     );
   }
 
   /** Renews access with the stored refresh token and saves it. Refusal means the student must connect again. */
-  private async renewAccess(studentId: string, conn: StoredConnection): Promise<string> {
+  private renewAccess(studentId: string, conn: StoredConnection): Promise<string> {
+    const running = this.renewing.get(studentId);
+    if (running) return running;
+    const p = this.doRenew(studentId, conn).finally(() => this.renewing.delete(studentId));
+    this.renewing.set(studentId, p);
+    return p;
+  }
+
+  private async doRenew(studentId: string, conn: StoredConnection): Promise<string> {
     const key = this.opts.secretKey;
     let tokens;
     try {
@@ -173,7 +211,7 @@ export class CanvasReaderService {
     try {
       return await read(this.makeClient(conn.baseUrl, access));
     } catch (e) {
-      if (!(e instanceof CanvasAuthError) || renewed || !this.login || !conn.refreshSealed) throw e;
+      if (!(e instanceof CanvasAuthError) || renewed || !this.isRenewable(conn)) throw e;
       access = await this.renewAccess(studentId, conn);
       return await read(this.makeClient(conn.baseUrl, access));
     }

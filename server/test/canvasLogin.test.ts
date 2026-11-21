@@ -79,10 +79,14 @@ describe("log in with Canvas", () => {
   });
 
   it("connecting with a pasted token still works and is never renewed", async () => {
-    const { db, newStudent } = setup();
+    const { db, login, deadTokens, newStudent } = setup();
     const s = await newStudent();
     await s.put("/api/canvas/connection", CANVAS).expect(200);
     expect(row(db).refresh_sealed).toBeNull();
+    deadTokens.add(CANVAS.token);
+    const res = await s.post("/api/canvas/sync").expect(409);
+    expect(res.body.error).toBe("canvas_token_rejected");
+    expect(login.renewals).toBe(0);
   });
 
   it("an insecure login address is refused when the insecure flag is off", () => {

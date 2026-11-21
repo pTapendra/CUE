@@ -33,10 +33,11 @@ describe("renewing Canvas access", () => {
   });
 
   it("after a 401, renews once and retries", async () => {
-    const { s, login, deadTokens } = await connected();
+    const { s, login, deadTokens, tokensSeen } = await connected();
     deadTokens.add("access-1");
     await s.post("/api/canvas/sync").expect(200);
     expect(login.renewals).toBe(1);
+    expect(tokensSeen[tokensSeen.length - 1]).toBe("access-2");
   });
 
   it("renewed but still refused: one retry, then canvas_token_rejected", async () => {
@@ -72,6 +73,54 @@ describe("renewing Canvas access", () => {
     t.deadTokens.add("access-1");
     await s.post("/api/canvas/sync").expect(200);
     expect(t.login.renewals).toBe(1);
+  });
+});
+
+describe("renewal rules", () => {
+  it("never sends tokens to a host other than the one that issued them", async () => {
+    const { s, login, deadTokens, db } = await connected();
+    db.prepare("UPDATE canvas_connections SET base_url = 'https://other.example.edu'").run();
+    deadTokens.add("access-1");
+    const res = await s.post("/api/canvas/sync").expect(409);
+    expect(res.body.error).toBe("canvas_token_rejected");
+    expect(login.renewals).toBe(0);
+    await s.del("/api/canvas/connection").expect(204);
+    expect(login.revoked).toEqual([]);
+    expect((await s.get("/api/canvas/connection").expect(200)).body.connected).toBe(false);
+  });
+
+  it("overlapping reads share one renewal", async () => {
+    const { s, login, setClock } = await connected();
+    setClock(at(59 * MIN));
+    const renew = login.renew.bind(login);
+    login.renew = async (token) => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return renew(token);
+    };
+    const [a, b] = await Promise.all([s.post("/api/canvas/sync"), s.post("/api/canvas/sync")]);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(login.renewals).toBe(1);
+  });
+
+  it("logging in again revokes the access token Cue no longer uses", async () => {
+    const { s, login, setClock } = await connected();
+    setClock(at(59 * MIN));
+    await s.post("/api/canvas/sync").expect(200);
+    expect(login.renewals).toBe(1);
+    const { state } = (await s.post("/api/canvas/login").expect(200)).body;
+    await s.post("/api/canvas/login/finish", { code: "good-code", state }).expect(200);
+    expect(login.revoked).toContain("access-2");
+  });
+
+  it("a failed check read revokes the new access token", async () => {
+    const { s, login, deadTokens } = await connected();
+    login.revoked.length = 0;
+    deadTokens.add("access-1");
+    const { state } = (await s.post("/api/canvas/login").expect(200)).body;
+    const res = await s.post("/api/canvas/login/finish", { code: "good-code", state }).expect(409);
+    expect(res.body.error).toBe("canvas_token_rejected");
+    expect(login.revoked).toContain("access-1");
   });
 });
 
