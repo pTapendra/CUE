@@ -850,9 +850,15 @@ fake_seed_output() {
   printf 'CUE_COURSES\t3\n'
 }
 
-test_seed_accounts_file_defaults_to_the_project_folder() {
+test_seed_accounts_file_defaults_to_the_seed_folder() {
   unset CUE_SEED_ACCOUNTS_FILE
-  assert_eq "path" "$(cd "$HERE/.." && pwd)/local-canvas-accounts.csv" "$(seed_accounts_file)"
+  assert_eq "path" "$(cd "$HERE/.." && pwd)/seed/local-canvas-accounts.csv" "$(seed_accounts_file)"
+}
+
+test_write_accounts_file_creates_a_missing_folder() {
+  printf 'CUE_ACCOUNT\tstudent\tMaya Thompson\tmaya.thompson@students.cue.demo\tmaya-cue2026\t4\tCS 4350\n' |
+    write_accounts_file "$T/seed/local-canvas-accounts.csv"
+  assert_true "file written" test -s "$T/seed/local-canvas-accounts.csv"
 }
 
 test_seed_accounts_file_can_be_moved_for_tests() {
@@ -861,7 +867,7 @@ test_seed_accounts_file_can_be_moved_for_tests() {
 }
 
 test_seed_accounts_file_is_kept_out_of_git() {
-  assert_true "git-ignored" git -C "$HERE/.." check-ignore -q local-canvas-accounts.csv
+  assert_true "git-ignored" git -C "$HERE/.." check-ignore -q seed/local-canvas-accounts.csv
 }
 
 test_mac_time_zone_reads_the_macs_zone() {

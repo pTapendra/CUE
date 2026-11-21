@@ -798,7 +798,7 @@ find_canvas() {
 # Where the demo accounts and passwords are written (by local-canvas-seed.sh),
 # next to the settings file.
 seed_accounts_file() {
-  printf '%s\n' "${CUE_SEED_ACCOUNTS_FILE:-$(repo_dir)/local-canvas-accounts.csv}"
+  printf '%s\n' "${CUE_SEED_ACCOUNTS_FILE:-$(repo_dir)/seed/local-canvas-accounts.csv}"
 }
 
 # Before the ngrok question: says where the demo accounts are, or, until there

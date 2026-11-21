@@ -6,4 +6,4 @@ dist/
 .env
 .DS_Store
 .superpowers/
-/local-canvas-accounts.csv
+/seed/local-canvas-accounts.csv
