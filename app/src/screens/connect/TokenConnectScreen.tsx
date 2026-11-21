@@ -1,6 +1,5 @@
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { showReviewAfterConnect } from '../../navigation/actions';
 import { useStartup } from '../../navigation/startup';
 import type { RootScreenProps } from '../../navigation/types';
@@ -15,7 +14,7 @@ export function TokenConnectScreen({ navigation }: RootScreenProps<'TokenConnect
   const vm = useConnectCanvas(canvasUrl ?? '');
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
+    <View style={[styles.root, { backgroundColor: colors.bg }]}>
       <View style={[styles.header, { borderBottomColor: colors.line }]}>
         <View style={styles.side}>
           <Button title="Cancel" variant="plain" onPress={() => navigation.goBack()} />
@@ -68,7 +67,7 @@ export function TokenConnectScreen({ navigation }: RootScreenProps<'TokenConnect
           />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 

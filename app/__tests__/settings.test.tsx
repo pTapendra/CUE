@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert, StyleSheet, Text } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { StudyBlock } from '../src/api/types';
@@ -500,5 +501,44 @@ describe('Study times', () => {
     await act(async () => root.findAllByType('DateTimePicker' as never)[0].props.onChange({ type: 'set' }, new Date(2026, 10, 2, 18, 30)));
     expect(texts(root)).toContain('At least 1 hour');
     expect(root.find((n) => n.props.accessibilityLabel === 'Save' && n.props.accessibilityState).props.accessibilityState.disabled).toBe(true);
+  });
+});
+
+describe('Safe areas', () => {
+  // iOS doesn't report the status bar to SafeAreaView inside a full-screen modal, so pages pad
+  // themselves from the insets the app measures at its root.
+  const insets = useSafeAreaInsets as jest.Mock;
+  const measured = insets.getMockImplementation();
+
+  beforeEach(() => insets.mockImplementation(() => ({ top: 47, bottom: 34, left: 0, right: 0 })));
+  afterEach(() => insets.mockImplementation(measured));
+
+  /** The padding of the ancestor of `title` that keeps it below the status bar (none: zeros). */
+  function pagePadding(title: string) {
+    let node: ReactTestRenderer.ReactTestInstance | null = tree!.root.find(
+      (n) => n.type === Text && n.props.accessibilityRole === 'header' && n.props.children === title,
+    );
+    while (node && StyleSheet.flatten(node.props.style)?.paddingTop !== 47) node = node.parent;
+    const style = node ? StyleSheet.flatten(node.props.style) : {};
+    return { top: style.paddingTop ?? 0, bottom: style.paddingBottom ?? 0 };
+  }
+
+  it('keeps Settings, a full-screen modal, below the status bar and above the home indicator', async () => {
+    await openSettings();
+    expect(pagePadding('Settings')).toEqual({ top: 47, bottom: 34 });
+  });
+
+  it('keeps the token form, a full-screen modal, below the status bar', async () => {
+    await openSettings({ connected: false, loginAvailable: false });
+    await tap(tree!.root, 'Connect Canvas');
+    await flush();
+    expect(pagePadding('Connect Canvas')).toEqual({ top: 47, bottom: 34 });
+  });
+
+  it('pads a tab page at the top but leaves the bottom to the tab bar', async () => {
+    await openSettings();
+    await tap(tree!.root, 'Done');
+    await flush();
+    expect(pagePadding('Today')).toEqual({ top: 47, bottom: 0 });
   });
 });

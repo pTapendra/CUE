@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme, DefaultTheme, NavigationContainer, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { type Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { type Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CourseScreen } from '../screens/courses/CourseScreen';
 import { CoursesScreen } from '../screens/courses/CoursesScreen';
 import { TokenConnectScreen } from '../screens/connect/TokenConnectScreen';
@@ -67,7 +67,7 @@ export function RootNavigator({ initialRouteName, startup }: { initialRouteName:
           <Stack.Screen name="WhatCueKeeps" component={WhatCueKeepsRoute} />
           <Stack.Group screenOptions={{ presentation: 'fullScreenModal' }}>
             <Stack.Screen name="Review" component={ReviewRoute} />
-            <Stack.Screen name="TokenConnect" component={TokenConnectScreen} />
+            <Stack.Screen name="TokenConnect" component={TokenConnectRoute} />
             <Stack.Screen name="Settings" component={SettingsRoute} />
           </Stack.Group>
         </Stack.Navigator>
@@ -141,6 +141,14 @@ function ReviewRoute({ navigation }: RootScreenProps<'Review'>) {
   );
 }
 
+function TokenConnectRoute(props: RootScreenProps<'TokenConnect'>) {
+  return (
+    <Page>
+      <TokenConnectScreen {...props} />
+    </Page>
+  );
+}
+
 function SettingsRoute(props: RootScreenProps<'Settings'>) {
   return (
     <Page>
@@ -165,13 +173,26 @@ function WhatCueKeepsRoute(props: RootScreenProps<'WhatCueKeeps'>) {
   );
 }
 
-/** A screen's safe area on the app's background. */
-function Page({ edges, children }: { edges?: Edge[]; children: React.ReactNode }) {
+const ALL_EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * A screen's safe area on the app's background. It pads by the insets the app measures at its
+ * root, not with SafeAreaView: on iOS, SafeAreaView inside a full-screen modal (Settings,
+ * Check what Cue found) gets no top inset, and the page slid under the status bar.
+ */
+function Page({ edges = ALL_EDGES, children }: { edges?: Edge[]; children: React.ReactNode }) {
   const { colors } = useTokens();
+  const insets = useSafeAreaInsets();
+  const pad = (edge: Edge) => (edges.includes(edge) ? insets[edge] : 0);
   return (
-    <SafeAreaView edges={edges} style={[styles.page, { backgroundColor: colors.bg }]}>
+    <View
+      style={[
+        styles.page,
+        { backgroundColor: colors.bg, paddingTop: pad('top'), paddingRight: pad('right'), paddingBottom: pad('bottom'), paddingLeft: pad('left') },
+      ]}
+    >
       {children}
-    </SafeAreaView>
+    </View>
   );
 }
 
