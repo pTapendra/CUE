@@ -76,10 +76,31 @@ describe("HttpCanvasLogin", () => {
     }
   });
 
+  it("a token reply without user.id revokes the fresh token best effort, then is CanvasUnavailableError", async () => {
+    for (const revokeFails of [false, true]) {
+      const calls: { method: string; url: string; auth: string | null }[] = [];
+      const impl = (async (input: string | URL, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        calls.push({ method, url: String(input), auth: new Headers(init?.headers).get("authorization") });
+        if (method === "DELETE") {
+          if (revokeFails) throw new Error("down");
+          return new Response("{}", { status: 200 });
+        }
+        return new Response(JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 3600 }), { status: 200 });
+      }) as typeof fetch;
+      await expect(new HttpCanvasLogin(settings, impl).exchangeCode("c")).rejects.toBeInstanceOf(CanvasUnavailableError);
+      const del = calls.filter((c) => c.method === "DELETE");
+      expect(del).toHaveLength(1);
+      expect(del[0].url).toBe("https://canvas.test/login/oauth2/token");
+      expect(del[0].auth).toBe("Bearer a");
+    }
+  });
+
   it("renews with grant_type=refresh_token; a reply without expires_in or refresh_token gives nulls", async () => {
-    const { impl, calls } = fakeFetch({ body: { access_token: "b", token_type: "Bearer" } });
+    const { impl, calls } = fakeFetch({ body: { access_token: "b", token_type: "Bearer", user: { id: 1 } } });
     const tokens = await new HttpCanvasLogin(settings, impl).renew("old-refresh");
     expect(tokens).toEqual({ accessToken: "b", refreshToken: null, expiresInSeconds: null });
+    expect(tokens).not.toHaveProperty("userId");
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("https://canvas.test/login/oauth2/token");
     const form = new URLSearchParams(calls[0].body);

@@ -1,6 +1,7 @@
 import {
   CanvasAuthError,
   CanvasUnavailableError,
+  canvasIdString,
   type CanvasAssignment,
   type CanvasClient,
   type CanvasCourse,
@@ -79,8 +80,9 @@ export class HttpCanvasClient implements CanvasClient {
     } catch {
       throw new CanvasUnavailableError("Unreadable reply");
     }
-    if (!body || body.id == null) throw new CanvasUnavailableError("Reply had no user ID");
-    return { id: String(body.id) };
+    const id = canvasIdString(body?.id);
+    if (id === null) throw new CanvasUnavailableError("Reply had no user ID");
+    return { id };
   }
 
   /** GET a list endpoint and follow Canvas's Link: rel="next" pagination. */

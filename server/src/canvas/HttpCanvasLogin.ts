@@ -1,4 +1,4 @@
-import { CanvasUnavailableError } from "./CanvasClient.js";
+import { CanvasUnavailableError, canvasIdString } from "./CanvasClient.js";
 import {
   CANVAS_SCOPES,
   CanvasLoginRefusedError,
@@ -41,7 +41,11 @@ export class HttpCanvasLogin implements CanvasLogin {
       redirect_uri: OOB_REDIRECT,
       code,
     });
-    if (userId === null) throw new CanvasUnavailableError("Token reply had no user ID");
+    if (userId === null) {
+      // The login can't be used, so don't leave the fresh token live.
+      await this.revoke(tokens.accessToken).catch(() => {});
+      throw new CanvasUnavailableError("Token reply had no user ID");
+    }
     return { ...tokens, userId };
   }
 
@@ -85,11 +89,7 @@ export class HttpCanvasLogin implements CanvasLogin {
     }
     // Keep only the tokens, expiry and the user's ID; the user's name and
     // anything else in the reply is dropped.
-    const rawId = json.user?.id;
-    const userId =
-      (typeof rawId === "number" && Number.isFinite(rawId)) || (typeof rawId === "string" && rawId !== "")
-        ? String(rawId)
-        : null;
+    const userId = canvasIdString(json.user?.id);
     return {
       userId,
       accessToken: json.access_token,
