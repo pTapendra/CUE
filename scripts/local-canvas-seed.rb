@@ -163,7 +163,7 @@ module CueDemoSeed
 
   def person(name, role, codes)
     first, last = name.downcase.split(" ", 2)
-    domain = (role == "teacher") ? "faculty.cue-demo.test" : "students.cue-demo.test"
+    domain = (role == "teacher") ? "faculty.cue.demo" : "students.cue.demo"
     { name: name, role: role, codes: codes,
       email: "#{first}.#{last}@#{domain}",
       sis_user_id: "cue-demo-#{first}-#{last}",

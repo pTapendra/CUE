@@ -7,8 +7,8 @@
 #
 #   scripts/local-canvas-seed.sh
 #
-# Every account's login and password go into local-canvas-accounts.csv, next
-# to local-canvas.sh's settings, readable by this user only. The data and the
+# Every account's login and password go into local-canvas-accounts.csv in the
+# project folder (git-ignored), readable by this user only. The data and the
 # Ruby that creates it are in local-canvas-seed.rb.
 #
 # Like local-canvas.sh, the functions below run nothing when this file is

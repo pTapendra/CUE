@@ -38,14 +38,14 @@ Changes two decisions in the local Canvas design: it said "no sample courses" (n
 
 - `scripts/local-canvas-seed.sh`: finds the Canvas folder the same way `local-canvas.sh` does (its settings file), checks Canvas's web container is running (otherwise it says to run `start`), runs the Ruby, writes the accounts file, and prints a short summary and the file's path.
 - `scripts/local-canvas-seed.rb`: the data and the Ruby that creates or updates it. It prints one line per account for the shell script to write out. It's kept in its own file because it is too long to embed in the shell script.
-- Accounts file: `local-canvas-accounts.csv` next to the existing settings file (`~/.config/cue/`), mode 600. Columns: `role,name,email,password,canvas_user_id,courses`.
+- Accounts file: `local-canvas-accounts.csv` in the project folder (git-ignored), mode 600. Columns: `role,name,email,password,canvas_user_id,courses`.
 
 ### Data (dates relative to the day the script runs)
 
 - **Term:** starts 6 weeks before the run day and ends 10 weeks after it.
 - **Courses** (published): Software Engineering, Database Systems and Applied Statistics, with realistic codes (e.g. `CS 4350`, `CS 4513`, `STAT 3303`). There is one teacher per course.
 - **Students:** 6, each in 2 or 3 courses; at least one is in all three.
-- **People:** invented, varied names. Emails are `first.last@students.cue-demo.test` and `first.last@faculty.cue-demo.test`. `.test` is reserved, so mail can never reach anyone.
+- **People:** invented, varied names. Emails are `first.last@students.cue.demo` and `first.last@faculty.cue.demo`. `cue.demo` is not a real domain, and the local Canvas sends no email.
 - **Per course, 6–8 published assignments,** due at 23:59, spread from about 3 weeks before the run day to 10 weeks after it. They cover:
   - homework and project milestones;
   - at least one quiz (submission type `online_quiz`);
