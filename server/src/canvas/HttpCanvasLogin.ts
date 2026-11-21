@@ -35,12 +35,22 @@ export class HttpCanvasLogin implements CanvasLogin {
     return `${this.canvasUrl}/login/oauth2/auth?${params}`;
   }
 
-  exchangeCode(code: string): Promise<CanvasTokens> {
-    return this.tokenRequest({ grant_type: "authorization_code", redirect_uri: OOB_REDIRECT, code });
+  async exchangeCode(code: string): Promise<CanvasTokens & { userId: string }> {
+    const { userId, ...tokens } = await this.tokenRequest({
+      grant_type: "authorization_code",
+      redirect_uri: OOB_REDIRECT,
+      code,
+    });
+    if (userId === null) throw new CanvasUnavailableError("Token reply had no user ID");
+    return { ...tokens, userId };
   }
 
-  renew(refreshToken: string): Promise<CanvasTokens> {
-    return this.tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken });
+  async renew(refreshToken: string): Promise<CanvasTokens> {
+    const { userId: _userId, ...tokens } = await this.tokenRequest({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    });
+    return tokens;
   }
 
   async revoke(accessToken: string): Promise<void> {
@@ -51,7 +61,7 @@ export class HttpCanvasLogin implements CanvasLogin {
     if (!res.ok) throw new CanvasUnavailableError(`HTTP ${res.status}`);
   }
 
-  private async tokenRequest(fields: Record<string, string>): Promise<CanvasTokens> {
+  private async tokenRequest(fields: Record<string, string>): Promise<CanvasTokens & { userId: string | null }> {
     const body = new URLSearchParams({
       ...fields,
       client_id: this.settings.clientId,
@@ -73,8 +83,15 @@ export class HttpCanvasLogin implements CanvasLogin {
     if (!json || typeof json.access_token !== "string" || !json.access_token) {
       throw new CanvasUnavailableError("Token reply had no access token");
     }
-    // Keep only the tokens and expiry; `user` and anything else is dropped.
+    // Keep only the tokens, expiry and the user's ID; the user's name and
+    // anything else in the reply is dropped.
+    const rawId = json.user?.id;
+    const userId =
+      (typeof rawId === "number" && Number.isFinite(rawId)) || (typeof rawId === "string" && rawId !== "")
+        ? String(rawId)
+        : null;
     return {
+      userId,
       accessToken: json.access_token,
       refreshToken: typeof json.refresh_token === "string" && json.refresh_token ? json.refresh_token : null,
       expiresInSeconds: typeof json.expires_in === "number" ? json.expires_in : null,

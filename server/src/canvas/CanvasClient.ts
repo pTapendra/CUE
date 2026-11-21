@@ -9,6 +9,8 @@ export interface CanvasClient {
   listCourses(): Promise<CanvasCourse[]>;
   listAssignments(courseId: string): Promise<CanvasAssignment[]>;
   listCalendarEvents(courseIds: string[], from: Date, to: Date): Promise<CanvasEvent[]>;
+  /** Who the token belongs to (GET /api/v1/users/self). */
+  whoAmI(): Promise<{ id: string }>;
 }
 
 export interface CanvasCourse {

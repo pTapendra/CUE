@@ -28,7 +28,8 @@ export interface CanvasLogin {
   /** No trailing slash. */
   readonly canvasUrl: string;
   authorizeUrl(state: string): string;
-  exchangeCode(code: string): Promise<CanvasTokens>;
+  /** Also says which Canvas user logged in (their Canvas user ID). */
+  exchangeCode(code: string): Promise<CanvasTokens & { userId: string }>;
   renew(refreshToken: string): Promise<CanvasTokens>;
   revoke(accessToken: string): Promise<void>;
 }

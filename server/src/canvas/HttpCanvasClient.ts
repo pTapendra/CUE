@@ -71,6 +71,18 @@ export class HttpCanvasClient implements CanvasClient {
     return events;
   }
 
+  async whoAmI(): Promise<{ id: string }> {
+    const res = await this.get(`${this.baseUrl}/api/v1/users/self`);
+    let body: any;
+    try {
+      body = await res.json();
+    } catch {
+      throw new CanvasUnavailableError("Unreadable reply");
+    }
+    if (!body || body.id == null) throw new CanvasUnavailableError("Reply had no user ID");
+    return { id: String(body.id) };
+  }
+
   /** GET a list endpoint and follow Canvas's Link: rel="next" pagination. */
   private async getAll<T>(path: string, query: Record<string, string> | URLSearchParams): Promise<T[]> {
     const params = query instanceof URLSearchParams ? query : new URLSearchParams(query);

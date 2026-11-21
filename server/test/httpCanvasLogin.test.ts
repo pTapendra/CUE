@@ -37,12 +37,12 @@ describe("HttpCanvasLogin", () => {
     expect(url.searchParams.get("scope")).toBe(CANVAS_SCOPES.join(" "));
   });
 
-  it("exchanges a code with a form POST and keeps only the tokens and expiry", async () => {
+  it("exchanges a code with a form POST and keeps only the tokens, expiry and user ID", async () => {
     const { impl, calls } = fakeFetch({
       body: { access_token: "a", refresh_token: "r", expires_in: 3600, token_type: "Bearer", user: { id: 7, name: "Ada" } },
     });
     const tokens = await new HttpCanvasLogin(settings, impl).exchangeCode("the-code");
-    expect(tokens).toEqual({ accessToken: "a", refreshToken: "r", expiresInSeconds: 3600 });
+    expect(tokens).toEqual({ accessToken: "a", refreshToken: "r", expiresInSeconds: 3600, userId: "7" });
     expect(calls).toHaveLength(1);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("https://canvas.test/login/oauth2/token");
@@ -55,6 +55,25 @@ describe("HttpCanvasLogin", () => {
       redirect_uri: OOB_REDIRECT,
       code: "the-code",
     });
+  });
+
+  it("exchangeCode returns the Canvas user ID as a string", async () => {
+    const { impl } = fakeFetch({
+      body: { access_token: "a", refresh_token: "r", expires_in: 3600, user: { id: 42, name: "Maya Thompson" } },
+    });
+    const result = await new HttpCanvasLogin(settings, impl).exchangeCode("c");
+    expect(result.userId).toBe("42");
+    expect(JSON.stringify(result)).not.toContain("Maya");
+  });
+
+  it("a token reply without user.id is CanvasUnavailableError", async () => {
+    for (const body of [
+      { access_token: "a" },
+      { access_token: "a", user: { name: "x" } },
+    ]) {
+      const { impl } = fakeFetch({ body });
+      await expect(new HttpCanvasLogin(settings, impl).exchangeCode("c")).rejects.toBeInstanceOf(CanvasUnavailableError);
+    }
   });
 
   it("renews with grant_type=refresh_token; a reply without expires_in or refresh_token gives nulls", async () => {
