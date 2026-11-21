@@ -56,7 +56,7 @@ module CueDemoSeed
         ]
       },
       events: [
-        { title: "Exam review session", day: 27, from: [16, 0], to: [17, 30] }
+        { title: "Review session (Room 115)", day: 27, from: [16, 0], to: [17, 30] }
       ]
     },
     {
