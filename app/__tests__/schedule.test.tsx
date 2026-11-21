@@ -420,6 +420,16 @@ describe('drawing', () => {
     expect(pressableWith(root, 'Own task').backgroundColor).toBe(lightUnknown.tint);
   });
 
+  it('lets the last hours scroll clear of the + button', async () => {
+    const { root } = await openSchedule();
+
+    const add = boxStyle(root, 'Add');
+    // The grid's scroll view is the one with pull to refresh.
+    const grid = root.findAll((n) => n.props.refreshControl !== undefined && n.props.contentContainerStyle !== undefined)[0];
+    const content = StyleSheet.flatten(grid.props.contentContainerStyle);
+    expect(content.paddingBottom).toBeGreaterThanOrEqual(Number(add.height) + Number(add.bottom));
+  });
+
   it('draws a red line at the current time, on today only', async () => {
     const { root } = await openSchedule((server) => {
       // An event from 08:00, so the grid starts at 08:00 and 09:00 is on it.

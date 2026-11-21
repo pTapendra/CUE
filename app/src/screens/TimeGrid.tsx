@@ -27,6 +27,7 @@ export function TimeGrid({
   onBlock,
   onItem,
   refreshControl,
+  bottomInset = 0,
 }: {
   days: Date[];
   range: GridRange;
@@ -37,6 +38,8 @@ export function TimeGrid({
   onBlock: (block: StudyBlock) => void;
   onItem: (item: Item) => void;
   refreshControl?: ScrollViewProps['refreshControl'];
+  /** Space below the last hour, so it scrolls clear of anything floating over the grid. */
+  bottomInset?: number;
 }) {
   const { colors, courses: palette, unknown } = useTokens();
   const now = useNow();
@@ -74,7 +77,7 @@ export function TimeGrid({
         </View>
       ) : null}
 
-      <ScrollView refreshControl={refreshControl}>
+      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ paddingBottom: bottomInset }}>
         <View style={styles.row}>
           <View style={styles.gutter}>
             {hours.map((h) => (

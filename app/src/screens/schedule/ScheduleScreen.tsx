@@ -112,6 +112,7 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
         onBlock={vm.showBlock}
         onItem={setEditing}
         refreshControl={<RefreshControl refreshing={vm.loading} onRefresh={vm.reload} />}
+        bottomInset={ADD_CLEARANCE}
       />
 
       <Pressable
@@ -168,6 +169,9 @@ function useReloadOnReturn(reload: () => Promise<void>) {
 }
 
 const ADD_SIZE = 56;
+const ADD_MARGIN = space.lg;
+/** How far the grid's last hour must scroll up to clear the + button, with a gap above it. */
+const ADD_CLEARANCE = ADD_SIZE + 2 * ADD_MARGIN;
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
@@ -198,8 +202,8 @@ const styles = StyleSheet.create({
   },
   add: {
     position: 'absolute',
-    right: space.lg,
-    bottom: space.lg,
+    right: ADD_MARGIN,
+    bottom: ADD_MARGIN,
     width: ADD_SIZE,
     height: ADD_SIZE,
     borderRadius: ADD_SIZE / 2,
