@@ -96,6 +96,32 @@ The Canvas mobile app cannot create tokens, but the Canvas website can, includin
 
 On a computer the same page is **Account → Settings → Approved Integrations → New Access Token**. You can delete the token in Canvas at any time. Some schools turn off token creation for students; if Canvas shows no **New Access Token** button, use **Skip** and add dates by hand.
 
+## A local Canvas for testing and demos
+
+To test or demo Cue without a school's Canvas, run your own Canvas on a Mac in Docker:
+
+```bash
+scripts/local-canvas.sh setup   # first time only; takes an hour or more
+scripts/local-canvas.sh start   # whenever you need Canvas
+scripts/local-canvas.sh stop
+```
+
+**setup** checks for Homebrew, git, Docker Desktop and ngrok, and offers to install anything missing (or tells you how). Canvas needs 8 GB of memory in Docker and about 60 GB of disk. If the Mac is short on space, setup can put Canvas and Docker's disk on an external drive, inside a disk image, which also works on exFAT drives. It then downloads a fixed Canvas version and runs Canvas's own setup, which asks for an email and password for the Canvas admin account.
+
+**start** starts Canvas at <http://canvas.docker> (that Mac only) and asks whether to make it reachable from a phone through ngrok. If you say yes:
+
+- it uses your own free ngrok account and asks for your authtoken the first time;
+- it prints your address, like `https://your-name.ngrok-free.dev`, which stays the same every time;
+- Canvas stays on the internet only while that window is open. Ctrl+C takes it off again; Canvas keeps running on the Mac.
+
+A free ngrok account allows one tunnel at a time. While it runs, anyone with the address can reach your Canvas login page, so give the Canvas admin a strong password. The first time a phone opens the address, ngrok shows a warning page; tap **Visit Site**.
+
+If setup put Canvas on an external drive, Docker keeps its disk there too, inside a disk image that has to be mounted before Docker starts. Turn off **Start Docker Desktop when you sign in** (Docker Desktop → Settings → General), plug the drive in, and use `scripts/local-canvas.sh start`: it mounts the disk image first, then starts Docker. If Docker Desktop did start without it, `start` says so; quit Docker Desktop and run `start` again.
+
+`start` with ngrok writes `docker-compose.cue-ngrok.yml` in the Canvas folder so Canvas accepts the ngrok address. To undo that, delete the file; the next `start` or `stop` tidies Canvas's `.env` to match.
+
+To use it with Cue, log in to Canvas, start a course (Dashboard → **Start a New Course**, so you're enrolled), add assignments and calendar events, and create a token under **Account → Settings → New Access Token**. In Cue, connect with the ngrok address. Without ngrok, use `http://canvas.docker` and start Cue's server with `CUE_ALLOW_INSECURE_CANVAS=1`; that only works while Cue's server runs on the same Mac.
+
 ## How the code is organised
 
 The structure follows the P2 design document.
