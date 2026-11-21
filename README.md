@@ -9,7 +9,7 @@ This repository holds two parts:
 | `server/` | Back-end server: Node.js, Express, TypeScript, SQLite |
 | `app/` | Mobile app: React Native with Expo, TypeScript (runs in Expo Go; can be turned into a bare React Native project at any time) |
 
-The app talks only to the server. Only the server talks to Canvas, and only with read (GET) requests.
+The app talks only to the server. Only the server talks to Canvas, and only with read (GET) requests, apart from the token requests of logging in with Canvas (code exchange, renewal and revoke).
 
 ## What works
 

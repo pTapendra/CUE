@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import type { CanvasClientFactory } from "../canvas/CanvasClient.js";
-import type { CanvasLogin } from "../canvas/CanvasLogin.js";
+import { CanvasAuthError, type CanvasClient, type CanvasClientFactory } from "../canvas/CanvasClient.js";
+import { CanvasLoginRefusedError, type CanvasLogin } from "../canvas/CanvasLogin.js";
 import { decrypt, encrypt } from "../crypto.js";
 import type { ScheduleService } from "../schedule/ScheduleService.js";
-import type { CanvasReaderRepository } from "./CanvasReaderRepository.js";
+import type { CanvasReaderRepository, StoredConnection } from "./CanvasReaderRepository.js";
 import type { ItemKind, ProposedCourse, ProposedItem, SyncPreview } from "./types.js";
 
 export class CanvasNotConnectedError extends Error {
@@ -45,6 +45,7 @@ const EXAM_WORDS = /\b(exam|midterm|mid-term|final|test)\b/i;
 const DAY = 24 * 60 * 60 * 1000;
 const PREVIEW_TTL = 30 * 60 * 1000;
 const LOGIN_TTL = 10 * 60 * 1000;
+const RENEW_WITHIN = 2 * 60 * 1000;
 
 export interface CanvasReaderOptions {
   secretKey: Buffer;
@@ -110,21 +111,93 @@ export class CanvasReaderService {
     this.repo.saveConnection(studentId, url, encrypt(token, this.opts.secretKey));
   }
 
-  disconnect(studentId: string): void {
+  /**
+   * Asks Canvas to revoke a login connection's token (best effort, any failure is
+   * ignored), then deletes the connection. Pasted tokens are never revoked.
+   */
+  async disconnect(studentId: string): Promise<void> {
+    const conn = this.repo.getConnection(studentId);
+    if (conn && this.login && conn.refreshSealed) {
+      try {
+        const access = this.needsRenewal(conn)
+          ? await this.renewAccess(studentId, conn)
+          : decrypt(conn.tokenSealed, this.opts.secretKey);
+        await this.login.revoke(access);
+      } catch {
+        // Revoking is best effort; the connection is deleted regardless.
+      }
+    }
     this.repo.deleteConnection(studentId);
+  }
+
+  private needsRenewal(conn: StoredConnection): boolean {
+    return (
+      this.login != null &&
+      conn.refreshSealed != null &&
+      conn.accessExpiresAt != null &&
+      Date.parse(conn.accessExpiresAt) - this.now().getTime() <= RENEW_WITHIN
+    );
+  }
+
+  /** Renews access with the stored refresh token and saves it. Refusal means the student must connect again. */
+  private async renewAccess(studentId: string, conn: StoredConnection): Promise<string> {
+    const key = this.opts.secretKey;
+    let tokens;
+    try {
+      tokens = await this.login!.renew(decrypt(conn.refreshSealed!, key));
+    } catch (e) {
+      if (e instanceof CanvasLoginRefusedError) throw new CanvasAuthError();
+      throw e;
+    }
+    const expiresAt =
+      tokens.expiresInSeconds == null ? null : new Date(this.now().getTime() + tokens.expiresInSeconds * 1000).toISOString();
+    this.repo.updateAccess(
+      studentId,
+      encrypt(tokens.accessToken, key),
+      expiresAt,
+      tokens.refreshToken ? encrypt(tokens.refreshToken, key) : undefined,
+    );
+    return tokens.accessToken;
+  }
+
+  /** Runs a Canvas read, renewing access first when it is about to expire, and once more after a 401. */
+  private async withClient<T>(studentId: string, read: (client: CanvasClient) => Promise<T>): Promise<T> {
+    const conn = this.repo.getConnection(studentId);
+    if (!conn) throw new CanvasNotConnectedError();
+    let renewed = false;
+    let access = decrypt(conn.tokenSealed, this.opts.secretKey);
+    if (this.needsRenewal(conn)) {
+      access = await this.renewAccess(studentId, conn);
+      renewed = true;
+    }
+    try {
+      return await read(this.makeClient(conn.baseUrl, access));
+    } catch (e) {
+      if (!(e instanceof CanvasAuthError) || renewed || !this.login || !conn.refreshSealed) throw e;
+      access = await this.renewAccess(studentId, conn);
+      return await read(this.makeClient(conn.baseUrl, access));
+    }
   }
 
   /** Reads Canvas and returns items to confirm. Stores nothing in the schedule. */
   async preview(studentId: string): Promise<SyncPreview> {
-    const conn = this.repo.getConnection(studentId);
-    if (!conn) throw new CanvasNotConnectedError();
-    const client = this.makeClient(conn.baseUrl, decrypt(conn.tokenSealed, this.opts.secretKey));
-
     const now = this.now();
     const from = new Date(now.getTime() - DAY);
     const to = new Date(now.getTime() + 180 * DAY);
     const imported = this.schedule.importedCanvasIds(studentId);
 
+    const { courses, items } = await this.withClient(studentId, (client) => this.readCanvas(client, imported, from, to));
+    items.sort((x, y) => (x.dueAt ?? "9999").localeCompare(y.dueAt ?? "9999"));
+    this.repo.markSynced(studentId, now);
+    return this.repo.savePreview(studentId, { courses, items }, PREVIEW_TTL);
+  }
+
+  private async readCanvas(
+    client: CanvasClient,
+    imported: Set<string>,
+    from: Date,
+    to: Date,
+  ): Promise<{ courses: ProposedCourse[]; items: ProposedItem[] }> {
     const canvasCourses = await client.listCourses();
     const courses: ProposedCourse[] = canvasCourses.map((c) => ({ externalId: c.id, name: c.name, code: c.courseCode }));
     const nameOf = new Map(courses.map((c) => [c.externalId, c.name]));
@@ -171,9 +244,7 @@ export class CanvasReaderService {
       });
     }
 
-    items.sort((x, y) => (x.dueAt ?? "9999").localeCompare(y.dueAt ?? "9999"));
-    this.repo.markSynced(studentId, now);
-    return this.repo.savePreview(studentId, { courses, items }, PREVIEW_TTL);
+    return { courses, items };
   }
 
   /**

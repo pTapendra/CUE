@@ -122,7 +122,8 @@ export function createApp(s: Services) {
 
   const sid = (req: Request) => (req as Authed).studentId;
 
-  api.delete("/account", (req, res) => {
+  api.delete("/account", async (req, res) => {
+    await s.canvasReader.disconnect(sid(req));
     s.accounts.delete(sid(req));
     res.status(204).end();
   });
@@ -148,8 +149,8 @@ export function createApp(s: Services) {
     res.json(s.canvasReader.status(sid(req)));
   });
 
-  api.delete("/canvas/connection", (req, res) => {
-    s.canvasReader.disconnect(sid(req));
+  api.delete("/canvas/connection", async (req, res) => {
+    await s.canvasReader.disconnect(sid(req));
     res.status(204).end();
   });
 
@@ -250,7 +251,7 @@ function describe(err: unknown): [number, string, string] {
   if (err instanceof BlockMoveError) return [409, "block_move_invalid", err.message];
   if (err instanceof InvalidCanvasUrlError) return [400, "invalid_canvas_url", err.message];
   if (err instanceof CanvasNotConnectedError) return [409, "canvas_not_connected", err.message];
-  if (err instanceof CanvasAuthError) return [409, "canvas_token_rejected", "Canvas rejected the token. Please reconnect."];
+  if (err instanceof CanvasAuthError) return [409, "canvas_token_rejected", "Canvas no longer accepts Cue's access. Connect again."];
   if (err instanceof LoginExpiredError) return [409, "login_expired", err.message];
   if (err instanceof CanvasLoginRefusedError) return [409, "canvas_login_failed", "Canvas did not complete the login"];
   if (err instanceof LoginUnavailableError) return [404, "login_unavailable", err.message];

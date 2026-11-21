@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { CanvasLogin } from "../src/canvas/CanvasLogin.js";
+import { CanvasReaderService, InvalidCanvasUrlError } from "../src/canvasReader/CanvasReaderService.js";
 import { CANVAS, NOW, setup } from "./helpers.js";
 
 const row = (db: ReturnType<typeof setup>["db"]) =>
@@ -81,5 +83,31 @@ describe("log in with Canvas", () => {
     const s = await newStudent();
     await s.put("/api/canvas/connection", CANVAS).expect(200);
     expect(row(db).refresh_sealed).toBeNull();
+  });
+
+  it("an insecure login address is refused when the insecure flag is off", () => {
+    const { login } = setup();
+    const insecure = { ...login, canvasUrl: "http://canvas.test" } as unknown as CanvasLogin;
+    expect(
+      () => new CanvasReaderService({} as never, {} as never, (() => ({})) as never, { secretKey: Buffer.alloc(32), login: insecure }),
+    ).toThrow(InvalidCanvasUrlError);
+  });
+
+  it("a refused check read after the code exchange gives canvas_token_rejected and saves nothing", async () => {
+    const { db, deadTokens, newStudent } = setup();
+    deadTokens.add("access-1");
+    const s = await newStudent();
+    const { state } = (await s.post("/api/canvas/login").expect(200)).body;
+    const res = await s.post("/api/canvas/login/finish", { code: "good-code", state }).expect(409);
+    expect(res.body.error).toBe("canvas_token_rejected");
+    expect(db.prepare("SELECT COUNT(*) AS n FROM canvas_connections").get()).toEqual({ n: 0 });
+  });
+
+  it("after a refused code, the same state gives login_expired", async () => {
+    const s = await setup().newStudent();
+    const { state } = (await s.post("/api/canvas/login").expect(200)).body;
+    await s.post("/api/canvas/login/finish", { code: "bad-code", state }).expect(409);
+    const res = await s.post("/api/canvas/login/finish", { code: "good-code", state }).expect(409);
+    expect(res.body.error).toBe("login_expired");
   });
 });
