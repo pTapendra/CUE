@@ -401,13 +401,17 @@ esac'
 }
 
 # The whole start command, with Docker, ngrok and curl stubbed: it starts only
-# Canvas's web container, prints the ngrok address, and Ctrl+C stops ngrok.
+# Canvas's web container, sets up Canvas login, prints the ngrok address, and
+# Ctrl+C stops ngrok.
 test_start_with_ngrok_end_to_end() {
   export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  export CUE_SERVER_ENV="$T/server.env"
   mkdir -p "$T/canvas"
   settings_save "$T/canvas" ""
   printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
-  stub docker 'echo "docker $*" >>"$T/docker.log"; exit 0'
+  stub docker 'echo "docker $*" >>"$T/docker.log"
+case "$*" in *"rails runner"*) echo "CUE_KEY 10000000000001 s3cr/t+=" ;; esac
+exit 0'
   stub_ngrok_world
   printf 'y\n' | bash "$SCRIPT" start >"$T/out" 2>&1 &
   local pid=$! i
@@ -418,6 +422,12 @@ test_start_with_ngrok_end_to_end() {
   assert_contains "prints the address" "https://my-name.ngrok-free.dev" "$(cat "$T/out")"
   assert_contains "starts only Canvas's web container" "docker compose up -d web" "$(cat "$T/docker.log")"
   assert_contains "allows the address" "my-name.ngrok-free.dev" "$(cat "$T/canvas/docker-compose.cue-ngrok.yml")"
+  local out
+  out="$(cat "$T/out")"
+  assert_contains "sets up login before showing the address" "Restart Cue's server" "${out%%Canvas is reachable*}"
+  assert_eq "login settings written" "https://my-name.ngrok-free.dev" "$(env_get "$T/server.env" CUE_CANVAS_URL)"
+  assert_contains "tells students how to connect" 'with "Log in with Canvas"' "$out"
+  case "$out" in *s3cr*) assert_eq "secret not printed" "hidden" "printed" ;; esac
   # A background job ignores SIGINT, so send TERM, which the same trap handles
   # (in a terminal, Ctrl+C sends INT to the script in the foreground).
   kill -TERM "$pid" 2>/dev/null
@@ -429,6 +439,7 @@ test_start_with_ngrok_end_to_end() {
 
 test_start_stops_ngrok_when_canvas_fails_to_restart() {
   export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  export CUE_SERVER_ENV="$T/server.env"
   mkdir -p "$T/canvas"
   settings_save "$T/canvas" ""
   printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
@@ -496,6 +507,7 @@ test_port_user_names_a_program_other_than_docker() {
 
 test_start_with_ngrok_refuses_when_port_8080_is_taken() {
   export CUE_LOCAL_CANVAS_SETTINGS="$T/local-canvas.conf"
+  export CUE_SERVER_ENV="$T/server.env"
   mkdir -p "$T/canvas"
   settings_save "$T/canvas" ""
   printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
@@ -542,6 +554,142 @@ test_fetch_canvas_leaves_another_checkout_alone() {
   assert_eq "status" "1" "$?"
   assert_contains "says why" "different" "$(cat "$T/out")"
   assert_eq "origin untouched" "https://example.com/someone/other.git" "$(/usr/bin/git -C "$T/repo" remote get-url origin)"
+}
+
+# --- Canvas login for Cue (server/.env) ------------------------------------
+# Every test here points CUE_SERVER_ENV into $T, so the real server/.env is
+# never touched.
+
+test_server_env_file_defaults_to_this_checkouts_server_env() {
+  assert_eq "default" "$(cd "$HERE/.." && pwd)/server/.env" "$(unset CUE_SERVER_ENV && server_env_file)"
+  export CUE_SERVER_ENV="$T/server.env"
+  assert_eq "override" "$T/server.env" "$(server_env_file)"
+}
+
+test_env_set_replaces_adds_and_keeps_other_lines() {
+  export CUE_SERVER_ENV="$T/server.env"
+  printf 'PORT=3000\nCUE_CANVAS_URL=old\n# note\n' >"$CUE_SERVER_ENV"
+  assert_eq "prints nothing" "" "$(env_set "$CUE_SERVER_ENV" CUE_CANVAS_URL "https://new")"
+  env_set "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_ID "1"
+  assert_eq "file" "PORT=3000
+CUE_CANVAS_URL=https://new
+# note
+CUE_CANVAS_CLIENT_ID=1" "$(cat "$CUE_SERVER_ENV")"
+}
+
+test_env_get_and_env_set_skip_commented_and_longer_keys() {
+  export CUE_SERVER_ENV="$T/server.env"
+  printf '# CUE_CANVAS_URL=commented\nCUE_CANVAS_URL_OTHER=x\n' >"$CUE_SERVER_ENV"
+  assert_eq "no value yet" "" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
+  env_set "$CUE_SERVER_ENV" CUE_CANVAS_URL "https://new"
+  assert_eq "file" "# CUE_CANVAS_URL=commented
+CUE_CANVAS_URL_OTHER=x
+CUE_CANVAS_URL=https://new" "$(cat "$CUE_SERVER_ENV")"
+  assert_eq "reads the real line" "https://new" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
+  assert_eq "missing file" "" "$(env_get "$T/missing.env" CUE_CANVAS_URL)"
+}
+
+test_env_set_writes_a_secret_exactly() {
+  export CUE_SERVER_ENV="$T/server.env"
+  printf 'PORT=3000\n' >"$CUE_SERVER_ENV"
+  env_set "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_SECRET 'a/b+c=d&e'
+  assert_eq "reads back" 'a/b+c=d&e' "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_SECRET)"
+  env_set "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_SECRET 'x\ny\\z&'
+  assert_eq "backslashes too" 'x\ny\\z&' "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_SECRET)"
+  assert_eq "one line" "PORT=3000
+CUE_CANVAS_CLIENT_SECRET=x\\ny\\\\z&" "$(cat "$CUE_SERVER_ENV")"
+}
+
+test_ensure_server_env_creates_the_file_with_a_secret_key() {
+  export CUE_SERVER_ENV="$T/server.env"
+  ensure_server_env >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  assert_contains "copied the example" "PORT=3000" "$(cat "$CUE_SERVER_ENV")"
+  assert_contains "kept its comments" "# CUE_CANVAS_URL=" "$(cat "$CUE_SERVER_ENV")"
+  local key
+  key="$(env_get "$CUE_SERVER_ENV" CUE_SECRET_KEY)"
+  assert_eq "32 bytes" "32" "$(printf '%s' "$key" | base64 -D | wc -c | tr -d ' ')"
+  assert_eq "prints nothing" "" "$(cat "$T/out")"
+  ensure_server_env
+  assert_eq "keeps an existing key" "$key" "$(env_get "$CUE_SERVER_ENV" CUE_SECRET_KEY)"
+}
+
+test_cue_key_known() {
+  stub curl 'echo "$*" >>"$T/curl.log"; printf 401'
+  assert_false "unknown key" cue_key_known "https://my-name.ngrok-free.dev" 10000000000001
+  assert_contains "asks Canvas's login page" "https://my-name.ngrok-free.dev/login/oauth2/auth?client_id=10000000000001&response_type=code&redirect_uri=urn:ietf:wg:oauth:2.0:oob" "$(cat "$T/curl.log")"
+  stub curl 'printf 302'
+  assert_true "known key" cue_key_known "https://my-name.ngrok-free.dev" 10000000000001
+}
+
+test_ensure_cue_login_writes_settings_and_never_prints_the_secret() {
+  export CUE_SERVER_ENV="$T/server.env"
+  mkdir -p "$T/canvas"
+  stub docker 'echo "$PWD: docker $*" >>"$T/docker.log"; echo "CUE_KEY 10000000000001 s3cr/t+="'
+  stub curl 'printf 302'
+  ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  assert_eq "url" "https://my-name.ngrok-free.dev" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
+  assert_eq "client id" "10000000000001" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_ID)"
+  assert_eq "secret" "s3cr/t+=" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_CLIENT_SECRET)"
+  local log
+  log="$(cat "$T/docker.log")"
+  assert_contains "runs rails in Canvas's web container" "$T/canvas: docker compose exec -T web bundle exec rails runner" "$log"
+  assert_contains "scope: courses" "url:GET|/api/v1/courses " "$log"
+  assert_contains "scope: assignments" "url:GET|/api/v1/courses/:course_id/assignments" "$log"
+  assert_contains "scope: calendar events" "url:GET|/api/v1/calendar_events" "$log"
+  assert_contains "says what it does" "Setting up Canvas login for Cue (about a minute)..." "$(cat "$T/out")"
+  assert_contains "says to restart" "Restart Cue's server so it picks up Canvas login." "$(cat "$T/out")"
+  case "$(cat "$T/out")" in *s3cr*) assert_eq "secret not printed" "hidden" "printed" ;; esac
+}
+
+test_ensure_cue_login_skips_when_already_set_up() {
+  export CUE_SERVER_ENV="$T/server.env"
+  mkdir -p "$T/canvas"
+  printf 'CUE_SECRET_KEY=k\nCUE_CANVAS_URL=https://my-name.ngrok-free.dev\nCUE_CANVAS_CLIENT_ID=10000000000001\nCUE_CANVAS_CLIENT_SECRET=s3cr\n' >"$CUE_SERVER_ENV"
+  local before
+  before="$(cat "$CUE_SERVER_ENV")"
+  stub docker 'echo "$*" >>"$T/docker.log"'
+  stub curl 'printf 302'
+  ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  assert_eq "says so" "Canvas login for Cue is already set up." "$(cat "$T/out")"
+  assert_eq "docker not called" "" "$(cat "$T/docker.log" 2>/dev/null)"
+  assert_eq "file unchanged" "$before" "$(cat "$CUE_SERVER_ENV")"
+}
+
+test_ensure_cue_login_sets_up_again_for_a_new_address_or_a_forgotten_key() {
+  export CUE_SERVER_ENV="$T/server.env"
+  mkdir -p "$T/canvas"
+  printf 'CUE_SECRET_KEY=k\nCUE_CANVAS_URL=https://old.ngrok-free.dev\nCUE_CANVAS_CLIENT_ID=1\nCUE_CANVAS_CLIENT_SECRET=old\n' >"$CUE_SERVER_ENV"
+  stub docker 'echo "$*" >>"$T/docker.log"; echo "CUE_KEY 2 new"'
+  stub curl 'printf 302'
+  ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >/dev/null 2>&1
+  assert_true "new address: key step ran" test -s "$T/docker.log"
+  assert_eq "new address written" "https://my-name.ngrok-free.dev" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
+  rm -f "$T/docker.log"
+  stub curl 'printf 401'
+  ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >/dev/null 2>&1
+  assert_true "key Canvas doesn't know: key step ran" test -s "$T/docker.log"
+}
+
+test_ensure_cue_login_failure_warns_and_carries_on() {
+  export CUE_SERVER_ENV="$T/server.env"
+  mkdir -p "$T/canvas"
+  stub docker 'echo "x.rb:1: Validation failed: Scopes cannot contain url:GET|/nope (ActiveRecord::RecordInvalid)" >&2
+printf "\tfrom /usr/src/app/x.rb:2\n" >&2
+exit 1'
+  stub curl 'printf 302'
+  ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >"$T/out" 2>&1
+  assert_eq "status" "0" "$?"
+  assert_contains "warns" "Couldn't set up Canvas login for Cue. Students can still connect with an access token." "$(cat "$T/out")"
+  assert_contains "shows Canvas's message" "Scopes cannot contain url:GET|/nope" "$(cat "$T/out")"
+  assert_eq "no login settings" "" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
+  stub docker 'echo "no key line"'
+  ensure_cue_login "$T/canvas" "https://my-name.ngrok-free.dev" >"$T/out" 2>&1
+  assert_eq "status without a key line" "0" "$?"
+  assert_contains "warns without a key line" "Couldn't set up Canvas login for Cue." "$(cat "$T/out")"
+  assert_eq "still no login settings" "" "$(env_get "$CUE_SERVER_ENV" CUE_CANVAS_URL)"
 }
 
 # --- runner ----------------------------------------------------------------

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Runs a local Canvas in Docker for testing and demoing Cue, and can make it
-# reachable from a phone through ngrok. macOS only.
+# reachable from a phone through ngrok. With ngrok it also sets up Canvas login
+# for Cue, in server/.env of this checkout. macOS only.
 #
 #   scripts/local-canvas.sh setup   first time: check tools, install Canvas
 #   scripts/local-canvas.sh start   start Canvas; optionally expose it via ngrok
@@ -543,19 +544,141 @@ expose_with_ngrok() {
     stop_ngrok
     die "Canvas isn't answering through ngrok. Check http://canvas.docker on this Mac, then run start again."
   fi
+  ensure_cue_login "$CANVAS_DIR" "$NGROK_URL"
   trap 'stop_ngrok; say ""; say "ngrok stopped: Canvas is off the internet, and still running on this Mac (http://canvas.docker)."; exit 0' INT TERM
   say ""
   say "Canvas is reachable from your phone at:"
   say ""
   say "    $NGROK_URL"
   say ""
-  say "In Cue, open Canvas connection and enter that address. The first time a phone"
-  say "opens it, ngrok shows a warning page: tap \"Visit Site\"."
+  say "Students connect from Cue's Connect screen with \"Log in with Canvas\"."
+  say "The first time a phone opens Canvas, ngrok shows a warning page: tap \"Visit Site\"."
   say "Keep this window open. Press Ctrl+C to take Canvas off the internet."
   wait "$NGROK_PID"
   warn "ngrok stopped by itself. What it said:"
   tail -n 5 "$NGROK_LOG" >&2
   exit 1
+}
+
+# --- Canvas login for Cue ----------------------------------------------------
+# With ngrok, start creates Canvas's developer key for Cue and writes the login
+# settings into server/.env of this checkout. The secrets in that file (the
+# key's secret, CUE_SECRET_KEY) are never printed.
+
+# The scopes Cue's login asks for: read courses, assignments and calendar events.
+CUE_SCOPES="url:GET|/api/v1/courses url:GET|/api/v1/courses/:course_id/assignments url:GET|/api/v1/calendar_events"
+
+# Run by rails runner in Canvas's web container. Reuses the key named Cue on the
+# root account (deleted keys don't count), keeps Canvas's default of expiring
+# tokens, and turns the key on for the root account. Prints its id and secret.
+CUE_KEY_RUBY='
+key = DeveloperKey.nondeleted.find_or_initialize_by(name: "Cue", account: Account.default)
+key.require_scopes = true
+key.scopes = %w['"$CUE_SCOPES"']
+key.save!
+key.developer_key_account_bindings.find_or_initialize_by(account: Account.default).update!(workflow_state: "on")
+puts "CUE_KEY #{key.global_id} #{key.api_key}"
+'
+
+# This checkout's folder: the parent of the folder holding this script.
+repo_dir() {
+  (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+}
+
+server_env_file() {
+  printf '%s\n' "${CUE_SERVER_ENV:-$(repo_dir)/server/.env}"
+}
+
+# Prints the value of the KEY= line (the last one, as Node reads it), or
+# nothing. Commented lines don't count.
+env_get() { # file key
+  [ -f "$1" ] || return 0
+  CUE_ENV_KEY="$2" awk '
+    BEGIN { key = ENVIRON["CUE_ENV_KEY"] "=" }
+    index($0, key) == 1 { value = substr($0, length(key) + 1); found = 1 }
+    END { if (found) print value }
+  ' "$1"
+}
+
+# Replaces the KEY= line (every one, if repeated) with KEY=VALUE, or appends it;
+# every other line stays as it is, in order. The value reaches awk through the
+# environment, where nothing in it (/ + = & \) is treated specially.
+env_set() { # file key value
+  local file="$1" tmp status
+  tmp="$(mktemp)" || return 1
+  CUE_ENV_KEY="$2" CUE_ENV_VALUE="$3" awk '
+    BEGIN { key = ENVIRON["CUE_ENV_KEY"] "="; line = key ENVIRON["CUE_ENV_VALUE"] }
+    index($0, key) == 1 { print line; done = 1; next }
+    { print }
+    END { if (!done) print line }
+  ' "$file" >"$tmp" && cat "$tmp" >"$file"
+  status=$?
+  rm -f "$tmp"
+  return "$status"
+}
+
+# Creates server/.env from server/.env.example if there isn't one, and gives it
+# a CUE_SECRET_KEY (32 random bytes, base64) if it has none, so saved Canvas
+# tokens stay readable after Cue's server restarts.
+ensure_server_env() {
+  local file key
+  file="$(server_env_file)"
+  if [ ! -f "$file" ]; then
+    cp "$(repo_dir)/server/.env.example" "$file" || return 1
+  fi
+  [ -n "$(env_get "$file" CUE_SECRET_KEY)" ] && return 0
+  key="$(openssl rand -base64 32)" && [ -n "$key" ] || return 1
+  env_set "$file" CUE_SECRET_KEY "$key"
+}
+
+# Fails only when Canvas answers 401, its answer for a client id it doesn't know.
+cue_key_known() { # canvas_url client_id
+  [ "$(curl -s -o /dev/null -m 10 -w '%{http_code}' \
+    "$1/login/oauth2/auth?client_id=$2&response_type=code&redirect_uri=urn:ietf:wg:oauth:2.0:oob" 2>/dev/null)" != "401" ]
+}
+
+# Finds or creates the key in the running Canvas; prints "<client id> <secret>"
+# for the caller to capture. Canvas's output holds the secret, so it is parsed,
+# never shown. On failure, shows what Canvas said on stderr (its error, without
+# the backtrace).
+create_cue_developer_key() { # canvas_dir
+  local out err key
+  err="$(mktemp)"
+  if ! out="$(cd "$1" && docker compose exec -T web bundle exec rails runner "$CUE_KEY_RUBY" 2>"$err")"; then
+    warn "Canvas couldn't create its developer key for Cue. What it said:"
+    grep -v '^[[:space:]]*from ' "$err" | tail -n 5 >&2
+    rm -f "$err"
+    return 1
+  fi
+  rm -f "$err"
+  key="$(printf '%s\n' "$out" | sed -n 's/^CUE_KEY \([0-9][0-9]*\) \([^ ][^ ]*\)$/\1 \2/p' | head -n 1)"
+  [ -n "$key" ] || return 1
+  printf '%s\n' "$key"
+}
+
+# Sets up Canvas login for Cue, unless server/.env already has it for this
+# address and Canvas still knows the key. A failure only warns: Canvas stays up.
+ensure_cue_login() { # canvas_dir ngrok_url
+  local file id creds
+  if ensure_server_env; then
+    file="$(server_env_file)"
+    id="$(env_get "$file" CUE_CANVAS_CLIENT_ID)"
+    if [ "$(env_get "$file" CUE_CANVAS_URL)" = "$2" ] && [ -n "$id" ] &&
+      [ -n "$(env_get "$file" CUE_CANVAS_CLIENT_SECRET)" ] && cue_key_known "$2" "$id"; then
+      say "Canvas login for Cue is already set up."
+      return 0
+    fi
+    say "Setting up Canvas login for Cue (about a minute)..."
+    if creds="$(create_cue_developer_key "$1")" &&
+      env_set "$file" CUE_CANVAS_URL "$2" &&
+      env_set "$file" CUE_CANVAS_CLIENT_ID "${creds%% *}" &&
+      env_set "$file" CUE_CANVAS_CLIENT_SECRET "${creds#* }"; then
+      say "Restart Cue's server so it picks up Canvas login."
+      return 0
+    fi
+  fi
+  warn "Couldn't set up Canvas login for Cue. Students can still connect with an access token."
+  return 0
 }
 
 # --- commands ----------------------------------------------------------------
@@ -698,7 +821,7 @@ Usage: scripts/local-canvas.sh <command>
   setup   First time: check the tools you need, then install Canvas in Docker.
           Takes an hour or more.
   start   Start Canvas. Asks whether to make it reachable from a phone
-          through ngrok.
+          through ngrok; with ngrok it also sets up Canvas login for Cue.
   stop    Stop Canvas.
 EOF
 }

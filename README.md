@@ -121,7 +121,10 @@ scripts/local-canvas.sh stop
 
 - it uses your own free ngrok account and asks for your authtoken the first time;
 - it prints your address, like `https://your-name.ngrok-free.dev`, which stays the same every time;
+- it sets up Canvas login for Cue: it creates a developer key named Cue in Canvas (once; later starts reuse it) and writes `CUE_CANVAS_URL`, `CUE_CANVAS_CLIENT_ID` and `CUE_CANVAS_CLIENT_SECRET` into `server/.env`. If there is no `server/.env` yet, it copies `server/.env.example`, and it fills in `CUE_SECRET_KEY` if that is empty. Restart Cue's server afterwards so it picks up Canvas login;
 - Canvas stays on the internet only while that window is open. Ctrl+C takes it off again; Canvas keeps running on the Mac.
+
+The script writes the `server/.env` of the checkout it runs from, which suits running Cue's server on the same Mac as Canvas. For a Cue server on another computer, copy the three `CUE_CANVAS_*` lines from that file into its `server/.env` by hand; the script never prints them. If setting up login fails, `start` says so and carries on; students can still connect with a token.
 
 A free ngrok account allows one tunnel at a time. While it runs, anyone with the address can reach your Canvas login page, so give the Canvas admin a strong password. The first time a phone opens the address, ngrok shows a warning page; tap **Visit Site**.
 
@@ -129,7 +132,7 @@ If setup put Canvas on an external drive, Docker keeps its disk there too, insid
 
 `start` with ngrok writes `docker-compose.cue-ngrok.yml` in the Canvas folder so Canvas accepts the ngrok address. To undo that, delete the file; the next `start` or `stop` tidies Canvas's `.env` to match.
 
-To use it with Cue, log in to Canvas, start a course (Dashboard → **Start a New Course**, so you're enrolled), add assignments and calendar events, and create a token under **Account → Settings → New Access Token**. In Cue, connect with the ngrok address. Without ngrok, use `http://canvas.docker` and start Cue's server with `CUE_ALLOW_INSECURE_CANVAS=1`; that only works while Cue's server runs on the same Mac.
+To use it with Cue, log in to Canvas as the admin, start a course (Dashboard → **Start a New Course**), and add assignments and calendar events. Demo students need their own Canvas logins, which the Canvas admin creates, and must be enrolled in the courses. With ngrok and login set up, students tap **Log in with Canvas** on Cue's Connect screen. Without ngrok there is no login: take the three `CUE_CANVAS_*` lines out of `server/.env` so Cue asks for a token, create one under **Account → Settings → New Access Token**, connect with `http://canvas.docker`, and start Cue's server with `CUE_ALLOW_INSECURE_CANVAS=1`; that only works while Cue's server runs on the same Mac.
 
 ## How the code is organised
 
