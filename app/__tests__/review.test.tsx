@@ -109,7 +109,7 @@ describe('Check what Cue found', () => {
   it('sends the date picked for an exam, and goes to Today with a toast', async () => {
     const { server, root } = await openReview();
     const picked = new Date(2026, 10, 6, 10, 0);
-    await pickDate(root, 'Due', picked);
+    await pickDate(root, 'Due date for Midterm Exam', picked);
     await press(root, 'Save 2 items');
     await flush();
     const confirm = server.state.calls.find((c) => c.path === '/api/canvas/sync/confirm')!;
@@ -122,7 +122,7 @@ describe('Check what Cue found', () => {
 
   it('saves an exam left without a date, and drops the date of an unticked exam', async () => {
     const { server, root } = await openReview();
-    await pickDate(root, 'Due', new Date(2026, 10, 6, 10, 0));
+    await pickDate(root, 'Due date for Midterm Exam', new Date(2026, 10, 6, 10, 0));
     await press(root, 'Midterm Exam');
     expect(texts(root)).not.toContain('or add it later');
     await press(root, 'Save 1 item');
@@ -154,10 +154,14 @@ describe('Check what Cue found', () => {
     await typeInto('Paste your token', 'good-token-123');
     await press(root, 'Connect and sync');
     await flush();
+    expect(server.state.calls.find((c) => c.method === 'PUT' && c.path === '/api/canvas/connection')!.body).toEqual({
+      baseUrl: 'https://s.instructure.com',
+      token: 'good-token-123',
+    });
 
     expect(texts(root)).toContain('Check what Cue found');
     expect(texts(root)).toContain('Canvas has no date for this exam');
-    await pickDate(root, 'Due', new Date(2026, 10, 6, 10, 0));
+    await pickDate(root, 'Due date for Midterm Exam', new Date(2026, 10, 6, 10, 0));
     await press(root, 'Save 2 items');
     await flush();
     expect(selectedTab(root)).toBe('Today');

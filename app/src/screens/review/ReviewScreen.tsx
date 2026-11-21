@@ -178,7 +178,7 @@ function Row({
       {item.needsDate && checked ? (
         <View style={styles.needsDate}>
           <Text style={[type.body, { color: colors.exam }]}>Canvas has no date for this exam</Text>
-          <DateTimeField label="Due" value={date} mode="datetime" onChange={onDate} allowClear clearLabel="Add date" />
+          <DateTimeField label={`Due date for ${item.title}`} value={date} mode="datetime" onChange={onDate} allowClear clearLabel="Add date" />
           {date ? null : <Text style={[type.meta, { color: colors.text2 }]}>or add it later</Text>}
         </View>
       ) : null}
