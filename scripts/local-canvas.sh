@@ -812,7 +812,7 @@ offer_demo_data() {
     return 0
   fi
   ask_yes_no "Add demo courses and accounts (about a minute)?" || return 0
-  if wait_for_canvas http://canvas.docker 300 && bash "$(repo_dir)/scripts/local-canvas-seed.sh"; then
+  if wait_for_canvas http://canvas.docker 300 && bash "$(repo_dir)/scripts/local-canvas-seed.sh" </dev/null; then
     return 0
   fi
   warn "Demo data wasn't added; Canvas is still running."

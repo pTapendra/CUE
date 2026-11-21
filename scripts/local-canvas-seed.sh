@@ -44,7 +44,7 @@ run_seed_ruby() { # canvas_dir
   local out err
   err="$(mktemp)"
   if ! out="$(cd "$1" && docker compose exec -T -e CUE_SEED_TZ="$(mac_time_zone)" web \
-    bundle exec rails runner "$(cat "$SEED_RUBY")" 2>"$err")"; then
+    bundle exec rails runner "$(cat "$SEED_RUBY")" 2>"$err" </dev/null)"; then
     warn "Canvas couldn't add the demo data. What it said:"
     grep -v '^[[:space:]]*from ' "$err" | tail -n 5 >&2
     rm -f "$err"

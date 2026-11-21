@@ -509,6 +509,25 @@ esac'
   assert_contains "ngrok question still asked" "Canvas is running at http://canvas.docker" "$out"
 }
 
+# Docker's exec forwards stdin to the container, so the seed must not hand it
+# the answers still waiting for start's ngrok question.
+test_start_demo_data_leaves_the_ngrok_answer_alone() {
+  seed_world
+  export CUE_SERVER_ENV="$T/server.env"
+  printf 'agent:\n  authtoken: secret\n' >"$T/ngrok.yml"
+  fake_seed_output >"$T/seed.out"
+  stub docker 'case "$*" in
+  "compose ps"*) printf "web\n" ;;
+  "compose exec"*) cat >/dev/null; cat "$T/seed.out" ;;
+esac'
+  stub curl 'printf 200'
+  stub_ngrok_world
+  stub lsof 'printf "p321\ncnode\n"'
+  stub ngrok 'case "$1" in config) echo "Valid configuration file at $T/ngrok.yml" ;; http) exit 1 ;; esac'
+  printf 'y\ny\n' | bash "$SCRIPT" start >"$T/out" 2>&1
+  assert_contains "the ngrok question got its yes" "Port 8080 is in use by node" "$(cat "$T/out")"
+}
+
 test_start_carries_on_when_demo_data_fails() {
   seed_world
   export CUE_SERVER_ENV="$T/server.env"
