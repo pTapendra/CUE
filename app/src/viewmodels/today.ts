@@ -48,11 +48,15 @@ export function dueSoon(items: Item[], now: Date): Item[] {
     .sort((a, b) => time(a.dueAt!) - time(b.dueAt!));
 }
 
-/** Items without a date that aren't done: exams first, then by title. */
+/**
+ * Items without a date: those not done (exams first, then by title), then the done ones in the same order.
+ * Done items stay listed: Today is the only place an undated item without a course shows, so leaving them
+ * out would leave no way to reopen, date or delete them.
+ */
 export function noDate(undated: Item[]): Item[] {
-  return undated
-    .filter((i) => i.status !== 'done')
-    .sort((a, b) => Number(b.kind === 'exam') - Number(a.kind === 'exam') || a.title.localeCompare(b.title));
+  const done = (i: Item) => Number(i.status === 'done');
+  const exam = (i: Item) => Number(i.kind === 'exam');
+  return [...undated].sort((a, b) => done(a) - done(b) || exam(b) - exam(a) || a.title.localeCompare(b.title));
 }
 
 /**

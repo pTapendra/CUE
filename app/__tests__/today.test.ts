@@ -125,16 +125,18 @@ describe('dueSoon', () => {
 });
 
 describe('noDate', () => {
-  it('lists what is not done, exams first, then by title', () => {
+  it('lists what is not done, exams first, then by title; then what is done, in the same order', () => {
     const undated = [
       item({ id: 'b', title: 'Lab report' }),
       item({ id: 'c', title: 'Midterm', kind: 'exam' }),
       item({ id: 'd', title: 'Essay', status: 'done' }),
       item({ id: 'e', title: 'Final', kind: 'exam' }),
       item({ id: 'f', title: 'Club', kind: 'event' }),
+      item({ id: 'g', title: 'Quiz', kind: 'exam', status: 'done' }),
     ];
 
-    expect(noDate(undated).map((i) => i.title)).toEqual(['Final', 'Midterm', 'Club', 'Lab report']);
+    // Done items stay listed, so they can be reopened, dated or deleted.
+    expect(noDate(undated).map((i) => i.title)).toEqual(['Final', 'Midterm', 'Club', 'Lab report', 'Quiz', 'Essay']);
   });
 });
 

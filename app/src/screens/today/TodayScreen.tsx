@@ -153,7 +153,7 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
                 <Text style={[type.body, styles.none, { color: colors.text2 }]}>Nothing due in the next 7 days.</Text>
               ) : (
                 vm.dueSoon.map((item) => (
-                  <View key={item.id} style={styles.dueRow}>
+                  <View key={item.id} style={styles.checkRow}>
                     <CheckCircle
                       checked={false}
                       exam={item.kind === 'exam'}
@@ -177,17 +177,33 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
             {vm.noDate.length > 0 ? (
               <View>
                 <SectionHeader title="No date" />
-                {vm.noDate.map((item) => (
-                  <ListRow
-                    key={item.id}
-                    title={item.title}
-                    tag={item.kind === 'exam' ? <Tag label="Exam" tone="exam" /> : undefined}
-                    meta={item.courseName ?? undefined}
-                    metaLeading={item.courseName ? <CourseDot color={colorOf(item.courseName)} /> : undefined}
-                    onPress={() => setEditing(item)}
-                    trailing={<Text style={[type.bodyStrong, { color: colors.accent }]}>Add date</Text>}
-                  />
-                ))}
+                {vm.noDate.map((item) => {
+                  // Done ones stay at the end, dimmed and ticked: untick to reopen, tap to date or delete.
+                  const done = item.status === 'done';
+                  return (
+                    <View key={item.id} style={styles.checkRow}>
+                      <CheckCircle
+                        checked={done}
+                        exam={item.kind === 'exam'}
+                        label={`Mark ${item.title} ${done ? 'not done' : 'done'}`}
+                        onPress={() => (done ? vm.setStatus(item.id, 'not_started') : markDone(item))}
+                      />
+                      <View style={styles.flex}>
+                        <ListRow
+                          title={item.title}
+                          tag={item.kind === 'exam' ? <Tag label="Exam" tone="exam" /> : undefined}
+                          meta={item.courseName ?? undefined}
+                          metaLeading={item.courseName ? <CourseDot color={colorOf(item.courseName)} /> : undefined}
+                          onPress={() => setEditing(item)}
+                          dimmed={done}
+                          trailing={
+                            done ? undefined : <Text style={[type.bodyStrong, { color: colors.accent }]}>Add date</Text>
+                          }
+                        />
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             ) : null}
           </>
@@ -340,5 +356,5 @@ const styles = StyleSheet.create({
   cardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   shortfall: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   none: { paddingVertical: space.sm },
-  dueRow: { flexDirection: 'row', alignItems: 'center' },
+  checkRow: { flexDirection: 'row', alignItems: 'center' },
 });

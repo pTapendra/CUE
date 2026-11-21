@@ -3,13 +3,14 @@
  */
 
 import React from 'react';
+import { Text } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import type { ProposedItem } from '../src/api/types';
 import { ApiClient, type TokenStore } from '../src/api/client';
 import { groupByCourse } from '../src/viewmodels/useSyncReview';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, isDisabled, onScreen, press, tap, texts } from '../test-support/ui';
+import { flush, isDisabled, onScreen, press, tap, texts, type } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -208,6 +209,54 @@ describe('Check what Cue found', () => {
       expect(texts(root)).not.toContain('Check what Cue found');
       expect(texts(root)).not.toContain(HEADLINE);
     });
+  });
+});
+
+describe('after connecting with a token from Welcome', () => {
+  async function connectFromWelcome() {
+    const { root } = await launch();
+    await press(root, 'Connect Canvas');
+    await flush();
+    await type(root, 'yourschool.instructure.com', 's.instructure.com');
+    await type(root, 'Paste your token', 'good-token-123');
+    await press(root, 'Connect and sync');
+    await flush();
+    return root;
+  }
+
+  it("leaves no Welcome under the review, so Android's Back can't return to it", async () => {
+    const root = await connectFromWelcome();
+    expect(texts(root)).toContain('Check what Cue found');
+    // Every screen in the stack stays mounted; Welcome is not among them.
+    expect(root.findAll((n) => n.type === Text && n.props.children === HEADLINE)).toHaveLength(0);
+  });
+
+  it.each(['Save 2 items', 'Cancel'])('%s on the review lands on Today', async (button) => {
+    const root = await connectFromWelcome();
+    await press(root, button);
+    await flush();
+    expect(selectedTab(root)).toBe('Today');
+    expect(texts(root)).not.toContain('Check what Cue found');
+    expect(root.findAll((n) => n.type === Text && n.props.children === HEADLINE)).toHaveLength(0);
+  });
+
+  it('from Settings, the review still opens over the tabs, and Cancel goes back to them', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    const { root } = await launch(server);
+    server.state.connected = false; // disconnected elsewhere
+    await tap(root, 'Settings');
+    await flush();
+    await press(root, 'Connect Canvas');
+    await flush();
+    await type(root, 'Paste your token', 'good-token-123');
+    await press(root, 'Connect and sync');
+    await flush();
+    expect(texts(root)).toContain('Check what Cue found');
+
+    await press(root, 'Cancel');
+    await flush();
+    expect(selectedTab(root)).toBe('Today');
   });
 });
 

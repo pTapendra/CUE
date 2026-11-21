@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApi } from '../../api/ApiContext';
+import { showReviewAfterConnect } from '../../navigation/actions';
 import { useStartup } from '../../navigation/startup';
 import type { RootScreenProps } from '../../navigation/types';
 import { setSkippedCanvas } from '../../prefs';
@@ -34,8 +35,8 @@ export function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>) {
   const api = useApi();
   const { colors } = useTokens();
   const { loginAvailable } = useStartup();
-  // Replaces Welcome, so Android's back button from Review can't return to it.
-  const login = useCanvasLogin(() => navigation.replace('Review'));
+  // Welcome gives way to the tabs, with Review on top, so Android's back button from Review can't return to it.
+  const login = useCanvasLogin(() => showReviewAfterConnect(navigation));
 
   async function skip() {
     // Only the next launch reads the flag: if the phone can't keep it, Welcome just shows again then.

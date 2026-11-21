@@ -5,6 +5,7 @@ type Handler = (body: any, url: URL) => { status: number; body?: unknown };
 /** A tiny in-memory stand-in for the Cue server, answering through `fetch`. */
 export function fakeServer() {
   let nextId = 1;
+  let nextDevice = 1;
   const state = {
     connected: false,
     loginAvailable: false,
@@ -13,6 +14,8 @@ export function fakeServer() {
     /** When set, the next syncs fail with this error (a successful login clears it). */
     /** When set, DELETE /api/account fails with a 500. */
     deleteFails: false,
+    /** When set, POST /api/devices fails with a 500 (no new account can be made). */
+    devicesFail: false,
     syncError: null as { status: number; error: string } | null,
     /** When Canvas was last synced, as the connection reports it. */
     lastSyncedAt: null as string | null,
@@ -41,7 +44,11 @@ export function fakeServer() {
   };
 
   const routes: Record<string, Handler> = {
-    'POST /api/devices': () => ({ status: 201, body: { deviceToken: 'device-1' } }),
+    // Each new account gets its own token: device-1, then device-2 after "Delete all my data".
+    'POST /api/devices': () =>
+      state.devicesFail
+        ? { status: 500, body: { error: 'server_error', message: 'x' } }
+        : { status: 201, body: { deviceToken: `device-${nextDevice++}` } },
     'GET /api/canvas/connection': () => ({
       status: 200,
       body: {
@@ -119,6 +126,7 @@ export function fakeServer() {
       if (state.deleteFails) return { status: 500, body: { error: 'server_error', message: 'x' } };
       state.connected = false;
       state.items = [];
+      state.settings = { ...state.settings, timeZone: null }; // the next account starts without one
       return { status: 204 };
     },
     'GET /api/planner/settings': () => ({ status: 200, body: state.settings }),

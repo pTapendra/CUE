@@ -99,6 +99,7 @@ export function CourseScreen({ navigation, route }: RootScreenProps<'Course'>) {
                     onSchedule={() => viewInSchedule(plan)}
                   />
                 ))}
+                {/* Past or done, dimmed with colour (never opacity); a done exam without a date is last. */}
                 {detail.pastExams.map((exam) => (
                   <View key={exam.id}>
                     <Card>
@@ -108,7 +109,9 @@ export function CourseScreen({ navigation, route }: RootScreenProps<'Course'>) {
                           <Tag label="Exam" tone="exam" />
                         </View>
                         <Pressable accessibilityRole="button" onPress={() => setEditing(exam)} style={styles.dateButton}>
-                          <Text style={[type.body, { color: colors.text3 }]}>{dayLabel(new Date(exam.dueAt!))}</Text>
+                          <Text style={[type.body, { color: colors.text3 }]}>
+                            {exam.dueAt ? dayLabel(new Date(exam.dueAt)) : 'No date'}
+                          </Text>
                         </Pressable>
                       </View>
                     </Card>

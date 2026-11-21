@@ -191,6 +191,31 @@ describe('A course', () => {
     expect(shown.indexOf('Final exam')).toBeLessThan(shown.indexOf('Old quiz'));
   });
 
+  it('lists a done exam without a date after the past ones, dimmed, and opens it to reopen it', async () => {
+    const opened = await openCourses((s) => {
+      semester(s);
+      s.state.items.push(item({ id: 'mock', title: 'Mock exam', kind: 'exam', status: 'done', ...stats }));
+    });
+    await press(opened.root, 'Statistics');
+    await flush();
+    const { root, server } = opened;
+
+    const shown = texts(root);
+    expect(shown).toContain('Mock exam');
+    expect(shown.indexOf('Old quiz')).toBeLessThan(shown.indexOf('Mock exam'));
+    expect(textColor(root, 'Mock exam')).toBe(lightColors.text2);
+    expect(lowestOpacity(onScreen(root, (n) => n.props.children === 'Mock exam')[0])).toBe(1);
+
+    await press(root, 'No date');
+    expect(texts(root)).toContain('Edit item');
+    await press(root, 'Not started');
+    await flush();
+    const put = server.state.calls.find((c) => c.method === 'PUT' && c.path === '/api/items/mock/status');
+    expect(put!.body.status).toBe('not_started');
+    // Not done any more: an upcoming exam that needs a date.
+    expect(textColor(root, 'Mock exam')).toBe(lightColors.text);
+  });
+
   it("View in Schedule opens Schedule on the exam's first block", async () => {
     const { root } = await openStatistics();
     await press(root, 'View in Schedule');

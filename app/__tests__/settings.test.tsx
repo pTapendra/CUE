@@ -233,7 +233,7 @@ describe('Settings', () => {
   });
 
   describe('Delete all my data', () => {
-    it('asks first, then deletes, forgets the device and the skipped flag, and returns to Welcome', async () => {
+    it('asks first, then deletes, forgets the device and the onboarded flag, and returns to Welcome', async () => {
       const { server, store, root } = await openSettings();
       store.map.set('cue.skippedCanvas', '1');
       expect(store.map.get('cue.deviceToken')).toBe('device-1');
@@ -252,8 +252,32 @@ describe('Settings', () => {
       expect(calls(server, 'DELETE', '/api/account')).toHaveLength(1);
       expect(texts(root)).toContain(HEADLINE);
       expect(texts(root)).not.toContain('Delete all my data');
-      expect(store.map.has('cue.deviceToken')).toBe(false);
+      expect(store.map.get('cue.deviceToken')).toBe('device-2'); // a new anonymous account, not the deleted one
       expect(store.map.has('cue.skippedCanvas')).toBe(false);
+    });
+
+    it("tells the new account the phone's time zone, so the planner can plan", async () => {
+      const { server, root } = await openSettings();
+      await press(root, 'Delete all my data');
+      await chooseInAlert('Delete everything');
+      await flush();
+
+      const deleted = server.state.calls.findIndex((c) => c.method === 'DELETE' && c.path === '/api/account');
+      const zone = server.state.calls.slice(deleted).find((c) => c.method === 'PUT' && c.path === '/api/planner/settings');
+      expect(zone!.body.timeZone).toBe(deviceTimeZone());
+      expect(zone!.auth).toBe('Bearer device-2');
+      expect(texts(root)).toContain(HEADLINE);
+    });
+
+    it('returns to Welcome even when the new account cannot be made yet', async () => {
+      const { server, store, root } = await openSettings();
+      server.state.devicesFail = true;
+      await press(root, 'Delete all my data');
+      await chooseInAlert('Delete everything');
+
+      expect(calls(server, 'POST', '/api/devices')).toHaveLength(2); // at start-up, and the try after deleting
+      expect(store.map.has('cue.deviceToken')).toBe(false); // the next request tries again
+      expect(texts(root)).toContain(HEADLINE);
     });
 
     it('shows an error and keeps everything when the server fails', async () => {

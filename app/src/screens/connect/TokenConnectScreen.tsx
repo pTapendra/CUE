@@ -1,6 +1,7 @@
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { showReviewAfterConnect } from '../../navigation/actions';
 import { useStartup } from '../../navigation/startup';
 import type { RootScreenProps } from '../../navigation/types';
 import { Button, ErrorBanner } from '../../ui/kit';
@@ -62,7 +63,7 @@ export function TokenConnectScreen({ navigation }: RootScreenProps<'TokenConnect
             busy={vm.busy}
             disabled={!vm.canSubmit}
             onPress={async () => {
-              if (await vm.connect()) navigation.replace('Review');
+              if (await vm.connect()) showReviewAfterConnect(navigation);
             }}
           />
         </ScrollView>

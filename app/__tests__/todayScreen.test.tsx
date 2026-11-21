@@ -4,9 +4,9 @@ import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { Course, Item, StudyBlock } from '../src/api/types';
-import { lightCourses } from '../src/ui/tokens';
+import { lightColors, lightCourses } from '../src/ui/tokens';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, onScreen, press, tap, texts } from '../test-support/ui';
+import { flush, lowestOpacity, onScreen, press, tap, textColor, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -235,6 +235,51 @@ describe('Today', () => {
     const patch = server.state.calls.find((c) => c.method === 'PATCH' && c.path === '/api/items/item-final');
     expect(patch!.body.dueAt).toBe(nov(20, 10).toISOString());
     expect(texts(root)).not.toContain('Final exam'); // due in 18 days: no longer under No date, not yet due soon
+  });
+
+  /** The check circle on screen labelled `label`. */
+  const checkCircle = (root: Node, label: string) =>
+    onScreen(root, (n) => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function')[0];
+
+  it('keeps a done item without a date at the end of No date, dimmed and ticked, and reopens it', async () => {
+    const { server, root } = await openToday((s) => {
+      aWeekOfWork(s);
+      s.state.items.push(item({ id: 'item-essay', title: 'Essay', status: 'done' })); // no course
+    });
+
+    const shown = texts(root);
+    expect(shown).toContain('Essay');
+    expect(shown.indexOf('Lab report')).toBeLessThan(shown.indexOf('Essay'));
+    expect(textColor(root, 'Essay')).toBe(lightColors.text2);
+    expect(lowestOpacity(onScreen(root, (n) => n.props.children === 'Essay')[0])).toBe(1);
+    expect(checkCircle(root, 'Mark Essay not done').props.accessibilityState.checked).toBe(true);
+
+    await tap(root, 'Mark Essay not done');
+    await flush();
+    expect(statuses(server, 'item-essay')).toEqual(['not_started']);
+    expect(textColor(root, 'Essay')).toBe(lightColors.text);
+    expect(checkCircle(root, 'Mark Essay done').props.accessibilityState.checked).toBe(false);
+  });
+
+  it('opens a done item without a date in the item sheet', async () => {
+    const { root } = await openToday((s) => {
+      s.state.items = [item({ id: 'item-essay', title: 'Essay', status: 'done' })];
+    });
+    expect(texts(root)).not.toContain('Nothing due this week'); // it would hide the item
+    await press(root, 'Essay');
+    expect(texts(root)).toContain('Edit item');
+  });
+
+  it('ticking a No date row marks it done, and keeps it at the end of the group', async () => {
+    const { server, root } = await openToday(aWeekOfWork);
+
+    await tap(root, 'Mark Final exam done');
+    await flush();
+    expect(statuses(server, 'item-final')).toEqual(['done']);
+    expect(texts(root)).toContain('Marked done');
+    const shown = texts(root);
+    expect(shown.indexOf('Lab report')).toBeLessThan(shown.indexOf('Final exam'));
+    expect(checkCircle(root, 'Mark Final exam not done').props.accessibilityState.checked).toBe(true);
   });
 
   it('shows what the planner could not fit, above Due soon', async () => {

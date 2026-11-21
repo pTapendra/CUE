@@ -129,6 +129,20 @@ describe('courseDetail', () => {
     expect(d.pastExams.map((e) => e.id)).toEqual(['d']);
   });
 
+  it('puts a done exam without a date with the past ones, after the dated ones', () => {
+    const o = overview(
+      [item({ id: 'p', title: 'P', kind: 'exam', courseId: 'c-db', dueAt: nov(1) })],
+      [
+        item({ id: 'ud', title: 'Undated done', kind: 'exam', courseId: 'c-db', status: 'done' }),
+        item({ id: 'u', title: 'U', kind: 'exam', courseId: 'c-db' }),
+      ],
+    );
+    const d = courseDetail(db, o, now);
+    expect(d.upcomingExams.map((e) => e.exam.id)).toEqual(['u']);
+    expect(d.pastExams.map((e) => e.id)).toEqual(['p', 'ud']);
+    expect(courseSummaries([db], o, now)[0].undatedExams.map((e) => e.id)).toEqual(['u']); // no "needs a date" once done
+  });
+
   it('lists assignments and events by due date, undated last, and no exams', () => {
     const o = overview(
       [

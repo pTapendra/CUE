@@ -22,7 +22,7 @@ export type CourseSummary = {
 export type CourseDetail = {
   /** Dated exams still to come, in date order, then exams without a date. */
   upcomingExams: ExamPlan[];
-  /** Exams that have passed or are done, the latest first. */
+  /** Exams that have passed or are done, the latest first, then done exams without a date. */
   pastExams: Item[];
   /** Assignments and events by due date, undated last. */
   work: Item[];
@@ -63,14 +63,19 @@ export function courseDetail(course: Course, overview: Overview, now: Date): Cou
   const dated = overview.items.filter((i) => i.courseId === course.id);
   const undated = overview.undated.filter((i) => i.courseId === course.id);
   const exams = dated.filter((i) => i.kind === 'exam');
+  const undatedExams = undated.filter((i) => i.kind === 'exam');
   const upcomingDated = exams.filter((i) => upcoming(i, now)).sort(byDue);
   const work = (list: Item[]) => list.filter((i) => i.kind !== 'exam');
+  const byTitle = (a: Item, b: Item) => a.title.localeCompare(b.title);
   return {
-    upcomingExams: [
-      ...upcomingDated,
-      ...undated.filter((i) => i.kind === 'exam' && i.status !== 'done'),
-    ].map((e) => planFor(e, overview.blocks)),
-    pastExams: exams.filter((i) => !upcoming(i, now)).sort((a, b) => byDue(b, a)),
-    work: [...work(dated).sort(byDue), ...work(undated).sort((a, b) => a.title.localeCompare(b.title))],
+    upcomingExams: [...upcomingDated, ...undatedExams.filter((i) => i.status !== 'done')].map((e) =>
+      planFor(e, overview.blocks),
+    ),
+    // A done exam without a date stays here, so it can still be reopened, dated or deleted.
+    pastExams: [
+      ...exams.filter((i) => !upcoming(i, now)).sort((a, b) => byDue(b, a)),
+      ...undatedExams.filter((i) => i.status === 'done').sort(byTitle),
+    ],
+    work: [...work(dated).sort(byDue), ...work(undated).sort(byTitle)],
   };
 }

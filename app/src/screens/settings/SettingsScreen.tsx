@@ -8,6 +8,7 @@ import { friendlyMessage } from '../../api/client';
 import type { PlannerSettings } from '../../api/types';
 import type { RootScreenProps } from '../../navigation/types';
 import { setSkippedCanvas } from '../../prefs';
+import { syncTimeZone } from '../../timeZone';
 import { ErrorBanner, ListRow, SectionHeader, Tag } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
 import { syncedLabel } from '../../viewmodels/today';
@@ -75,6 +76,15 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
     }
     // Only the next launch reads the flag: if the phone can't clear it, Welcome just doesn't show then.
     await setSkippedCanvas(api.store, false).catch(() => {});
+    // A new anonymous account now, told the phone's time zone (without waiting for it): the planner plans
+    // nothing for an account without one. If the server can't be reached, the next request makes the
+    // account, and the zone goes with the next start or return to the app.
+    try {
+      await api.ensureAccount();
+      syncTimeZone(api);
+    } catch {
+      // see above
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
   }
 
