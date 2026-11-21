@@ -85,7 +85,12 @@ function Root({ api }: { api: ApiClient }) {
         />
       ) : null}
       {screen === 'review' ? (
-        <ReviewScreen onDone={() => setScreen('week')} onCancel={() => setScreen('week')} />
+        <ReviewScreen
+          onDone={() => setScreen('week')}
+          onCancel={() => setScreen('week')}
+          loginAvailable={loginAvailable}
+          onConnect={() => setScreen('connect')}
+        />
       ) : null}
       {screen === 'week' ? (
         <WeekScreen

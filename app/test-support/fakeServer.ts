@@ -8,6 +8,8 @@ export function fakeServer() {
   const state = {
     connected: false,
     loginAvailable: false,
+    /** When set, the next syncs fail with this error (a successful login clears it). */
+    syncError: null as { status: number; error: string } | null,
     items: [] as Item[],
     blocks: [] as StudyBlock[],
     shortfalls: [] as Shortfall[],
@@ -49,12 +51,16 @@ export function fakeServer() {
     'POST /api/canvas/login/finish': (b) => {
       if (b.code !== 'good-code') return { status: 409, body: { error: 'canvas_login_failed', message: 'x' } };
       state.connected = true;
+      state.syncError = null;
       return {
         status: 200,
         body: { connected: true, baseUrl: 'https://s.instructure.com', lastSyncedAt: null, loginAvailable: state.loginAvailable },
       };
     },
-    'POST /api/canvas/sync': () => ({ status: 200, body: state.preview }),
+    'POST /api/canvas/sync': () =>
+      state.syncError
+        ? { status: state.syncError.status, body: { error: state.syncError.error, message: 'x' } }
+        : { status: 200, body: state.preview },
     'POST /api/canvas/sync/confirm': (b) => {
       for (const p of state.preview.items.filter((i) => b.accept.includes(i.key))) {
         state.items.push({

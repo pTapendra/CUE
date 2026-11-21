@@ -260,3 +260,68 @@ describe('Log in with Canvas', () => {
     });
   });
 });
+
+describe('Logging in again from the sync screen', () => {
+  const codeUrl = 'https://canvas.test/login/oauth2/auth?code=good-code&state=s1';
+  const refused = "Canvas no longer accepts Cue's access. Connect again.";
+
+  // Opens the app already connected (on the Week screen), with the next sync
+  // failing as given, and presses Sync Canvas.
+  async function syncFailing(syncError: { status: number; error: string }, loginAvailable: boolean) {
+    const server = fakeServer();
+    server.state.connected = true;
+    server.state.loginAvailable = loginAvailable;
+    server.state.syncError = syncError;
+    const client = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    let tree: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = ReactTestRenderer.create(<App client={client} />);
+    });
+    await flush();
+    const root = tree!.root;
+    await press(root, 'Sync Canvas');
+    await flush();
+    return { server, tree: tree!, root };
+  }
+
+  it('a sync Canvas refuses offers Log in with Canvas, then shows the items', async () => {
+    const { root, tree } = await syncFailing({ status: 409, error: 'canvas_token_rejected' }, true);
+    expect(texts(root)).toContain(refused);
+    expect(texts(root)).toContain('Log in with Canvas');
+
+    await press(root, 'Log in with Canvas');
+    await flush();
+    let load = true;
+    await act(async () => {
+      load = root.findByType('WebView' as any).props.onShouldStartLoadWithRequest({ url: codeUrl });
+    });
+    expect(load).toBe(false);
+    await flush();
+
+    expect(texts(root)).toContain('SQL homework');
+    expect(texts(root)).not.toContain(refused);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('without login settings the button opens the token form', async () => {
+    const { root, tree } = await syncFailing({ status: 409, error: 'canvas_token_rejected' }, false);
+    await press(root, 'Connect Canvas');
+    await flush();
+    expect(root.findAll((n) => n.props.placeholder === 'Paste your token').length).toBeGreaterThan(0);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it("other sync failures don't offer a login", async () => {
+    const { root, tree } = await syncFailing({ status: 502, error: 'canvas_unavailable' }, true);
+    expect(texts(root)).toContain('Canvas is not responding right now. Your saved schedule is still here.');
+    expect(texts(root)).not.toContain('Log in with Canvas');
+    expect(texts(root)).not.toContain('Connect Canvas');
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+});
