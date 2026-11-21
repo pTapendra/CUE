@@ -217,6 +217,33 @@ describe('the grid', () => {
     expect(texts(root)).not.toContain('1 suggested block');
   });
 
+  it("keeps the page on screen when an action started on an earlier page finishes after paging", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { server, root } = await openSchedule(undefined, (fetchImpl) =>
+      (async (url: string, init?: RequestInit) => {
+        // Accept all answers only when released.
+        if (new URL(url).pathname === '/api/blocks/accept') await held;
+        return fetchImpl(url, init);
+      }) as unknown as typeof fetch,
+    );
+    const accept = onScreen(root, (n) => typeof n.props.onPress === 'function' && texts(n).includes('Accept all'))[0];
+    await act(async () => {
+      accept.props.onPress(); // not awaited: the POST is held
+    });
+    await tap(root, 'Next days');
+    await flush();
+    expect(texts(root)).toContain('Thu 5 Nov – Sat 7 Nov');
+
+    await act(async () => release());
+    await flush();
+
+    // The reload after the action is for the page on screen, and it is the last one to fill the screen.
+    expect(texts(root)).toContain('Thu 5 Nov – Sat 7 Nov');
+    expect(lastRange(server)).toEqual({ from: nov(5), to: nov(8) });
+    expect(texts(root)).not.toContain('Stats midterm');
+  });
+
   it('shows a failed load with Try again, which loads again', async () => {
     let fail = true;
     const { root } = await openSchedule(undefined, (fetchImpl) =>

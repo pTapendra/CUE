@@ -12,6 +12,7 @@ type Props = {
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
   tag?: React.ReactNode;
+  /** Past or done: quieter colours (never opacity, which would drop the text below readable contrast). */
   dimmed?: boolean;
 };
 
@@ -22,13 +23,13 @@ export function ListRow({ title, meta, metaLeading, onPress, leading, trailing, 
       {leading}
       <View style={styles.main}>
         <View style={styles.titleRow}>
-          <Text style={[type.bodyStrong, styles.title, { color: colors.text }]}>{title}</Text>
+          <Text style={[type.bodyStrong, styles.title, { color: dimmed ? colors.text2 : colors.text }]}>{title}</Text>
           {tag}
         </View>
         {meta ? (
           <View style={styles.metaRow}>
             {metaLeading}
-            <Text style={[type.meta, styles.meta, { color: colors.text2 }]}>{meta}</Text>
+            <Text style={[type.meta, styles.meta, { color: dimmed ? colors.text3 : colors.text2 }]}>{meta}</Text>
           </View>
         ) : null}
       </View>
@@ -36,7 +37,7 @@ export function ListRow({ title, meta, metaLeading, onPress, leading, trailing, 
         (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.text3} /> : null)}
     </>
   );
-  const style = [styles.row, { borderBottomColor: colors.line, opacity: dimmed ? 0.55 : 1 }];
+  const style = [styles.row, { borderBottomColor: colors.line }];
   if (!onPress) return <View style={style}>{body}</View>;
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={style}>

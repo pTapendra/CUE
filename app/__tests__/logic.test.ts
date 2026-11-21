@@ -6,7 +6,7 @@ import { useCanvasLogin } from '../src/viewmodels/useCanvasLogin';
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item, StudyBlock, StudyWindow } from '../src/api/types';
 import { serverUrl } from '../src/config';
-import { fromInput, monthTitle, parseDay, rangeLabel, startOfWeek, toInput } from '../src/dates';
+import { monthTitle, parseDay, rangeLabel, startOfWeek } from '../src/dates';
 import { deadlinesFor, gridRange, placeInDay, timedEventsFor } from '../src/viewmodels/grid';
 import { canvasSettingsUrl, normalizeUrl } from '../src/viewmodels/useConnectCanvas';
 import { pageStart } from '../src/viewmodels/useSchedule';
@@ -21,19 +21,6 @@ describe('dates', () => {
     const mon = startOfWeek(wed);
     expect([mon.getFullYear(), mon.getMonth(), mon.getDate(), mon.getHours()]).toEqual([2026, 10, 2, 0]);
     expect(startOfWeek(new Date(2026, 10, 8)).getDate()).toBe(2); // Sunday belongs to the same week
-  });
-
-  it('round-trips the date field', () => {
-    const iso = fromInput('2026-11-06 14:05')!;
-    expect(toInput(iso)).toBe('2026-11-06 14:05');
-    expect(toInput(fromInput('2026-11-06')!)).toBe('2026-11-06 23:59');
-  });
-
-  it('rejects impossible or badly formed dates', () => {
-    expect(fromInput('')).toBeNull();
-    expect(fromInput('2026-02-30')).toBeUndefined();
-    expect(fromInput('2026-11-06 25:00')).toBeUndefined();
-    expect(fromInput('next friday')).toBeUndefined();
   });
 });
 

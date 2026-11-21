@@ -100,15 +100,15 @@ export function CourseScreen({ navigation, route }: RootScreenProps<'Course'>) {
                   />
                 ))}
                 {detail.pastExams.map((exam) => (
-                  <View key={exam.id} style={styles.dimmed}>
+                  <View key={exam.id}>
                     <Card>
                       <View style={styles.card}>
                         <View style={styles.titleRow}>
-                          <Text style={[type.bodyStrong, { color: colors.text }]}>{exam.title}</Text>
+                          <Text style={[type.bodyStrong, { color: colors.text2 }]}>{exam.title}</Text>
                           <Tag label="Exam" tone="exam" />
                         </View>
                         <Pressable accessibilityRole="button" onPress={() => setEditing(exam)} style={styles.dateButton}>
-                          <Text style={[type.body, { color: colors.text2 }]}>{dayLabel(new Date(exam.dueAt!))}</Text>
+                          <Text style={[type.body, { color: colors.text3 }]}>{dayLabel(new Date(exam.dueAt!))}</Text>
                         </Pressable>
                       </View>
                     </Card>
@@ -211,6 +211,5 @@ const styles = StyleSheet.create({
   card: { gap: space.sm },
   titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
   dateButton: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  dimmed: { opacity: 0.55 },
   workRow: { flexDirection: 'row', alignItems: 'center' },
 });

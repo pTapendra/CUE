@@ -13,9 +13,9 @@ The app talks only to the server. Only the server talks to Canvas, and only with
 
 ## What works
 
-- **Retrieve schedule data (UC1).** Connect a Canvas account with Log in with Canvas (or with a personal access token when the server has no login settings), read courses, assignment deadlines and calendar events, and review them before anything is saved. Exams are recognised by their titles (exam, midterm, final, test). An exam with no date in Canvas is flagged so the student can type one in.
-- **View and edit the schedule (UC2).** A three-day time grid (the arrows move three days; tapping the title returns to today) with a "Needs a date" list. Students can add items by hand (including exams Canvas does not list), edit them, delete them, and set one of four statuses: Not started, In progress, Done, Postponed.
-- **Study planner.** Students set their study times (which hours of each weekday they can study, in their own time zone) and a daily limit, and give each item an amount of study time (an exam defaults to 6 hours, an assignment to 2). Cue suggests study blocks that fit inside the study times, before the due date, and shows them on a three-day time grid next to events and deadlines. A student can accept, move or reject each block, or accept all suggestions on screen at once. Where the time does not fit, the app says how much is missing.
+- **Retrieve schedule data (UC1).** Connect a Canvas account with Log in with Canvas (or with a personal access token when the server has no login settings), read courses, assignment deadlines and calendar events, and review them before anything is saved. Exams are recognised by their titles (exam, midterm, final, test). An exam with no date in Canvas is flagged so the student can add the date with a date picker.
+- **View and edit the schedule (UC2).** The Schedule tab shows a time grid of one day, three days or a week (**Day**, **3 days**, **Week**; the arrows page by that many days, and the locate button returns to today). Items without a date appear under **No date** on Today. Students can add items by hand (including exams Canvas does not list), edit them, delete them, and set one of four statuses: Not started, In progress, Done, Postponed.
+- **Study planner.** Students set their study times (which hours of each weekday they can study, in their own time zone) and a daily limit, and give each item an amount of study time (an exam defaults to 6 hours, an assignment to 2). Cue suggests study blocks that fit inside the study times, before the due date, and shows them on the Schedule grid next to events and deadlines. A student can accept, move or reject each block, or accept all suggestions on screen at once. Where the time does not fit, the app says how much is missing.
 - **Privacy.** Each installed app gets an anonymous account. No name or email is collected. The Canvas token is encrypted (AES-256-GCM) on the server and never stored on the phone.
 
 Not built yet: start reminders, notes and slides, quizzes, weak topics.
@@ -69,7 +69,19 @@ npm test                    # 50 tests
 
 4. Scan the QR code: on iPhone with the Camera app, on Android from inside Expo Go. The app opens and reloads when you save a file.
 
-Students set their study times from **⚙ → Study times** in the app. Until they do, Cue uses the defaults (Monday to Friday 18:00 to 22:00, Saturday and Sunday 10:00 to 16:00, at most 3 hours a day).
+### Using the app
+
+The first time Cue opens it shows a welcome screen: **Log in with Canvas** (or **Connect Canvas** when the server has no login settings), or **Skip for now · add dates by hand**. After Canvas is connected, Cue shows **Check what Cue found** so the student can choose what to save.
+
+The app has three tabs:
+
+- **Today**: what to do next. **Up next** is the next accepted study block (**Start** sets its item In progress; **Move** picks a new time), then **Due soon** (the next 7 days) and **No date** (items that need a date, with **Add date**). Marking an item done shows **Marked done** with **Undo**. The **Sync** button reads Canvas again, and the line under the title says when Canvas was last synced. The gear at the top opens Settings.
+- **Schedule**: the time grid, with **Accept all** for the suggestions on screen.
+- **Courses**: every course with its progress; a course lists its exams (with the study plan for each) and its work.
+
+**Settings** (the gear on Today) has **Sync now**, **Study times**, **What Cue keeps**, **Disconnect Canvas** (the schedule and study plans stay; Cue stops reading Canvas) and **Delete all my data** (removes the account and everything in it from Cue). Both ask first.
+
+Students set their study times from **Settings → Study times** in the app. Until they do, Cue uses the defaults (Monday to Friday 18:00 to 22:00, Saturday and Sunday 10:00 to 16:00, at most 3 hours a day).
 
 The app finds the server automatically on the computer that runs `npm start` (port 3000). To use a server elsewhere, copy `app/.env.example` to `app/.env` and set `EXPO_PUBLIC_SERVER_URL`.
 
@@ -90,20 +102,20 @@ From then on it is a normal React Native project with native folders. To commit 
 
 ### Connecting Canvas
 
-When the server has Canvas login settings, the Connect screen has one button. Tap **Log in with Canvas**, log in to Canvas inside Cue, then tap **Authorize**. Cue only reads your courses and deadlines. Tap **Cancel** to go back without connecting.
+When the server has Canvas login settings, the first screen has one button. Tap **Log in with Canvas**, log in to Canvas inside Cue, then tap **Authorize**. Cue only reads your courses and deadlines. Tap **Cancel** to go back without connecting.
 
-Without login settings on the server, the Connect screen asks for a token instead.
+Without login settings on the server, the button reads **Connect Canvas** and opens a form that asks for a token instead.
 
 #### Getting a Canvas token
 
-The Canvas mobile app cannot create tokens, but the Canvas website can, including in a phone's browser. On the Connect screen:
+The Canvas mobile app cannot create tokens, but the Canvas website can, including in a phone's browser. In that form:
 
 1. Type your school's Canvas address (for example `yourschool.instructure.com`).
 2. Tap **Open Canvas to create a token**. Your Canvas settings page opens inside Cue.
 3. Log in, tap **+ New Access Token**, copy the token (Canvas shows it only once), then tap **Done**.
 4. Paste the token and tap **Connect and sync**.
 
-On a computer the same page is **Account → Settings → Approved Integrations → New Access Token**. You can delete the token in Canvas at any time. Some schools turn off token creation for students; if Canvas shows no **New Access Token** button, use **Skip** and add dates by hand.
+On a computer the same page is **Account → Settings → Approved Integrations → New Access Token**. You can delete the token in Canvas at any time. Some schools turn off token creation for students; if Canvas shows no **New Access Token** button, use **Cancel** and add dates by hand.
 
 ## A local Canvas for testing and demos
 
@@ -138,7 +150,7 @@ Until there is demo data, `start` offers to add it (`Add demo courses and accoun
 
 Every account's password is its first name in lowercase plus `-cue2026` (for example `maya-cue2026`). The logins and passwords are in `seed/local-canvas-accounts.csv` in the project folder, readable only by you and kept out of git. Running the seed again moves the dates to the new day and adds nothing twice. It only changes records it created (their Canvas SIS IDs start with `cue-demo-`), never the admin account or courses you made by hand.
 
-To use it with Cue, log in as one of the demo students. With ngrok and login set up, students tap **Log in with Canvas** on Cue's Connect screen. Without ngrok there is no login: take the three `CUE_CANVAS_*` lines out of `server/.env` so Cue asks for a token, create one under **Account → Settings → New Access Token**, connect with `http://canvas.docker`, and start Cue's server with `CUE_ALLOW_INSECURE_CANVAS=1`; that only works while Cue's server runs on the same Mac. To use your own data instead, skip the demo data and, as the Canvas admin, start a course and create student logins and assignments by hand.
+To use it with Cue, log in as one of the demo students. With ngrok and login set up, students tap **Log in with Canvas** on Cue's first screen. Without ngrok there is no login: take the three `CUE_CANVAS_*` lines out of `server/.env` so Cue asks for a token, create one under **Account → Settings → New Access Token**, connect with `http://canvas.docker`, and start Cue's server with `CUE_ALLOW_INSECURE_CANVAS=1`; that only works while Cue's server runs on the same Mac. To use your own data instead, skip the demo data and, as the Canvas admin, start a course and create student logins and assignments by hand.
 
 ## How the code is organised
 
@@ -164,8 +176,9 @@ app/src/
   api/                           API client and types
   viewmodels/                    hooks holding screen logic (MVVM)
   viewmodels/useCanvasLogin.ts   screen logic for Log in with Canvas
-  screens/                       Connect, CanvasLoginScreen, Review, Week, TimeGrid, BlockSheet, StudyTimes, ItemEditor
-  ui/                            shared components and theme
+  navigation/                    tabs (Today, Schedule, Courses) and the screens above them
+  screens/                       welcome, today, schedule, courses, settings, review, connect, sheets (item and study block)
+  ui/                            design tokens (light and dark) and the shared kit
 ```
 
 Each subsystem reads and writes only its own data through a repository (Repository pattern). Canvas reads go only through the `CanvasClient` interface, and the login's token requests only through `CanvasLogin` (Adapter pattern), so tests use a fake and the access route can change in one place.

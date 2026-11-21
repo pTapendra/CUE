@@ -1,5 +1,5 @@
 import ReactTestRenderer, { act } from 'react-test-renderer';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 type Node = ReactTestRenderer.ReactTestInstance;
 
@@ -73,4 +73,20 @@ export function type(root: Node, placeholder: string, value: string) {
   return act(async () => {
     input.props.onChangeText(value);
   });
+}
+
+/** The lowest opacity on `node` or any of its ancestors (1 when nothing fades it). */
+export function lowestOpacity(node: Node): number {
+  let lowest = 1;
+  for (let n: Node | null = node; n; n = n.parent) {
+    const style = StyleSheet.flatten(n.props.style);
+    if (typeof style?.opacity === 'number') lowest = Math.min(lowest, style.opacity);
+  }
+  return lowest;
+}
+
+/** The colour of the Text on screen under `root` whose content is exactly `content`. */
+export function textColor(root: Node, content: string): string | undefined {
+  const node = onScreen(root, (n) => n.type === Text && texts(n).includes(content) && n.props.children === content)[0];
+  return node ? StyleSheet.flatten(node.props.style)?.color : undefined;
 }

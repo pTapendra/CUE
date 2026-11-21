@@ -88,32 +88,6 @@ export function timeLabel(d: Date): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** Formats a date for the text field the student edits: "2026-11-04 14:30". */
-export function toInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${timeLabel(d)}`;
-}
-
-/**
- * Parses "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" in local time.
- * Returns an ISO string, null for an empty field, or undefined when invalid.
- * A date without a time means the end of that day (23:59).
- */
-export function fromInput(text: string): string | null | undefined {
-  const t = text.trim();
-  if (!t) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?$/.exec(t);
-  if (!m) return undefined;
-  const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
-  const [h, mi] = m[4] ? [Number(m[4]), Number(m[5])] : [23, 59];
-  const date = new Date(y, mo, d, h, mi);
-  if (date.getFullYear() !== y || date.getMonth() !== mo || date.getDate() !== d || h > 23 || mi > 59) {
-    return undefined;
-  }
-  return date.toISOString();
-}
-
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }

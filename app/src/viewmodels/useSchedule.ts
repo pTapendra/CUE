@@ -84,7 +84,13 @@ export function useSchedule(open: { view: ScheduleView; date: Date }) {
     }
   }, [api, from, count]);
 
-  const actions = useItemActions(load);
+  // Actions and the time zone handler outlive the page they began on: they must reload the page
+  // on screen when they finish, not the one whose `load` they were created with.
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const reloadCurrent = useCallback(() => loadRef.current(), []);
+
+  const actions = useItemActions(reloadCurrent);
   const { clearError } = actions;
 
   useEffect(() => {
@@ -98,11 +104,11 @@ export function useSchedule(open: { view: ScheduleView; date: Date }) {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       syncTimeZone(api).then((changed) => {
-        if (changed) load();
+        if (changed) reloadCurrent();
       });
     });
     return () => subscription.remove();
-  }, [api, load]);
+  }, [api, reloadCurrent]);
 
   /** Opens the page with `date` in `view` (or the current view). */
   const show = useCallback((nextView: ScheduleView | undefined, date: Date) => {

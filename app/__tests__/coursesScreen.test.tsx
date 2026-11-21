@@ -4,9 +4,9 @@ import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
 import type { Course, Item, StudyBlock } from '../src/api/types';
-import { lightCourses } from '../src/ui/tokens';
+import { lightColors, lightCourses } from '../src/ui/tokens';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, onScreen, press, tap, texts } from '../test-support/ui';
+import { flush, lowestOpacity, onScreen, press, tap, textColor, texts } from '../test-support/ui';
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -252,6 +252,26 @@ describe('A course', () => {
 
     await press(opened.root, 'Lab report');
     expect(texts(opened.root)).toContain('Edit item');
+  });
+
+  it('dims past exams and done work with colour, not opacity, so the text stays readable', async () => {
+    const opened = await openStatistics();
+    expect(textColor(opened.root, 'Old quiz')).toBe(lightColors.text2);
+    expect(textColor(opened.root, 'Sun 1 Nov')).toBe(lightColors.text3);
+    const quiz = onScreen(opened.root, (n) => n.props.children === 'Old quiz')[0];
+    expect(lowestOpacity(quiz)).toBe(1);
+    await tap(opened.root, 'Back');
+    await flush();
+
+    await press(opened.root, 'Databases');
+    await flush();
+    await press(opened.root, 'Work');
+    await tap(opened.root, 'Mark SQL homework done');
+    await flush();
+    expect(textColor(opened.root, 'SQL homework')).toBe(lightColors.text2);
+    const row = onScreen(opened.root, (n) => n.props.children === 'SQL homework')[0];
+    expect(lowestOpacity(row)).toBe(1);
+    expect(textColor(opened.root, 'Lab report')).toBe(lightColors.text);
   });
 
   it('Back returns to Courses', async () => {

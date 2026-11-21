@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native';
+import { ActivityIndicator, AppState, StyleSheet } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { ApiClient } from '../src/api/client';
@@ -320,6 +320,33 @@ describe('Today', () => {
     await flush();
     expect(overviewLoads(server)).toBe(loads + 1);
     expect(texts(root)).not.toContain('SQL homework');
+  });
+
+  it('on coming back to the front after midnight, shows the new day and loads again', async () => {
+    const { server, root } = await openToday((s) => {
+      s.state.items = [
+        item({ id: 'item-a', title: 'Due Wednesday', dueAt: nov(4, 10).toISOString() }),
+        item({ id: 'item-b', title: 'Due next Monday', dueAt: nov(9, 10).toISOString() }),
+      ];
+    });
+    expect(texts(root)).toContain('Mon 2 Nov');
+    expect(texts(root)).toContain('Due Wednesday');
+    expect(texts(root)).not.toContain('Due next Monday'); // beyond the week
+    const loads = overviewLoads(server);
+
+    // The phone was left on Today overnight; it is now 00:30 on Sunday 8 Nov, the last day of that week.
+    jest.setSystemTime(new Date(2026, 10, 8, 0, 30));
+    const listeners = (AppState.addEventListener as jest.Mock).mock.calls.filter(([event]) => event === 'change');
+    await act(async () => {
+      listeners.forEach(([, onChange]) => onChange('active'));
+    });
+    await flush();
+
+    expect(overviewLoads(server)).toBe(loads + 1);
+    expect(texts(root)).toContain('Sun 8 Nov');
+    expect(texts(root)).not.toContain('Mon 2 Nov');
+    expect(texts(root)).toContain('Due next Monday'); // now inside the Due soon window
+    jest.setSystemTime(new Date(2026, 10, 2, 9, 0));
   });
 
   it('shows "Nothing due this week" when there is nothing to do', async () => {
