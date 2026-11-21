@@ -38,7 +38,7 @@ Create a secret key once and put it in `.env`:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-Without `CUE_SECRET_KEY` the server makes a temporary key, and saved Canvas tokens stop working after a restart. Changing the key also unlinks accounts from their Canvas logins, so the same students get new accounts when they log in again.
+Without `CUE_SECRET_KEY` the server makes a temporary key, and saved Canvas tokens stop working after a restart. Changing the key also unlinks accounts from their Canvas logins, so the same students get new accounts when they log in again. A restart without `CUE_SECRET_KEY` is such a change: every account is unlinked, each student's next login opens a new, empty account, and the old data can't be reached.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

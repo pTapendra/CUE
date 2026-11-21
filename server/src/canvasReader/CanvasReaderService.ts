@@ -118,25 +118,32 @@ export class CanvasReaderService {
     const key = this.opts.secretKey;
     const accessExpiresAt =
       tokens.expiresInSeconds == null ? null : new Date(this.now().getTime() + tokens.expiresInSeconds * 1000).toISOString();
-    return this.linkAndSave(
-      current,
-      { canvasUrl: this.login.canvasUrl, userId: tokens.userId },
-      encrypt(tokens.accessToken, key),
-      tokens.refreshToken ? { refreshSealed: encrypt(tokens.refreshToken, key), accessExpiresAt } : null,
-    );
+    try {
+      return this.linkAndSave(
+        current,
+        { canvasUrl: this.login.canvasUrl, userId: tokens.userId },
+        encrypt(tokens.accessToken, key),
+        tokens.refreshToken ? { refreshSealed: encrypt(tokens.refreshToken, key), accessExpiresAt } : null,
+      );
+    } catch (e) {
+      // Nothing was saved (the transaction rolled back), so Cue won't use this grant.
+      await this.revokeQuietly(tokens.accessToken);
+      throw e;
+    }
   }
 
   /**
    * Every Canvas request is done by now. Links the phone to the Canvas user's account and saves
-   * the connection there in one transaction; then revokes, best effort, the login connections Cue
-   * no longer uses: the one replaced, and the one of the phone's old account if it was deleted.
+   * the connection there in one transaction, and returns as soon as it commits. Nothing after the
+   * commit throws or waits: the login connections Cue no longer uses (the one replaced, and the one
+   * of the phone's old account if it was deleted) are revoked best effort, without waiting for Canvas.
    */
-  private async linkAndSave(
+  private linkAndSave(
     current: CurrentDevice,
     identity: { canvasUrl: string; userId: string },
     tokenSealed: string,
     renewal: { refreshSealed: string; accessExpiresAt: string | null } | null,
-  ): Promise<{ studentId: string; deviceToken: string | null }> {
+  ): { studentId: string; deviceToken: string | null } {
     const ownConnection = this.repo.getConnection(current.studentId);
     let replaced = null as StoredConnection | null;
     const result = this.opts.accounts.link(current, identity, (target) => {
@@ -144,12 +151,9 @@ export class CanvasReaderService {
       this.repo.saveConnection(target, identity.canvasUrl, tokenSealed, renewal);
     });
 
-    const key = this.opts.secretKey;
-    if (replaced && this.isRenewable(replaced)) {
-      await this.revokeQuietly(decrypt(replaced.tokenSealed, key));
-    }
+    if (replaced && this.isRenewable(replaced)) void this.revokeStored(replaced);
     if (result.removedStudentId === current.studentId && ownConnection && this.isRenewable(ownConnection)) {
-      await this.revokeQuietly(decrypt(ownConnection.tokenSealed, key));
+      void this.revokeStored(ownConnection);
     }
     if (result.movedItems > 0) this.schedule.markChanged(result.studentId);
     return { studentId: result.studentId, deviceToken: result.deviceToken };
@@ -158,6 +162,15 @@ export class CanvasReaderService {
   private async revokeQuietly(accessToken: string): Promise<void> {
     try {
       await this.login!.revoke(accessToken);
+    } catch {
+      // Best effort.
+    }
+  }
+
+  /** Revokes a stored connection's access token; never throws, so the caller need not wait for it. */
+  private async revokeStored(conn: StoredConnection): Promise<void> {
+    try {
+      await this.login!.revoke(decrypt(conn.tokenSealed, this.opts.secretKey));
     } catch {
       // Best effort.
     }

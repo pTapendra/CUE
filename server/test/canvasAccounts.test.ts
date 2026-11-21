@@ -1,5 +1,5 @@
 import { createHmac, randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { CanvasReaderRepository } from "../src/canvasReader/CanvasReaderRepository.js";
 import { encrypt } from "../src/crypto.js";
 import { loginAs, setup, type Student } from "./helpers.js";
@@ -167,6 +167,45 @@ describe("a Canvas login opens that student's own account", () => {
     expect(login.revoked).toContain("old-access");
   });
 
+  it("a switching login replies without waiting for Canvas to revoke the connection it replaced", async () => {
+    const { login, newStudent } = world();
+    const a = await newStudent();
+    await logIn(a, "maya");
+
+    // Canvas doesn't answer the revoke until the test lets it.
+    const attempted: string[] = [];
+    let answer!: () => void;
+    const canvasAnswers = new Promise<void>((resolve) => (answer = resolve));
+    login.revoke = async (accessToken) => {
+      attempted.push(accessToken);
+      await canvasAnswers;
+    };
+
+    const b = await newStudent();
+    const res = await loginAs(b, "maya");
+    expect(res.status).toBe(200);
+    expect(res.body.deviceToken).toEqual(expect.any(String));
+    expect(attempted).toEqual(["access-1"]);
+    answer();
+  });
+
+  it("a login whose link fails revokes the Canvas grant it just got", async () => {
+    const { accounts, login, newStudent } = world();
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
+    const phone = await newStudent();
+    // The phone's account is deleted while Canvas exchanges the code, so it can't be linked.
+    const exchange = login.exchangeCode.bind(login);
+    login.exchangeCode = async (code) => {
+      accounts.delete(accounts.findByToken(phone.token)!);
+      return exchange(code);
+    };
+
+    const res = await loginAs(phone, "maya");
+    expect(res.status).toBe(500);
+    expect(login.revoked).toEqual(["access-1"]);
+  });
+
   it("disconnect keeps the account linked", async () => {
     const { newStudent } = world();
     const phone = await newStudent();
@@ -223,6 +262,12 @@ describe("a Canvas login opens that student's own account", () => {
     expect(expected).toMatch(/^[0-9a-f]{64}$/);
     expect(expected).toBe(createHmac("sha256", secretKey).update("https://canvas.test|1").digest("hex"));
     expect(canvas_identity).toBe(expected);
+  });
+
+  it("one Canvas address gives one identity, however it is written", () => {
+    const { accounts } = world();
+    expect(accounts.identityHash("https://Canvas.Test:443/", "1")).toBe(accounts.identityHash("https://canvas.test", "1"));
+    expect(accounts.identityHash("https://canvas.test/login/", "1")).toBe(accounts.identityHash("https://canvas.test", "1"));
   });
 
   it("a failed login links nothing", async () => {

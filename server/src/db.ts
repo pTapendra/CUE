@@ -2,6 +2,10 @@ import Database from "better-sqlite3";
 
 export type Db = Database.Database;
 
+/**
+ * The first schema. It isn't the current one: the migrations below change it, and migration 3
+ * rebuilds `students` (its `token_hash` moves into `devices`, and it gains `canvas_identity`).
+ */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS students (
   id            TEXT PRIMARY KEY,

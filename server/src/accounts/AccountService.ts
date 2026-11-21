@@ -53,9 +53,13 @@ export class AccountService {
     this.repo.removeDevice(deviceToken);
   }
 
-  /** A keyed hash: the database alone can't be matched against Canvas user IDs. */
+  /**
+   * A keyed hash: the database alone can't be matched against Canvas user IDs. The Canvas address
+   * counts by its origin only, so one Canvas, however its address is written, gives one identity.
+   */
   identityHash(canvasUrl: string, canvasUserId: string): string {
-    return createHmac("sha256", this.secretKey).update(`${canvasUrl}|${canvasUserId}`).digest("hex");
+    const origin = new URL(canvasUrl).origin;
+    return createHmac("sha256", this.secretKey).update(`${origin}|${canvasUserId}`).digest("hex");
   }
 
   /**
