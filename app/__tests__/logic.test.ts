@@ -1,3 +1,8 @@
+import React from 'react';
+import ReactTestRenderer, { act } from 'react-test-renderer';
+import { ApiProvider } from '../src/api/ApiContext';
+import { readLoginReturn } from '../src/viewmodels/canvasLogin';
+import { useCanvasLogin } from '../src/viewmodels/useCanvasLogin';
 import { ApiClient, ApiError, friendlyMessage } from '../src/api/client';
 import type { Item, StudyBlock, StudyWindow } from '../src/api/types';
 import { serverUrl } from '../src/config';
@@ -78,7 +83,7 @@ describe('ApiClient', () => {
     const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
     const err = await api.connectCanvas('https://s.instructure.com', 'bad-token-123').catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(friendlyMessage(err)).toMatch(/reconnect/);
+    expect(friendlyMessage(err)).toBe("Canvas no longer accepts Cue's access. Connect again.");
     expect(friendlyMessage(new TypeError('Network request failed'))).toMatch(/Cannot reach/);
   });
 
@@ -253,5 +258,116 @@ describe('study windows', () => {
   it('describes the range', () => {
     expect(rangeText(win('18:00', '22:00'))).toBe('18:00 – 22:00');
     expect(rangeText(win('22:00', '01:00'))).toBe('22:00 – 01:00 (next day)');
+  });
+});
+
+describe('Canvas login', () => {
+  const A = 'https://canvas.test/login/oauth2/auth?client_id=1&state=s1';
+
+  it("readLoginReturn lets Canvas's own pages load", () => {
+    expect(readLoginReturn(A, A, 's1')).toBeNull();
+    expect(readLoginReturn('https://canvas.test/login/canvas', A, 's1')).toBeNull();
+    expect(readLoginReturn('https://canvas.test/login/oauth2/confirm', A, 's1')).toBeNull();
+  });
+
+  it('readLoginReturn catches the code', () => {
+    expect(readLoginReturn('https://canvas.test/login/oauth2/auth?code=c1&state=s1', A, 's1')).toEqual({
+      kind: 'code',
+      code: 'c1',
+    });
+  });
+
+  it('readLoginReturn: denied, wrong state, other site', () => {
+    expect(readLoginReturn('https://canvas.test/login/oauth2/auth?error=access_denied&state=s1', A, 's1')).toEqual({
+      kind: 'denied',
+    });
+    expect(readLoginReturn('https://canvas.test/login/oauth2/auth?code=c1&state=zz', A, 's1')).toEqual({
+      kind: 'mismatch',
+    });
+    expect(readLoginReturn('https://evil.test/login/oauth2/auth?code=c1&state=s1', A, 's1')).toBeNull();
+  });
+
+  it('friendly messages for the login errors', () => {
+    expect(friendlyMessage(new ApiError(409, 'canvas_token_rejected', 'x'))).toBe(
+      "Canvas no longer accepts Cue's access. Connect again.",
+    );
+    expect(friendlyMessage(new ApiError(409, 'login_expired', 'x'))).toBe('The login took too long. Please try again.');
+    expect(friendlyMessage(new ApiError(409, 'canvas_login_failed', 'x'))).toBe(
+      "Canvas didn't complete the login. Please try again.",
+    );
+  });
+
+  it('asks the server to start and finish a login', async () => {
+    const server = fakeServer();
+    const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    expect(await api.startCanvasLogin()).toEqual({ authorizeUrl: A, state: 's1' });
+    expect((await api.finishCanvasLogin('good-code', 's1')).connected).toBe(true);
+    const err = await api.finishCanvasLogin('bad', 's1').catch((e) => e);
+    expect(err).toMatchObject({ status: 409, code: 'canvas_login_failed' });
+  });
+
+  async function mount(onConnected: () => void) {
+    const server = fakeServer();
+    const api = new ApiClient('http://cue.test', memoryStore(), server.fetchImpl);
+    let current!: ReturnType<typeof useCanvasLogin>;
+    function Probe() {
+      current = useCanvasLogin(onConnected);
+      return null;
+    }
+    await act(async () => {
+      ReactTestRenderer.create(React.createElement(ApiProvider, { client: api, children: React.createElement(Probe) }));
+    });
+    return { server, hook: () => current };
+  }
+
+  const back = (code: string, state = 's1') => `https://canvas.test/login/oauth2/auth?code=${code}&state=${state}`;
+
+  it('finishes once even when the return address is reported repeatedly', async () => {
+    const onConnected = jest.fn();
+    const { server, hook } = await mount(onConnected);
+    await act(async () => hook().start());
+    expect(hook().authorizeUrl).toBe(A);
+    expect(hook().onNavigate(A)).toBe(true);
+    let results: boolean[] = [];
+    await act(async () => {
+      results = [hook().onNavigate(back('good-code')), hook().onNavigate(back('good-code'))];
+    });
+    expect(results).toEqual([false, false]);
+    expect(onConnected).toHaveBeenCalledTimes(1);
+    expect(server.state.calls.filter((c) => c.path === '/api/canvas/login/finish')).toHaveLength(1);
+    expect(hook().authorizeUrl).toBeNull();
+    expect(hook().error).toBeNull();
+    expect(hook().busy).toBe(false);
+  });
+
+  it('closes with a message when denied, mismatched or refused, and quietly on cancel', async () => {
+    const onConnected = jest.fn();
+    const { hook } = await mount(onConnected);
+    await act(async () => hook().start());
+    await act(async () => {
+      hook().onNavigate('https://canvas.test/login/oauth2/auth?error=access_denied&state=s1');
+    });
+    expect(hook().authorizeUrl).toBeNull();
+    expect(hook().error).toBe("You didn't allow Cue to read Canvas.");
+
+    await act(async () => hook().start());
+    expect(hook().error).toBeNull();
+    await act(async () => {
+      hook().onNavigate(back('c1', 'zz'));
+    });
+    expect(hook().error).toBe("The login didn't complete. Please try again.");
+
+    await act(async () => hook().start());
+    await act(async () => {
+      hook().onNavigate(back('nope'));
+    });
+    expect(hook().authorizeUrl).toBeNull();
+    expect(hook().error).toBe("Canvas didn't complete the login. Please try again.");
+
+    await act(async () => hook().start());
+    act(() => hook().cancel());
+    expect(hook().authorizeUrl).toBeNull();
+    expect(hook().error).toBeNull();
+    expect(onConnected).not.toHaveBeenCalled();
   });
 });

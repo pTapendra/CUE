@@ -7,6 +7,7 @@ export function fakeServer() {
   let nextId = 1;
   const state = {
     connected: false,
+    loginAvailable: false,
     items: [] as Item[],
     blocks: [] as StudyBlock[],
     shortfalls: [] as Shortfall[],
@@ -34,12 +35,24 @@ export function fakeServer() {
     'POST /api/devices': () => ({ status: 201, body: { deviceToken: 'device-1' } }),
     'GET /api/canvas/connection': () => ({
       status: 200,
-      body: { connected: state.connected, baseUrl: state.connected ? 'https://s.instructure.com' : null, lastSyncedAt: null },
+      body: { connected: state.connected, baseUrl: state.connected ? 'https://s.instructure.com' : null, lastSyncedAt: null, loginAvailable: state.loginAvailable },
     }),
     'PUT /api/canvas/connection': (b) => {
       if (b.token === 'bad-token-123') return { status: 409, body: { error: 'canvas_token_rejected', message: 'x' } };
       state.connected = true;
-      return { status: 200, body: { connected: true, baseUrl: b.baseUrl, lastSyncedAt: null } };
+      return { status: 200, body: { connected: true, baseUrl: b.baseUrl, lastSyncedAt: null, loginAvailable: state.loginAvailable } };
+    },
+    'POST /api/canvas/login': () => ({
+      status: 200,
+      body: { authorizeUrl: 'https://canvas.test/login/oauth2/auth?client_id=1&state=s1', state: 's1' },
+    }),
+    'POST /api/canvas/login/finish': (b) => {
+      if (b.code !== 'good-code') return { status: 409, body: { error: 'canvas_login_failed', message: 'x' } };
+      state.connected = true;
+      return {
+        status: 200,
+        body: { connected: true, baseUrl: 'https://s.instructure.com', lastSyncedAt: null, loginAvailable: state.loginAvailable },
+      };
     },
     'POST /api/canvas/sync': () => ({ status: 200, body: state.preview }),
     'POST /api/canvas/sync/confirm': (b) => {

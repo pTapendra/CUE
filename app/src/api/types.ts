@@ -73,6 +73,13 @@ export interface ConnectionStatus {
   connected: boolean;
   baseUrl: string | null;
   lastSyncedAt: string | null;
+  /** True when the server is set up for Log in with Canvas. */
+  loginAvailable: boolean;
+}
+
+export interface CanvasLoginStart {
+  authorizeUrl: string;
+  state: string;
 }
 
 export interface ProposedItem {

@@ -1,4 +1,5 @@
 import type {
+  CanvasLoginStart,
   ConnectionStatus,
   Course,
   Item,
@@ -34,7 +35,11 @@ export function friendlyMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case 'canvas_token_rejected':
-        return 'Canvas rejected your token. Create a new one in Canvas and reconnect.';
+        return "Canvas no longer accepts Cue's access. Connect again.";
+      case 'login_expired':
+        return 'The login took too long. Please try again.';
+      case 'canvas_login_failed':
+        return "Canvas didn't complete the login. Please try again.";
       case 'canvas_not_connected':
         return 'Connect your Canvas account first.';
       case 'invalid_canvas_url':
@@ -82,6 +87,14 @@ export class ApiClient {
 
   connectCanvas(baseUrl: string, token: string) {
     return this.call<ConnectionStatus>('PUT', '/api/canvas/connection', { baseUrl, token });
+  }
+
+  startCanvasLogin() {
+    return this.call<CanvasLoginStart>('POST', '/api/canvas/login');
+  }
+
+  finishCanvasLogin(code: string, state: string) {
+    return this.call<ConnectionStatus>('POST', '/api/canvas/login/finish', { code, state });
   }
 
   disconnectCanvas() {
