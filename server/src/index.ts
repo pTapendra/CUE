@@ -1,4 +1,5 @@
 import { AccountRepository } from "./accounts/AccountRepository.js";
+import { AccountService } from "./accounts/AccountService.js";
 import { createApp } from "./api/app.js";
 import { HttpCanvasLogin } from "./canvas/HttpCanvasLogin.js";
 import { HttpCanvasClient } from "./canvas/HttpCanvasClient.js";
@@ -28,18 +29,20 @@ const schedule = new ScheduleService(new ScheduleRepository(db), {
 });
 const planner = new PlannerService(new PlannerRepository(db), schedule);
 schedule.onChange((id) => planner.replan(id));
+const accounts = new AccountService(new AccountRepository(db), config.secretKey);
 const canvasReader = new CanvasReaderService(
   new CanvasReaderRepository(db),
   schedule,
   (baseUrl, token) => new HttpCanvasClient(baseUrl, token),
   {
     secretKey: config.secretKey,
+    accounts,
     allowInsecureUrls: process.env.CUE_ALLOW_INSECURE_CANVAS === "1",
     login: config.canvasLogin ? new HttpCanvasLogin(config.canvasLogin) : null,
   },
 );
 
-const app = createApp({ accounts: new AccountRepository(db), canvasReader, schedule, planner });
+const app = createApp({ accounts, canvasReader, schedule, planner });
 
 app.listen(config.port, () => {
   console.log(`Cue server listening on http://localhost:${config.port}`);

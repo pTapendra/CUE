@@ -45,6 +45,16 @@ describe("AccountRepository", () => {
     expect(() => accounts.setIdentity(b, "abc")).toThrow();
   });
 
+  it("an identity never changes once set", () => {
+    const { accounts } = setup();
+    const a = accounts.create().studentId;
+    accounts.setIdentity(a, "abc");
+    expect(() => accounts.setIdentity(a, "def")).toThrow();
+    expect(accounts.identityOf(a)).toBe("abc");
+    expect(accounts.findByIdentity("def")).toBeNull();
+    expect(() => accounts.setIdentity("no-such-account", "def")).toThrow();
+  });
+
   it("moveManualData moves hand-added courses, items and their blocks, not Canvas ones", () => {
     const { db, accounts } = setup();
     const from = accounts.create().studentId;

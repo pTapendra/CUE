@@ -50,9 +50,12 @@ export class AccountRepository {
     return row?.id ?? null;
   }
 
-  /** Throws when another account already has this identity. */
+  /** Links an unlinked account. Throws when it already has an identity (that never changes) or another account has this one. */
   setIdentity(studentId: string, identity: string): void {
-    this.db.prepare("UPDATE students SET canvas_identity = ? WHERE id = ?").run(identity, studentId);
+    const { changes } = this.db
+      .prepare("UPDATE students SET canvas_identity = ? WHERE id = ? AND canvas_identity IS NULL")
+      .run(identity, studentId);
+    if (changes === 0) throw new Error("Only an existing unlinked account can take a Canvas identity");
   }
 
   /** Moves hand-added courses and items (and the study blocks of those items); returns the items moved. */

@@ -124,6 +124,11 @@ export class ScheduleService {
     this.listeners.push(listener);
   }
 
+  /** Tells the listeners about a change saved elsewhere, such as items moved in from another account. */
+  markChanged(studentId: string): void {
+    this.emit(studentId);
+  }
+
   listCourses(studentId: string): Course[] {
     return this.repo.listCourses(studentId);
   }
