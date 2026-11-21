@@ -924,7 +924,7 @@ test_seed_end_to_end_writes_the_file_and_summary() {
   stub docker 'echo "$PWD: docker $*" >>"$T/docker.log"
 case "$*" in
   "compose ps"*) printf "postgres\nredis\nweb\n" ;;
-  "compose exec"*) echo "some Rails noise"; cat "$T/seed.out" ;;
+  "compose exec"*) cat >"$T/stdin"; echo "some Rails noise"; cat "$T/seed.out" ;;
 esac'
   bash "$SEED_SCRIPT" >"$T/out" 2>&1
   assert_eq "status" "0" "$?"
@@ -940,7 +940,8 @@ esac'
   assert_contains "runs in the Canvas folder" "$T/canvas: docker compose exec -T" "$log"
   assert_contains "passes the Mac's time zone" "-e CUE_SEED_TZ=" "$log"
   assert_contains "runs rails in the web container" "web bundle exec rails runner" "$log"
-  assert_contains "sends the seed data from seed/" "$(head -n 1 "$HERE/../seed/local-canvas-seed.rb")" "$log"
+  assert_contains "passes the loader from scripts/" "$(head -n 1 "$HERE/local-canvas-seed.rb")" "$log"
+  assert_eq "sends the data from seed/ on stdin" "$(cat "$HERE/../seed/local-canvas-seed.yml")" "$(cat "$T/stdin")"
   assert_contains "passes the seed's Ruby" "cue-demo-term" "$log"
   case "$out" in *"Rails noise"*) assert_eq "Canvas's other output hidden" "hidden" "shown" ;; esac
 }
@@ -1009,17 +1010,80 @@ test_seed_refuses_to_run_as_root() {
   assert_contains "message" "root" "$out"
 }
 
-test_seed_ruby_follows_the_rules() {
+test_seed_loader_has_the_rules_but_no_data() {
   local ruby needle
-  ruby="$(cat "$HERE/../seed/local-canvas-seed.rb")"
-  for needle in cue-demo-term -cue2026 students.cue.demo faculty.cue.demo CUE_SEED_TZ CUE_ACCOUNT \
+  ruby="$(cat "$HERE/local-canvas-seed.rb")"
+  for needle in cue-demo-term CUE_SEED_TZ CUE_ACCOUNT '$stdin' \
     "already belongs to a Canvas user the seed didn't create"; do
     assert_contains "has $needle" "$needle" "$ruby"
   done
-  assert_false "no old email domain" grep -q 'cue-demo\.test' "$HERE/../seed/local-canvas-seed.rb"
+  # The courses and people live in seed/local-canvas-seed.yml, not here.
+  for needle in "Software Engineering" "Maya Thompson" "cue.demo"; do
+    case "$ruby" in *"$needle"*) assert_eq "no data ($needle)" "absent" "present" ;; esac
+  done
   # The word Cue never uses for a stretch of work, in any case. Written as a
   # pattern so that this file doesn't contain the word either.
-  assert_false "never uses the word" grep -qi 'spr[i]nt' "$HERE/../seed/local-canvas-seed.rb"
+  assert_false "never uses the word" grep -qi 'spr[i]nt' "$HERE/local-canvas-seed.rb"
+}
+
+# Loads seed/local-canvas-seed.yml the way the loader does (plain YAML, no
+# Ruby objects) and checks its shape, including the YAML traps: an unquoted
+# 16:00 is a number, and so is an unquoted answer like 0.2.
+test_seed_data_is_plain_yaml_with_the_demo_semester() {
+  local data="$HERE/../seed/local-canvas-seed.yml"
+  assert_true "data file exists" test -f "$data"
+  local out
+  out="$(ruby -ryaml -e '
+    d = YAML.safe_load(File.read(ARGV[0]))
+    errors = []
+    a = d["accounts"]
+    errors << "password suffix" unless a["password_suffix"] == "-cue2026"
+    errors << "student domain" unless a["student_email_domain"] == "students.cue.demo"
+    errors << "teacher domain" unless a["teacher_email_domain"] == "faculty.cue.demo"
+    errors << "question points" unless d["quiz_question_points"].is_a?(Integer)
+    t = d["term"]
+    errors << "term days" unless t["starts_day"] == -42 && t["ends_day"] == 70
+    courses = d["courses"]
+    errors << "3 courses" unless courses.size == 3
+    codes = courses.map { |c| c["code"] }
+    courses.each do |c|
+      %w[code name teacher].each { |k| errors << "#{c["code"]} #{k}" unless c[k].is_a?(String) }
+      c["assignments"].each do |x|
+        due = x["due_day"]
+        errors << "#{x["title"]} due_day" unless due.nil? || (due.is_a?(Integer) && due.between?(-42, 70))
+        errors << "#{x["title"]} points" unless x["points"].is_a?(Integer)
+        errors << "#{x["title"]} submission" unless x["submission"].is_a?(String)
+      end
+      q = c["quiz"]
+      errors << "#{c["code"]} quiz due" unless q["due_day"].is_a?(Integer)
+      q["questions"].each do |x|
+        answers = [x["question"], x["right"], *x["wrong"]]
+        errors << "#{c["code"]} answers must be text" unless answers.all? { |v| v.is_a?(String) } && x["wrong"].size == 3
+      end
+      c["events"].each do |e|
+        times = e.values_at("from", "to").compact
+        errors << "#{e["title"]} times must be HH:MM text" unless times.all? { |v| v.is_a?(String) && v =~ /\A\d\d:\d\d\z/ }
+        errors << "#{e["title"]} needs from and to, or all_day" unless e["all_day"] == true || times.size == 2
+      end
+    end
+    errors << "an exam with no date" unless courses.any? { |c| c["assignments"].any? { |x| x["due_day"].nil? } }
+    students = d["students"]
+    errors << "6 students" unless students.size == 6
+    students.each { |st| errors << "#{st["name"]} courses" unless (st["courses"] - codes).empty? && st["courses"].size.between?(2, 3) }
+    puts errors.empty? ? "ok" : errors.join("; ")
+  ' "$data" 2>&1)"
+  assert_eq "data checks" "ok" "$out"
+  assert_false "never uses the word" grep -qi 'spr[i]nt' "$data"
+}
+
+test_seed_stops_when_the_data_file_is_missing() {
+  seed_world
+  export CUE_SEED_DATA="$T/missing.yml"
+  stub docker 'echo "docker $*" >>"$T/docker.log"; case "$*" in "compose ps"*) echo web ;; esac'
+  bash "$SEED_SCRIPT" >"$T/out" 2>&1
+  assert_eq "status" "1" "$?"
+  assert_contains "names the file" "Can't find the demo data: $T/missing.yml" "$(cat "$T/out")"
+  case "$(cat "$T/docker.log" 2>/dev/null)" in *"compose exec"*) assert_eq "Ruby not run" "not run" "run" ;; esac
 }
 
 # --- runner ----------------------------------------------------------------

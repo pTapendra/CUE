@@ -1,0 +1,114 @@
+# Demo data for the local Canvas: one semester of courses, people,
+# assignments, quizzes and calendar events. scripts/local-canvas-seed.sh loads
+# it into Canvas with scripts/local-canvas-seed.rb; run that script again after
+# editing this file.
+#
+# Days are counted from the day the seed runs (negative = in the past), in the
+# Mac's time zone. Assignments and quizzes are due at 23:59. Cue reads a title
+# with the word exam, midterm, final or test in it as an exam, so only exams
+# use those words. Keep times ("16:00") and answers ("0.2") in quotes: YAML
+# reads them as numbers otherwise.
+
+accounts:
+  # Password: first name in lowercase + this. Email: first.last@domain.
+  password_suffix: "-cue2026"
+  teacher_email_domain: "faculty.cue.demo"
+  student_email_domain: "students.cue.demo"
+
+term:
+  starts_day: -42
+  ends_day: 70
+
+quiz_question_points: 5
+
+# submission: online_upload, online_text_entry or on_paper. due_day: null means
+# no due date (Cue asks the student for it).
+courses:
+  - code: "CS 4350"
+    name: "Software Engineering"
+    teacher: "Elena Marsh"
+    assignments:
+      - { title: "Homework 1: User Stories", due_day: -17, points: 20, submission: "online_text_entry" }
+      - { title: "Project Milestone 1: Requirements", due_day: -6, points: 50, submission: "online_upload" }
+      - { title: "Homework 2: UML Class Diagrams", due_day: 10, points: 25, submission: "online_upload" }
+      - { title: "Midterm Exam", due_day: null, points: 100, submission: "on_paper" }
+      - { title: "Project Milestone 2: Design Review", due_day: 24, points: 75, submission: "online_upload" }
+      - { title: "Homework 3: Unit Testing", due_day: 38, points: 25, submission: "online_upload" }
+      - { title: "Project Milestone 3: Release", due_day: 66, points: 150, submission: "online_upload" }
+    quiz:
+      title: "Quiz 1: Version Control"
+      due_day: 3
+      questions:
+        - question: "Which Git command records staged changes in the repository?"
+          right: "git commit"
+          wrong: ["git add", "git push", "git status"]
+        - question: "What does a pull request ask for?"
+          right: "A review before the changes are merged"
+          wrong: ["A copy of another repository", "Deleting a branch", "Undoing the last commit"]
+        - question: "Which file tells Git which files to leave untracked?"
+          right: ".gitignore"
+          wrong: [".gitconfig", "README.md", ".gitattributes"]
+    events:
+      - { title: "Review session (Room 115)", day: 27, from: "16:00", to: "17:30" }
+
+  - code: "CS 4513"
+    name: "Database Systems"
+    teacher: "David Okafor"
+    assignments:
+      - { title: "Homework 1: ER Diagrams", due_day: -20, points: 30, submission: "online_upload" }
+      - { title: "Homework 2: Relational Algebra", due_day: -11, points: 30, submission: "online_upload" }
+      - { title: "Project Part 1: Schema Design", due_day: 6, points: 60, submission: "online_upload" }
+      - { title: "Midterm Exam", due_day: 16, points: 100, submission: "on_paper" }
+      - { title: "Homework 3: Normalization", due_day: 30, points: 30, submission: "online_upload" }
+      - { title: "Project Part 2: Query Optimization", due_day: 52, points: 80, submission: "online_upload" }
+    quiz:
+      title: "Quiz 1: SQL Basics"
+      due_day: 2
+      questions:
+        - question: "Which SQL clause filters rows before they are grouped?"
+          right: "WHERE"
+          wrong: ["HAVING", "ORDER BY", "LIMIT"]
+        - question: "Which join returns only the rows that have a match in both tables?"
+          right: "INNER JOIN"
+          wrong: ["LEFT JOIN", "FULL OUTER JOIN", "CROSS JOIN"]
+        - question: "Which constraint stops a column from holding the same value twice?"
+          right: "UNIQUE"
+          wrong: ["NOT NULL", "DEFAULT", "CHECK"]
+    events:
+      - { title: "Final exam (Room 210)", day: 62, from: "10:00", to: "12:00" }
+
+  - code: "STAT 3303"
+    name: "Applied Statistics"
+    teacher: "Priya Raman"
+    assignments:
+      - { title: "Problem Set 1: Descriptive Statistics", due_day: -14, points: 20, submission: "online_upload" }
+      - { title: "Problem Set 2: Probability", due_day: -3, points: 20, submission: "online_upload" }
+      - { title: "Midterm Exam", due_day: 12, points: 100, submission: "on_paper" }
+      - { title: "Problem Set 3: Hypothesis Testing", due_day: 19, points: 25, submission: "online_upload" }
+      - { title: "Project Proposal", due_day: 26, points: 40, submission: "online_text_entry" }
+      - { title: "Problem Set 4: Linear Regression", due_day: 45, points: 25, submission: "online_upload" }
+      - { title: "Project Report", due_day: 68, points: 100, submission: "online_upload" }
+    quiz:
+      title: "Quiz 1: Sampling Distributions"
+      due_day: 1
+      questions:
+        - question: "As the sample size grows, the standard error of the mean..."
+          right: "gets smaller"
+          wrong: ["gets larger", "stays the same", "becomes the population mean"]
+        - question: "By the Central Limit Theorem, for large samples the sampling distribution of the mean is roughly..."
+          right: "normal"
+          wrong: ["uniform", "skewed right", "the same shape as the population"]
+        - question: "A sample of 100 has a standard deviation of 20. What is the standard error of the mean?"
+          right: "2"
+          wrong: ["0.2", "20", "200"]
+    events:
+      - { title: "Project demo day", day: 40, all_day: true }
+
+# Each student takes 2 or 3 of the courses above, by code.
+students:
+  - { name: "Maya Thompson", courses: ["CS 4350", "CS 4513", "STAT 3303"] }
+  - { name: "Liam Novak", courses: ["CS 4350", "CS 4513"] }
+  - { name: "Aisha Bello", courses: ["CS 4350", "STAT 3303"] }
+  - { name: "Diego Alvarez", courses: ["CS 4513", "STAT 3303"] }
+  - { name: "Hannah Schmidt", courses: ["CS 4350", "CS 4513", "STAT 3303"] }
+  - { name: "Wei Chen", courses: ["CS 4350", "STAT 3303"] }

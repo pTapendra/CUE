@@ -37,7 +37,8 @@ Changes two decisions in the local Canvas design: it said "no sample courses" (n
 ### Files
 
 - `scripts/local-canvas-seed.sh`: finds the Canvas folder the same way `local-canvas.sh` does (its settings file), checks Canvas's web container is running (otherwise it says to run `start`), runs the Ruby, writes the accounts file, and prints a short summary and the file's path.
-- `seed/local-canvas-seed.rb`: the data and the Ruby that creates or updates it. It prints one line per account for the shell script to write out. It's kept in its own file because it is too long to embed in the shell script.
+- `seed/local-canvas-seed.yml`: the data (courses, people, assignments, quizzes, events, the password suffix and email domains), as plain YAML.
+- `scripts/local-canvas-seed.rb`: the Ruby that loads that YAML (sent on stdin) and creates or updates the records. It prints one line per account for the shell script to write out.
 - Accounts file: `seed/local-canvas-accounts.csv` in the project folder (git-ignored), mode 600. Columns: `role,name,email,password,canvas_user_id,courses`.
 
 ### Data (dates relative to the day the script runs)

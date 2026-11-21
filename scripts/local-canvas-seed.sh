@@ -8,16 +8,18 @@
 #   scripts/local-canvas-seed.sh
 #
 # Every account's login and password go into seed/local-canvas-accounts.csv in
-# the project folder (git-ignored), readable by this user only. The data and the
-# Ruby that creates it are in seed/local-canvas-seed.rb.
+# the project folder (git-ignored), readable by this user only. The data is in
+# seed/local-canvas-seed.yml; local-canvas-seed.rb loads it into Canvas.
 #
 # Like local-canvas.sh, the functions below run nothing when this file is
 # sourced (the tests in local-canvas.test.sh do that); only running the file
 # calls main.
 
 SEED_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# The data (courses, people, assignments, events) lives in the seed folder.
-SEED_RUBY="$(cd "$SEED_SCRIPTS_DIR/.." && pwd)/seed/local-canvas-seed.rb"
+# The Ruby that loads the data into Canvas sits next to this script; the data
+# itself (courses, people, assignments, events) is YAML in the seed folder.
+SEED_RUBY="$SEED_SCRIPTS_DIR/local-canvas-seed.rb"
+SEED_DATA="${CUE_SEED_DATA:-$(cd "$SEED_SCRIPTS_DIR/.." && pwd)/seed/local-canvas-seed.yml}"
 # shellcheck source=local-canvas.sh
 . "$SEED_SCRIPTS_DIR/local-canvas.sh"
 
@@ -40,13 +42,14 @@ mac_time_zone() {
 }
 
 # Runs local-canvas-seed.rb in Canvas's web container, with the Mac's time
-# zone, and prints what it prints. On failure, shows what Canvas said on stderr
+# zone and the YAML data on stdin (never the terminal's input), and prints
+# what it prints. On failure, shows what Canvas said on stderr
 # (its error, without the backtrace).
 run_seed_ruby() { # canvas_dir
   local out err
   err="$(mktemp)"
   if ! out="$(cd "$1" && docker compose exec -T -e CUE_SEED_TZ="$(mac_time_zone)" web \
-    bundle exec rails runner "$(cat "$SEED_RUBY")" 2>"$err" </dev/null)"; then
+    bundle exec rails runner "$(cat "$SEED_RUBY")" 2>"$err" <"$SEED_DATA")"; then
     warn "Canvas couldn't add the demo data. What it said:"
     grep -v '^[[:space:]]*from ' "$err" | tail -n 5 >&2
     rm -f "$err"
@@ -77,6 +80,7 @@ write_accounts_file() { # file
 
 seed_main() {
   local file out counts code
+  [ -f "$SEED_DATA" ] || die "Can't find the demo data: $SEED_DATA"
   find_canvas
   canvas_web_running "$CANVAS_DIR" || die "Canvas isn't running. Start it with: scripts/local-canvas.sh start"
   file="$(seed_accounts_file)"
