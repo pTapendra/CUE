@@ -388,7 +388,22 @@ ngrok_url_from_json() {
 
 # Canvas settings that let ngrok's address through: Canvas accepts the
 # address, and its web server is published on 127.0.0.1 only, for ngrok.
+# Canvas's nginx also compresses what it sends (cue-gzip.conf, in the folder
+# its nginx.conf includes for extra settings): in development Canvas serves
+# about 20 MB of uncompressed JavaScript per page, about 4 MB compressed, and
+# through ngrok every byte goes up this Mac's connection and down to the phone.
 write_ngrok_compose() { # canvas_dir host
+  cat >"$1/cue-gzip.conf" <<'EOF'
+# Written by Cue's scripts/local-canvas.sh: Canvas's nginx compresses pages,
+# scripts and stylesheets, so phones reaching Canvas through ngrok download
+# far less. Mounted by docker-compose.cue-ngrok.yml.
+gzip on;
+gzip_comp_level 5;
+gzip_min_length 1024;
+gzip_proxied any;
+gzip_vary on;
+gzip_types text/css application/javascript text/javascript application/json image/svg+xml;
+EOF
   cat >"$1/$NGROK_COMPOSE_FILE" <<EOF
 # Written by Cue's scripts/local-canvas.sh so a phone can reach this Canvas
 # through ngrok. Rewritten on every start with ngrok. To undo, delete this
@@ -399,6 +414,8 @@ services:
       ADDITIONAL_ALLOWED_HOSTS: $2
     ports:
       - "127.0.0.1:$CANVAS_PORT:80"
+    volumes:
+      - ./cue-gzip.conf:/usr/src/nginx/conf.d/cue-gzip.conf:ro
 EOF
 }
 

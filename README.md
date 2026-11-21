@@ -130,7 +130,7 @@ A free ngrok account allows one tunnel at a time. While it runs, anyone with the
 
 If setup put Canvas on an external drive, Docker keeps its disk there too, inside a disk image that has to be mounted before Docker starts. Turn off **Start Docker Desktop when you sign in** (Docker Desktop → Settings → General), plug the drive in, and use `scripts/local-canvas.sh start`: it mounts the disk image first, then starts Docker. If Docker Desktop did start without it, `start` says so; quit Docker Desktop and run `start` again.
 
-`start` with ngrok writes `docker-compose.cue-ngrok.yml` in the Canvas folder so Canvas accepts the ngrok address. To undo that, delete the file; the next `start` or `stop` tidies Canvas's `.env` to match.
+`start` with ngrok writes `docker-compose.cue-ngrok.yml` in the Canvas folder so Canvas accepts the ngrok address, and `cue-gzip.conf` so Canvas's web server compresses what it sends (in development a Canvas page loads about 20 MB of JavaScript, about 4 MB compressed, which matters through ngrok). To undo both, delete `docker-compose.cue-ngrok.yml`; the next `start` or `stop` tidies Canvas's `.env` to match.
 
 ### Demo data
 

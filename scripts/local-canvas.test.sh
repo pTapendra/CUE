@@ -293,6 +293,17 @@ test_ngrok_url_from_json() {
   assert_eq "no tunnel" "" "$(printf '{"tunnels":[]}' | ngrok_url_from_json)"
 }
 
+test_write_ngrok_compose_turns_on_compression() {
+  write_ngrok_compose "$T" "my-name.ngrok-free.dev"
+  local conf
+  conf="$(cat "$T/cue-gzip.conf")"
+  assert_contains "gzip on" "gzip on;" "$conf"
+  assert_contains "scripts" "application/javascript" "$conf"
+  assert_contains "stylesheets" "text/css" "$conf"
+  assert_contains "mounted into Canvas's nginx" \
+    "./cue-gzip.conf:/usr/src/nginx/conf.d/cue-gzip.conf:ro" "$(cat "$T/docker-compose.cue-ngrok.yml")"
+}
+
 test_write_ngrok_compose_replaces_the_old_address() {
   write_ngrok_compose "$T" "old-name.ngrok-free.dev"
   write_ngrok_compose "$T" "new-name.ngrok-free.dev"
