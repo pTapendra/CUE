@@ -2,27 +2,88 @@ import { randomUUID } from "node:crypto";
 import type { Db } from "../db.js";
 import { hashToken, newDeviceToken } from "../crypto.js";
 
-/** Anonymous accounts: one per installed app, identified only by a device token. */
+/** Accounts and their devices. An account may carry a Canvas identity; each phone has its own device token. */
 export class AccountRepository {
   constructor(private readonly db: Db) {}
 
+  /** An unlinked account with one device. */
   create(): { studentId: string; deviceToken: string } {
-    const studentId = randomUUID();
-    const deviceToken = newDeviceToken();
-    this.db
-      .prepare("INSERT INTO students (id, token_hash, created_at) VALUES (?, ?, ?)")
-      .run(studentId, hashToken(deviceToken), new Date().toISOString());
-    return { studentId, deviceToken };
+    const studentId = this.insertStudent(null);
+    return { studentId, deviceToken: this.addDevice(studentId) };
+  }
+
+  /** A new account with this Canvas identity and no device yet. */
+  createLinked(identity: string): string {
+    return this.insertStudent(identity);
   }
 
   findByToken(deviceToken: string): string | null {
     const row = this.db
-      .prepare("SELECT id FROM students WHERE token_hash = ?")
-      .get(hashToken(deviceToken)) as { id: string } | undefined;
+      .prepare("SELECT student_id FROM devices WHERE token_hash = ?")
+      .get(hashToken(deviceToken)) as { student_id: string } | undefined;
+    return row?.student_id ?? null;
+  }
+
+  addDevice(studentId: string): string {
+    const deviceToken = newDeviceToken();
+    this.db
+      .prepare("INSERT INTO devices (token_hash, student_id, created_at) VALUES (?, ?, ?)")
+      .run(hashToken(deviceToken), studentId, new Date().toISOString());
+    return deviceToken;
+  }
+
+  removeDevice(deviceToken: string): void {
+    this.db.prepare("DELETE FROM devices WHERE token_hash = ?").run(hashToken(deviceToken));
+  }
+
+  identityOf(studentId: string): string | null {
+    const row = this.db.prepare("SELECT canvas_identity FROM students WHERE id = ?").get(studentId) as
+      | { canvas_identity: string | null }
+      | undefined;
+    return row?.canvas_identity ?? null;
+  }
+
+  findByIdentity(identity: string): string | null {
+    const row = this.db.prepare("SELECT id FROM students WHERE canvas_identity = ?").get(identity) as
+      | { id: string }
+      | undefined;
     return row?.id ?? null;
+  }
+
+  /** Throws when another account already has this identity. */
+  setIdentity(studentId: string, identity: string): void {
+    this.db.prepare("UPDATE students SET canvas_identity = ? WHERE id = ?").run(identity, studentId);
+  }
+
+  /** Moves hand-added courses and items (and the study blocks of those items); returns the items moved. */
+  moveManualData(fromStudentId: string, toStudentId: string): number {
+    return this.transaction(() => {
+      const args = { from: fromStudentId, to: toStudentId };
+      this.db.prepare("UPDATE courses SET student_id = @to WHERE student_id = @from AND source = 'manual'").run(args);
+      this.db
+        .prepare(
+          `UPDATE study_blocks SET student_id = @to
+           WHERE student_id = @from AND item_id IN (SELECT id FROM items WHERE student_id = @from AND source = 'manual')`,
+        )
+        .run(args);
+      return this.db.prepare("UPDATE items SET student_id = @to WHERE student_id = @from AND source = 'manual'").run(args)
+        .changes;
+    });
   }
 
   delete(studentId: string): void {
     this.db.prepare("DELETE FROM students WHERE id = ?").run(studentId);
+  }
+
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
+  private insertStudent(identity: string | null): string {
+    const studentId = randomUUID();
+    this.db
+      .prepare("INSERT INTO students (id, canvas_identity, created_at) VALUES (?, ?, ?)")
+      .run(studentId, identity, new Date().toISOString());
+    return studentId;
   }
 }
