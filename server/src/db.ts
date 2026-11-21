@@ -78,6 +78,15 @@ const MIGRATIONS: string[] = [
     shortfalls          TEXT NOT NULL DEFAULT '[]'
   );
   `,
+  `
+  ALTER TABLE canvas_connections ADD COLUMN refresh_sealed TEXT;
+  ALTER TABLE canvas_connections ADD COLUMN access_expires_at TEXT;
+  CREATE TABLE canvas_login_states (
+    state_hash TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL
+  );
+  `,
 ];
 
 /** Applies each migration newer than the database's `user_version`, once, in order. */

@@ -63,7 +63,7 @@ describe("migrations", () => {
     db.prepare(`INSERT INTO items (id, student_id, source, external_id, kind, title, due_at, created_at, updated_at)
                 VALUES ('i1', 's1', 'manual', 'i1', 'assignment', 'Essay', NULL, 'x', 'x')`).run();
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(1);
+    expect(db.pragma("user_version", { simple: true })).toBe(2);
     const cols = (db.prepare("PRAGMA table_info(items)").all() as { name: string }[]).map((c) => c.name);
     expect(cols).toEqual(expect.arrayContaining(["ends_at", "all_day", "study_minutes"]));
     expect(db.prepare("SELECT title, all_day FROM items").get()).toEqual({ title: "Essay", all_day: 0 });
@@ -73,7 +73,7 @@ describe("migrations", () => {
   it("runs each migration once", () => {
     const db = openDb(":memory:");
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(1);
+    expect(db.pragma("user_version", { simple: true })).toBe(2);
   });
 
   it("reads and writes the new item fields", () => {
@@ -83,5 +83,25 @@ describe("migrations", () => {
     const item = repo.createManualItem(sid, { courseId: null, kind: "event", title: "Lab", dueAt: "2026-11-03T15:00:00.000Z", endsAt: "2026-11-03T17:00:00.000Z" });
     expect(item).toMatchObject({ endsAt: "2026-11-03T17:00:00.000Z", allDay: false, studyMinutes: null });
     expect(repo.updateItem(sid, item.id, { studyMinutes: 120 })).toMatchObject({ studyMinutes: 120 });
+  });
+
+  it("adds the login columns and keeps existing Canvas connections", () => {
+    const db = openDb(":memory:");
+    db.exec("DROP TABLE canvas_login_states");
+    db.exec("ALTER TABLE canvas_connections DROP COLUMN refresh_sealed");
+    db.exec("ALTER TABLE canvas_connections DROP COLUMN access_expires_at");
+    db.pragma("user_version = 1");
+    db.prepare("INSERT INTO students VALUES ('s1', 'h', '2026-11-01T00:00:00Z')").run();
+    db.prepare("INSERT INTO canvas_connections (student_id, base_url, token_sealed, last_synced_at) VALUES ('s1', 'https://c.edu', 'sealed', '2026-11-01T00:00:00Z')").run();
+    migrate(db);
+    expect(db.pragma("user_version", { simple: true })).toBe(2);
+    expect(db.prepare("SELECT * FROM canvas_connections").get()).toEqual({
+      student_id: "s1",
+      base_url: "https://c.edu",
+      token_sealed: "sealed",
+      last_synced_at: "2026-11-01T00:00:00Z",
+      refresh_sealed: null,
+      access_expires_at: null,
+    });
   });
 });
