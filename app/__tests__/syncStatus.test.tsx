@@ -44,4 +44,12 @@ describe('SyncStatus', () => {
     expect(syncing).toMatchObject({ icon: 'sync', text: ['Syncing…'] });
     expect(syncing.row).toEqual(synced.row);
   });
+
+  it('starts at the left of a full-width line, as on Schedule and Courses', () => {
+    for (const state of [sync({}), sync({ busy: true })]) {
+      const { row } = lead(<SyncStatus sync={state} now={NOW} />);
+      expect(row).toMatchObject({ flexDirection: 'row' });
+      expect((row as { justifyContent?: string }).justifyContent ?? 'flex-start').toBe('flex-start');
+    }
+  });
 });

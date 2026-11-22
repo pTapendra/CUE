@@ -39,5 +39,6 @@ export function SyncStatus({ sync, now }: { sync: Sync; now: Date }) {
 
 const styles = StyleSheet.create({
   line: { minHeight: 44, justifyContent: 'center' },
-  synced: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  // In a row, `line`'s centring would centre the icon and words across the page; keep them at the left.
+  synced: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: space.xs },
 });
