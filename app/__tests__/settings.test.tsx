@@ -295,13 +295,12 @@ describe('Settings', () => {
       expect(texts(root)).toContain('Check what Cue found');
     });
 
-    it('with nothing new, stays in Settings and says In sync with Canvas', async () => {
+    it('always opens Check what Cue found, even with nothing new: skipped items are shown there', async () => {
       const { server, root } = await openSettings();
       server.state.preview.newItems = [];
       await press(root, 'Sync now');
       await flush();
-      expect(texts(root)).not.toContain('Check what Cue found');
-      expect(texts(root)).toEqual(expect.arrayContaining(['Daily limit', 'In sync with Canvas']));
+      expect(texts(root)).toEqual(expect.arrayContaining(['Check what Cue found', 'Cue is up to date with Canvas.']));
     });
 
     it('reads Log in with Canvas when not connected, and opens the login, not a sync', async () => {

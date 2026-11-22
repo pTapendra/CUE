@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text } from 'react-native';
+import { AccessibilityInfo, Pressable, Text } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator, type NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,7 +8,6 @@ import { ApiClient } from '../src/api/client';
 import { type Startup, StartupContext } from '../src/navigation/startup';
 import type { RootStackParamList } from '../src/navigation/types';
 import { CanvasLoginSheet } from '../src/screens/CanvasLoginScreen';
-import { ToastProvider } from '../src/ui/kit';
 import { useSync } from '../src/viewmodels/useSync';
 import { toReview } from '../src/viewmodels/useSyncReview';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
@@ -30,6 +29,7 @@ function Probe() {
       <Text>{`linked ${sync.linked}`}</Text>
       <Text>{`synced ${sync.lastSyncedAt}`}</Text>
       <Text>{`busy ${sync.busy}`}</Text>
+      <Text>{`inSync ${sync.inSync}`}</Text>
       <Pressable onPress={sync.sync}>
         <Text>sync</Text>
       </Pressable>
@@ -66,7 +66,6 @@ async function open(server: Server, startup: Startup = { loginAvailable: false, 
     tree = ReactTestRenderer.create(
       <ApiProvider client={client}>
         <StartupContext.Provider value={startup}>
-          <ToastProvider>
           <NavigationContainer ref={nav}>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="Tabs" component={Probe} />
@@ -75,7 +74,6 @@ async function open(server: Server, startup: Startup = { loginAvailable: false, 
               <Stack.Screen name="Settings" component={SettingsMarker} />
             </Stack.Navigator>
           </NavigationContainer>
-          </ToastProvider>
         </StartupContext.Provider>
       </ApiProvider>,
     );
@@ -139,7 +137,9 @@ describe('useSync', () => {
     expect(syncReads(server)).toBe(1);
   });
 
-  it('when nothing is new, sync stays and says In sync with Canvas', async () => {
+  it('when nothing is new, sync stays, is in sync for 2 seconds, and says so to a screen reader', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    announce.mockClear();
     const server = fakeServer();
     server.state.connected = true;
     server.state.preview.newItems = [];
@@ -149,12 +149,18 @@ describe('useSync', () => {
     await press(root, 'sync');
     await flush();
     expect(texts(root)).not.toContain('Review screen');
-    expect(texts(root)).toEqual(expect.arrayContaining(['In sync with Canvas', 'busy false']));
+    expect(texts(root)).toEqual(expect.arrayContaining(['inSync true', 'busy false']));
+    expect(announce).toHaveBeenCalledWith('In sync with Canvas');
     // The synced time is read again.
     expect(connectionReads(server)).toBe(2);
+
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(texts(root)).toContain('inSync false');
   });
 
-  it('with only skipped items, the toast offers Show, which opens Review with them', async () => {
+  it('with only skipped items, sync stays too: there is nothing new to review', async () => {
     const server = fakeServer();
     server.state.connected = true;
     server.state.preview.skipped = server.state.preview.newItems;
@@ -163,12 +169,8 @@ describe('useSync', () => {
 
     await press(root, 'sync');
     await flush();
-    expect(texts(root)).toContain('In sync with Canvas · 2 skipped');
     expect(texts(root)).not.toContain('Review screen');
-    await press(root, 'Show');
-    await flush();
-    expect(texts(root)).toEqual(expect.arrayContaining(['Review screen', 'preview given']));
-    expect(syncReads(server)).toBe(1);
+    expect(texts(root)).toContain('inSync true');
   });
 
   it('is busy while it reads, and a second tap does nothing', async () => {

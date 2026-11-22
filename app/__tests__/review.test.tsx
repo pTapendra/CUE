@@ -60,6 +60,19 @@ async function openReview(setup?: (server: ReturnType<typeof fakeServer>) => voi
   return { server, root };
 }
 
+/** Opens the app already connected, and opens the review from Settings → Sync now, which always shows it. */
+async function openReviewFromSettings(setup?: (server: ReturnType<typeof fakeServer>) => void) {
+  const server = fakeServer();
+  server.state.connected = true;
+  setup?.(server);
+  const { root } = await launch(server);
+  await tap(root, 'Settings');
+  await flush();
+  await press(root, 'Sync now');
+  await flush();
+  return { server, root };
+}
+
 /** Picks a date in the DateTimeField labelled `label`, as the phone's picker would. */
 async function pickDate(root: Node, label: string, date: Date) {
   await act(async () => root.findAll((n) => n.props.accessibilityLabel === label)[0].props.onPress());
@@ -194,12 +207,13 @@ describe('Check what Cue found', () => {
     expect(labels).toContain('Lab 2, will be removed from Cue');
   });
 
-  it('when nothing is new, Sync stays on Schedule and says In sync with Canvas', async () => {
+  it('when nothing is new, Sync stays on Schedule and its icon shows a check mark', async () => {
     const { server, root } = await openReview((s) => {
       s.state.preview.newItems = [];
     });
     expect(texts(root)).not.toContain('Check what Cue found');
-    expect(texts(root)).toContain('In sync with Canvas');
+    const button = onScreen(root, (n) => n.props.accessibilityLabel === 'In sync' && typeof n.props.onPress === 'function')[0];
+    expect(button.findAll((n) => n.props.name === 'checkmark')).not.toHaveLength(0);
     expect(selectedTab(root)).toBe('Schedule');
     expect(server.state.calls.some((c) => c.path === '/api/canvas/sync/confirm')).toBe(false);
   });
@@ -209,30 +223,27 @@ describe('Check what Cue found', () => {
     expect(server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/sync')).toHaveLength(1);
   });
 
-  it('with only skipped items, Show opens the review, which says Cue is up to date; Done closes without saving', async () => {
-    const { server, root } = await openReview((s) => {
+  it('with only skipped items, Settings → Sync now opens the review, which says Cue is up to date; Done closes without saving', async () => {
+    const { server, root } = await openReviewFromSettings((s) => {
       s.state.preview.skipped = s.state.preview.newItems;
       s.state.preview.newItems = [];
     });
-    await press(root, 'Show');
-    await flush();
     expect(texts(root)).toContain('Cue is up to date with Canvas.');
     expect(texts(root)).not.toContain('Save');
     expect(texts(root)).not.toContain('Cancel');
     await press(root, 'Done');
     await flush();
-    expect(selectedTab(root)).toBe('Schedule');
+    // Settings was opened from Today, so Done goes back to the tabs on Today.
+    expect(selectedTab(root)).toBe('Today');
     expect(texts(root)).not.toContain('Check what Cue found');
     expect(server.state.calls.some((c) => c.path === '/api/canvas/sync/confirm')).toBe(false);
   });
 
   it('Show 2 skipped reveals them unticked; ticking one sends it', async () => {
-    const { server, root } = await openReview((s) => {
+    const { server, root } = await openReviewFromSettings((s) => {
       s.state.preview.skipped = s.state.preview.newItems;
       s.state.preview.newItems = [];
     });
-    await press(root, 'Show');
-    await flush();
     expect(texts(root)).toContain('Cue is up to date with Canvas.');
     await press(root, 'Show 2 skipped');
     expect(texts(root)).toContain('Skipped');

@@ -9,6 +9,8 @@ type Props = {
   connected: boolean;
   onSync: () => void;
   onConnect: () => void;
+  /** A sync just found nothing to review: a check mark (and "In sync") for a moment. */
+  inSync?: boolean;
   /**
    * `icon`: just the sync icon, like the other header buttons (a screen reader still hears what it
    * does). `soft`: icon and words on a tinted pill, for the empty states that explain it.
@@ -16,9 +18,10 @@ type Props = {
   variant?: 'icon' | 'soft';
 };
 
-export function SyncButton({ busy, connected, onSync, onConnect, variant = 'icon' }: Props) {
+export function SyncButton({ busy, connected, onSync, onConnect, inSync = false, variant = 'icon' }: Props) {
   const { colors } = useTokens();
-  const title = !connected ? 'Connect Canvas' : busy ? 'Syncing…' : 'Sync';
+  const done = connected && !busy && inSync;
+  const title = !connected ? 'Connect Canvas' : busy ? 'Syncing…' : done ? 'In sync' : 'Sync';
   const iconOnly = variant === 'icon';
   return (
     <Pressable
@@ -35,10 +38,18 @@ export function SyncButton({ busy, connected, onSync, onConnect, variant = 'icon
       }
     >
       {iconOnly ? (
-        <SyncIcon spinning={busy} color={colors.accent} />
+        done ? (
+          <Ionicons name="checkmark" size={22} color={colors.accent} />
+        ) : (
+          <SyncIcon spinning={busy} color={colors.accent} />
+        )
       ) : (
         <View style={styles.row}>
-          {busy ? <ActivityIndicator color={colors.accent} /> : <Ionicons name="sync" size={16} color={colors.accent} />}
+          {busy ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : (
+            <Ionicons name={done ? 'checkmark' : 'sync'} size={16} color={colors.accent} />
+          )}
           <Text style={[type.bodyStrong, { color: colors.accent }]}>{title}</Text>
         </View>
       )}

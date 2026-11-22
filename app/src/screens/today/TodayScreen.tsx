@@ -84,7 +84,7 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
             Today
           </Text>
           <View style={styles.actions}>
-            <SyncButton busy={sync.busy} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
+            <SyncButton busy={sync.busy} inSync={sync.inSync} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
             <ProfileButton onPress={() => navigation.navigate('Settings')} />
           </View>
         </View>
@@ -121,7 +121,7 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
             }
             action={
               sync.connected ? (
-                <SyncButton variant="soft" busy={sync.busy} connected onSync={sync.sync} onConnect={sync.connect} />
+                <SyncButton variant="soft" busy={sync.busy} inSync={sync.inSync} connected onSync={sync.sync} onConnect={sync.connect} />
               ) : undefined
             }
           />

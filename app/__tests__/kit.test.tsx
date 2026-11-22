@@ -54,6 +54,20 @@ describe('SyncButton', () => {
       return Array.isArray(transform) && transform.some((t) => 'rotate' in t);
     });
 
+  it('as an icon shows a check mark while in sync', () => {
+    const r = render(<SyncButton variant="icon" busy={false} inSync connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    expect(r.root.findAll((n) => n.props.name === 'checkmark')).not.toHaveLength(0);
+    expect(r.root.findAll((n) => n.props.name === 'sync')).toHaveLength(0);
+    expect(texts(r.root)).toEqual([]);
+    expect(r.root.findAll((n) => n.props.accessibilityLabel === 'In sync' && typeof n.props.onPress === 'function')).toHaveLength(1);
+  });
+
+  it('soft, says In sync with a check mark while in sync', () => {
+    const r = render(<SyncButton variant="soft" busy={false} inSync connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    expect(texts(r.root)).toContain('In sync');
+    expect(r.root.findAll((n) => n.props.name === 'checkmark')).not.toHaveLength(0);
+  });
+
   it('as an icon spins its sync icon while busy', async () => {
     const r = render(<SyncButton variant="icon" busy connected onSync={jest.fn()} onConnect={jest.fn()} />);
     await act(async () => {});

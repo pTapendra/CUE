@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useApi } from '../api/ApiContext';
 import type { SyncPreview } from '../api/types';
 import { useStartup } from '../navigation/startup';
-import { useToast } from '../ui/kit';
 import { type CanvasLogin, useCanvasLogin } from './useCanvasLogin';
 import { toReview } from './useSyncReview';
 
@@ -16,9 +16,11 @@ export type Sync = {
   lastSyncedAt: string | null;
   /** Cue is reading Canvas, or the Canvas login is starting or finishing. */
   busy: boolean;
+  /** For a moment after a sync that found nothing to review: the Sync button shows a check mark. */
+  inSync: boolean;
   /**
    * Reads Canvas. Opens Check what Cue found when something is new, changed or removed; otherwise
-   * stays and says "In sync with Canvas". Without Canvas, connects instead.
+   * stays, shows `inSync` and tells a screen reader "In sync with Canvas". Without Canvas, connects instead.
    */
   sync(): void;
   /** Starts the in-app Canvas login, or opens the token form in token mode. */
@@ -31,6 +33,9 @@ export type Sync = {
    */
   login: CanvasLogin;
 };
+
+/** How long the Sync button shows its check mark after a sync with nothing to review. */
+const IN_SYNC_MS = 2000;
 
 /**
  * The Sync button's state and actions, shared by every screen that has one.
@@ -45,15 +50,17 @@ export function useSync(): Sync {
   const [loginAvailable, setLoginAvailable] = useState(startup.loginAvailable);
   const [linked, setLinked] = useState(startup.linked);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const toast = useToast();
   const [reading, setReading] = useState(false);
+  const [inSync, setInSync] = useState(false);
   // Set at once (state updates later), so a second tap during a read doesn't start another.
   const readingNow = useRef(false);
+  const inSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      if (inSyncTimer.current) clearTimeout(inSyncTimer.current);
     };
   }, []);
   const login = useCanvasLogin(() => {
@@ -95,6 +102,8 @@ export function useSync(): Sync {
   async function readCanvas() {
     if (readingNow.current) return;
     readingNow.current = true;
+    if (inSyncTimer.current) clearTimeout(inSyncTimer.current);
+    setInSync(false);
     setReading(true);
     let preview: SyncPreview | null = null;
     try {
@@ -113,16 +122,13 @@ export function useSync(): Sync {
       navigation.navigate('Review', { preview });
       return;
     }
-    const found = preview;
-    const skipped = found.skipped.length;
-    if (skipped > 0) {
-      toast.show(`In sync with Canvas · ${skipped} skipped`, {
-        label: 'Show',
-        onPress: () => navigation.navigate('Review', { preview: found }),
-      });
-    } else {
-      toast.show('In sync with Canvas');
-    }
+    // Nothing to review (skipped items are shown from Settings → Sync now).
+    AccessibilityInfo.announceForAccessibility('In sync with Canvas');
+    if (!mounted.current) return;
+    setInSync(true);
+    inSyncTimer.current = setTimeout(() => {
+      if (mounted.current) setInSync(false);
+    }, IN_SYNC_MS);
     // The synced time moved on.
     load(() => mounted.current);
   }
@@ -133,6 +139,7 @@ export function useSync(): Sync {
     linked,
     lastSyncedAt,
     busy: login.busy || reading,
+    inSync,
     sync: () => {
       if (connected) readCanvas();
       else connect();

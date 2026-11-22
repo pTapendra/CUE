@@ -11,9 +11,9 @@ Every Sync button opened "Check what Cue found" at once, and that page read Canv
 
 - While Cue reads Canvas, the header's sync icon spins (still when the phone asks to reduce motion). Screen readers hear "Syncing…"; the line under Today's title says "Syncing…".
 - Something new, changed or removed: "Check what Cue found" opens with what was just read. Canvas is not read a second time.
-- Nothing to review: the student stays on the page. A toast says **In sync with Canvas**, and the "synced" time updates.
-- Nothing new but items skipped before: the toast says **In sync with Canvas · N skipped** with a **Show** action that opens the review with that result, where "Show N skipped" brings them back.
-- Every Sync button works this way: the header icons, the empty-state buttons, and Settings → Sync now. So does finishing a Canvas login started from those buttons (a first login brings everything in, so the review opens).
+- Nothing to review (skipped items alone don't count): the student stays on the page. The Sync button shows a check mark for 2 seconds (the soft one also says "In sync"); a screen reader hears "In sync with Canvas"; the "synced" time updates. No pop-up (decided: a toast was tried and dropped).
+- The header icons and the empty-state buttons work this way, and so does finishing a Canvas login started from them (a first login brings everything in, so the review opens).
+- Settings → **Sync now** always opens the review, which reads Canvas itself: it is the way to items skipped before ("Show N skipped").
 - The read fails (offline, Canvas wants a new login, …): the review page opens as before; it reads again and explains, with Try again or Log in with Canvas.
 
 ## Non-goals
@@ -31,7 +31,8 @@ Every Sync button opened "Check what Cue found" at once, and that page read Canv
 
 - `Review` route params become `{ preview?: SyncPreview } | undefined`. `useSyncReview(initial?)` starts from `initial` when given (no first read; Try again still reads).
 - A pure `toReview(p)` (new, changed or removed > 0) is shared by `useSync` and `useSyncReview`'s "nothing listed".
-- `useSync.sync()`: busy while reading; then review with the preview, or the toast (and a fresh connection read for the synced time), or, on failure, the review page without a preview. Ignores taps while busy; no state updates after the screen goes away.
+- `useSync.sync()`: busy while reading; then review with the preview, or `inSync` for 2 s with an accessibility announcement (and a fresh connection read for the synced time), or, on failure, the review page without a preview. Ignores taps while busy; no state updates after the screen goes away.
+- `SyncButton` takes `inSync`: a check mark instead of the sync icon, labelled "In sync".
 - `SyncButton` icon variant: while busy, the sync icon rotates (Animated loop, native driver); with reduce motion on, it stays still.
 
 ## Left to the builder
