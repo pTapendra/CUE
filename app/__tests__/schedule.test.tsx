@@ -158,7 +158,7 @@ describe('the grid', () => {
     expect(shown).toContain('1 of 6');
     expect(shown).toContain('1 suggested block');
     expect(shown).toContain('Accept all');
-    expect(shown).toContain('DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours.');
+    expect(shown).toContain('DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times, raise the daily limit or lower the hours.');
   });
 
   it('opens on today and the next two days under the month, and pages by three days', async () => {

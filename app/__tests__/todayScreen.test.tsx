@@ -337,7 +337,7 @@ describe('Today', () => {
     });
 
     const shown = texts(root);
-    const warning = 'Stats midterm: 2 of 6 hours fit before Thu 5 Nov. Add study times or lower the hours.';
+    const warning = 'Stats midterm: 2 of 6 hours fit before Thu 5 Nov. Add study times, raise the daily limit or lower the hours.';
     expect(shown).toContain(warning);
     expect(shown.indexOf(warning)).toBeLessThan(shown.indexOf('Due soon'));
   });
