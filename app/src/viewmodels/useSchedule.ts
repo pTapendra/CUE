@@ -24,10 +24,10 @@ function keep(current: Page, next: Page): Page {
   return current.view === next.view && current.from.getTime() === next.from.getTime() ? current : next;
 }
 
-/** "DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times or lower the hours." */
+/** "DB final: 5 of 6 hours fit before Mon 9 Nov. Add study times, raise the daily limit or lower the hours." */
 export function shortfallText(s: Shortfall): string {
   const fit = `${s.plannedMinutes / 60} of ${s.neededMinutes / 60} hours fit`;
-  return `${s.itemTitle}: ${fit} before ${dayLabel(new Date(s.dueAt))}. Add study times or lower the hours.`;
+  return `${s.itemTitle}: ${fit} before ${dayLabel(new Date(s.dueAt))}. Add study times, raise the daily limit or lower the hours.`;
 }
 
 /**
