@@ -16,7 +16,7 @@ export interface FakeCanvasData {
 /** In-memory Canvas for tests and offline demos. */
 export class FakeCanvasClient implements CanvasClient {
   rejectToken = false;
-  /** When set, looking up one event fails as if Canvas could not be reached. */
+  /** When set, reading every event of a course (whatever its date) fails as if Canvas could not be reached. */
   failEventLookups = false;
   userId = "42";
 
@@ -42,10 +42,10 @@ export class FakeCanvasClient implements CanvasClient {
     });
   }
 
-  async getCalendarEvent(id: string) {
+  async listAllCalendarEvents(courseIds: string[]) {
     this.check();
     if (this.failEventLookups) throw new CanvasUnavailableError("lookup failed");
-    return this.data.events.find((e) => e.id === id) ?? null;
+    return this.data.events.filter((e) => courseIds.includes(e.courseId));
   }
 
   async whoAmI() {

@@ -73,9 +73,11 @@ Saved items are compared whether or not they pass `keep`: an assignment whose du
 A saved Canvas item is **Removed** when Canvas didn't return it and Cue is sure it read where it would be:
 
 - `assignment:<id>`: its course was in Canvas's course list, and that course's assignment list doesn't include it.
-- `event:<id>`: its course was in Canvas's course list, its saved date is within `from`…`to`, Canvas's events don't include it, **and** asking Canvas for that one event (`GET /api/v1/calendar_events/:id`) confirms it's gone: a 404, or the event comes back with `workflow_state` `"deleted"`.
+- `event:<id>`: its course was in Canvas's course list, its saved date is within `from`…`to`, Canvas's events don't include it, **and** reading every event of its course whatever the date (`GET /api/v1/calendar_events?all_events=true&context_codes[]=course_<id>`, which leaves deleted events out) doesn't include it either.
 
-Canvas only returns events dated within `from`…`to`, so an event missing from that list may still exist: the professor moved it outside the window, or the student changed its date in Cue after Canvas's own date passed. That is why each event that looks removed is looked up by ID. If the lookup returns the event, it is compared like any other saved item (and may be listed as Changed, with a Canvas date outside the window). If the lookup fails for any other reason (network, 401, 500), the event is not removed this time. Assignments need no lookup: their full list is read, with no date window.
+Canvas only returns events dated within `from`…`to`, so an event missing from that list may still exist: the professor moved it outside the window, or the student changed its date in Cue after Canvas's own date passed. That is why, when an event looks removed, its course's events are read again without dates. If the event is there, it is compared like any other saved item (and may be listed as Changed, with a Canvas date outside the window). If that read fails, those events are not removed this time. Assignments need no second read: their full list is read, with no date window. The second read uses the events route Cue's login may already read (`url:GET|/api/v1/calendar_events`); a route for one event (`/api/v1/calendar_events/:id`) would need a new login scope.
+
+A Canvas list Cue can't read whole (more than 50 pages, a next page on another host, or a page that isn't a list) fails the sync instead of coming back short, since anything missing from a list would look removed.
 
 A saved item in a course Canvas no longer lists (a course that ended, or one the student dropped) is never removed. A saved event dated outside `from`…`to`, or with no date, is never removed.
 
@@ -197,7 +199,7 @@ Update the README: UC1's description (sync shows new, changed and removed items;
 
 - No time in the summary line, and `markSynced` stays at read time.
 - Removed items are deleted on Save rather than kept with a flag: kept, the planner would go on scheduling study for work that no longer exists.
-- Removed is only claimed where Cue read Canvas fully (the course is listed; for events, the date is in range), and an event only after Canvas confirms, by ID, that it's gone. One extra Canvas request per event that looks removed, which is rare.
+- Removed is only claimed where Cue read Canvas fully (the course is listed; for events, the date is in range), and an event only after its course's events, read without dates, don't include it. One extra Canvas request per ten courses with an event that looks removed, which is rare.
 - Save leaves a Changed item's course as it is; course isn't a compared field.
 - A Canvas due date of null never overwrites a date in Cue.
 - Course renames are applied on Save without being listed.

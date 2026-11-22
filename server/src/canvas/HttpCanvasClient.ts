@@ -10,6 +10,8 @@ import {
 
 type Fetch = typeof fetch;
 
+const MAX_PAGES = 50;
+
 /**
  * Reads from the Canvas REST API with a personal access token.
  * The only request method in this class is GET (read-only Canvas access).
@@ -50,38 +52,25 @@ export class HttpCanvasClient implements CanvasClient {
   }
 
   async listCalendarEvents(courseIds: string[], from: Date, to: Date): Promise<CanvasEvent[]> {
-    if (courseIds.length === 0) return [];
+    return this.readEvents(courseIds, { start_date: from.toISOString(), end_date: to.toISOString() });
+  }
+
+  async listAllCalendarEvents(courseIds: string[]): Promise<CanvasEvent[]> {
+    return this.readEvents(courseIds, { all_events: "true" });
+  }
+
+  /** Course events from the one events route Cue's login may read, at most 10 context codes per request. */
+  private async readEvents(courseIds: string[], range: Record<string, string>): Promise<CanvasEvent[]> {
     const events: CanvasEvent[] = [];
-    // Canvas accepts at most 10 context codes per request.
     for (let i = 0; i < courseIds.length; i += 10) {
-      const chunk = courseIds.slice(i, i + 10);
-      const params = new URLSearchParams({
-        type: "event",
-        start_date: from.toISOString(),
-        end_date: to.toISOString(),
-        per_page: "100",
-      });
-      for (const id of chunk) params.append("context_codes[]", `course_${id}`);
-      const rows = await this.getAll<any>("/api/v1/calendar_events", params);
-      for (const e of rows) {
+      const params = new URLSearchParams({ type: "event", ...range, per_page: "100" });
+      for (const id of courseIds.slice(i, i + 10)) params.append("context_codes[]", `course_${id}`);
+      for (const e of await this.getAll<any>("/api/v1/calendar_events", params)) {
         const event = toEvent(e);
         if (event) events.push(event);
       }
     }
     return events;
-  }
-
-  async getCalendarEvent(id: string): Promise<CanvasEvent | null> {
-    const res = await this.get(`${this.baseUrl}/api/v1/calendar_events/${encodeURIComponent(id)}`, { notFound: true });
-    if (res === null) return null;
-    let body: any;
-    try {
-      body = await res.json();
-    } catch {
-      throw new CanvasUnavailableError("Unreadable reply");
-    }
-    if (body?.workflow_state === "deleted") return null;
-    return toEvent(body);
   }
 
   async whoAmI(): Promise<{ id: string }> {
@@ -97,26 +86,28 @@ export class HttpCanvasClient implements CanvasClient {
     return { id };
   }
 
-  /** GET a list endpoint and follow Canvas's Link: rel="next" pagination. */
+  /**
+   * GET a list endpoint and follow Canvas's Link: rel="next" pagination. A list it can't read whole
+   * fails instead of coming back short: a sync treats what's missing from a list as removed.
+   */
   private async getAll<T>(path: string, query: Record<string, string> | URLSearchParams): Promise<T[]> {
     const params = query instanceof URLSearchParams ? query : new URLSearchParams(query);
     let url: string | null = `${this.baseUrl}${path}?${params}`;
     const out: T[] = [];
-    for (let page = 0; url && page < 50; page++) {
+    for (let page = 0; url; page++) {
+      if (page === MAX_PAGES) throw new CanvasUnavailableError(`More than ${MAX_PAGES} pages`);
       const res = await this.get(url);
       const body = (await res.json()) as unknown;
-      if (Array.isArray(body)) out.push(...(body as T[]));
+      if (!Array.isArray(body)) throw new CanvasUnavailableError("Expected a list");
+      out.push(...(body as T[]));
       url = nextLink(res.headers.get("link"));
       // Never send the token to another host, even if a Link header points there.
-      if (url && new URL(url).origin !== new URL(this.baseUrl).origin) url = null;
+      if (url && new URL(url).origin !== new URL(this.baseUrl).origin) throw new CanvasUnavailableError("Next page is on another host");
     }
     return out;
   }
 
-  private async get(url: string): Promise<Response>;
-  /** With `notFound`, a 404 gives null instead of an error. */
-  private async get(url: string, opts: { notFound: true }): Promise<Response | null>;
-  private async get(url: string, opts?: { notFound: true }): Promise<Response | null> {
+  private async get(url: string): Promise<Response> {
     let res: Response;
     try {
       res = await this.fetchImpl(url, {
@@ -127,7 +118,6 @@ export class HttpCanvasClient implements CanvasClient {
       throw new CanvasUnavailableError((err as Error).message);
     }
     if (res.status === 401) throw new CanvasAuthError();
-    if (res.status === 404 && opts?.notFound) return null;
     if (!res.ok) throw new CanvasUnavailableError(`HTTP ${res.status}`);
     return res;
   }

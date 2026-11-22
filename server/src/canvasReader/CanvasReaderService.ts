@@ -291,18 +291,25 @@ export class CanvasReaderService {
     const { courses, groups } = await this.withClient(studentId, async (client) => {
       const read = { ...(await this.readCanvas(client, from, to)), from, to };
       let groups = diffCanvas(read, saved, skippedIds);
-      // Canvas only lists events within the dates read: ask for each missing one before calling it removed.
+      // Canvas lists events within the dates read only: before calling an event removed, read every
+      // event of its course whatever the date. A read that fails leaves those events alone.
+      const missing = groups.removed.filter((r) => r.key.startsWith("event:")).map((r) => r.key);
       const unsure = new Set<string>();
       let found = false;
-      for (const gone of groups.removed.filter((r) => r.key.startsWith("event:"))) {
+      if (missing.length > 0) {
+        const courseOf = new Map(saved.map((i) => [i.externalId, i.courseExternalId]));
+        const courseIds = [...new Set(missing.map((key) => courseOf.get(key)).filter((id): id is string => id != null))];
         try {
-          const event = await client.getCalendarEvent(gone.key.slice("event:".length));
-          if (event) {
-            read.items.push(this.proposeEvent(event, read.courses));
-            found = true;
+          const all = new Map((await client.listAllCalendarEvents(courseIds)).map((e) => [`event:${e.id}`, e]));
+          for (const key of missing) {
+            const event = all.get(key);
+            if (event) {
+              read.items.push(this.proposeEvent(event, read.courses));
+              found = true;
+            }
           }
         } catch {
-          unsure.add(gone.key);
+          for (const key of missing) unsure.add(key);
         }
       }
       if (found || unsure.size > 0) groups = diffCanvas(read, saved, skippedIds, unsure);
