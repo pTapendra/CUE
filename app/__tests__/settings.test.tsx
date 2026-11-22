@@ -592,14 +592,14 @@ describe('The profile icon', () => {
   const profileIcon = (root: Node): string | undefined => iconOf(onScreen(root, isSettings)[0]);
 
   /**
-   * The icon of the Settings button on the same page as the Back button. The Courses page stays
-   * mounted under a course's page, so its own button must not count.
+   * The Settings button on the same page as the Back button. The Courses page stays mounted under
+   * a course's page and comes first in the tree, so its own button must not count.
    */
-  function profileIconBesideBack(root: Node): string | undefined {
+  function settingsBesideBack(root: Node): Node | undefined {
     let node: Node | null = onScreen(root, isBack)[0] ?? null;
     while (node) {
       const button = node.findAll(isSettings)[0];
-      if (button) return texts(node).includes('Your courses · synced from Canvas') ? undefined : iconOf(button);
+      if (button) return texts(node).includes('Your courses · synced from Canvas') ? undefined : button;
       node = node.parent;
     }
     return undefined;
@@ -626,9 +626,12 @@ describe('The profile icon', () => {
     await press(root, 'Statistics');
     await flush();
     expect(onScreen(root, isBack)).toHaveLength(1);
-    expect(profileIconBesideBack(root)).toBe('person-circle-outline');
+    const button = settingsBesideBack(root);
+    expect(iconOf(button)).toBe('person-circle-outline');
 
-    await tap(root, 'Settings');
+    await act(async () => {
+      await button!.props.onPress();
+    });
     await flush();
     expect(texts(root)).toContain('Daily limit');
     await tap(root, 'Done');
@@ -645,6 +648,6 @@ describe('The profile icon', () => {
     await press(root, 'Statistics');
     await flush();
     expect(onScreen(root, isBack)).toHaveLength(1);
-    expect(profileIconBesideBack(root)).toBe('person-circle-outline');
+    expect(iconOf(settingsBesideBack(root))).toBe('person-circle-outline');
   });
 });
