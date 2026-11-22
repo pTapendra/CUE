@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Item, StudyBlock } from '../../api/types';
 import { dayKey, dayLabel } from '../../dates';
@@ -15,24 +15,25 @@ import {
   DayStrip,
   EmptyState,
   ErrorBanner,
-  IconButton,
   ListRow,
+  ProfileButton,
   SectionHeader,
   SyncButton,
   Tag,
   useToast,
 } from '../../ui/kit';
 import { type CourseColor, space, type, useTokens } from '../../ui/tokens';
-import { blockMeta, syncedLabel, type UpNext, upNextLabel, weekMarks, whenLabel } from '../../viewmodels/today';
-import { type Sync, useSync } from '../../viewmodels/useSync';
+import { blockMeta, type UpNext, upNextLabel, weekMarks, whenLabel } from '../../viewmodels/today';
+import { useSync } from '../../viewmodels/useSync';
 import { useToday } from '../../viewmodels/useToday';
 import { CanvasLoginSheet } from '../CanvasLoginScreen';
+import { SyncStatus } from '../SyncStatus';
 import { BlockSheet } from '../sheets/BlockSheet';
 import { ItemSheet } from '../sheets/ItemSheet';
 
 /**
  * Today: the week at a glance, the next study block, what is due in the next 7 days,
- * and what still has no date. Sync and Settings live in its header.
+ * and what still has no date. Sync and the profile icon (Settings) live in its header.
  */
 export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
   const { colors, courses: palette, unknown } = useTokens();
@@ -84,8 +85,8 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
             Today
           </Text>
           <View style={styles.actions}>
-            <SyncButton busy={sync.busy} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
-            <IconButton icon="settings-outline" label="Settings" onPress={() => navigation.navigate('Settings')} />
+            <SyncButton busy={sync.busy} inSync={sync.inSync} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
+            <ProfileButton onPress={() => navigation.navigate('Settings')} />
           </View>
         </View>
         <View style={styles.subtitle}>
@@ -121,7 +122,7 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
             }
             action={
               sync.connected ? (
-                <SyncButton variant="soft" busy={sync.busy} connected onSync={sync.sync} onConnect={sync.connect} />
+                <SyncButton variant="soft" busy={sync.busy} inSync={sync.inSync} connected onSync={sync.sync} onConnect={sync.connect} />
               ) : undefined
             }
           />
@@ -245,27 +246,6 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
   );
 }
 
-/** Under the title: when Canvas was synced, "Syncing…", or a Connect Canvas link. */
-function SyncStatus({ sync, now }: { sync: Sync; now: Date }) {
-  const { colors } = useTokens();
-  if (sync.busy) return <Text style={[type.body, { color: colors.text2 }]}>Syncing…</Text>;
-  if (!sync.connected) {
-    return (
-      <Pressable accessibilityRole="button" onPress={sync.connect} style={styles.link}>
-        <Text style={[type.bodyStrong, { color: colors.accent }]}>Connect Canvas</Text>
-      </Pressable>
-    );
-  }
-  return (
-    <View style={styles.synced}>
-      <Ionicons name="checkmark-circle" size={14} color={colors.ok} />
-      <Text style={[type.body, { color: colors.text2 }]}>
-        {sync.lastSyncedAt ? `Canvas synced ${syncedLabel(sync.lastSyncedAt, now)}` : 'Canvas connected'}
-      </Text>
-    </View>
-  );
-}
-
 /** The next accepted study block, else the suggestions to review, else a prompt to plan. */
 function UpNextCard({
   upNext,
@@ -348,8 +328,6 @@ const styles = StyleSheet.create({
   title: { flexShrink: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   subtitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.md },
-  synced: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 44 },
-  link: { minHeight: 44, justifyContent: 'center' },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
   spinner: { paddingVertical: space.xl },
   card: { gap: space.sm },

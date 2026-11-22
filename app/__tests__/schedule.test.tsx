@@ -291,7 +291,7 @@ describe('views', () => {
     expect(texts(root)).toContain('Oct – Nov');
   });
 
-  it('Day asks for one day, and Today comes back to today', async () => {
+  it('Day asks for one day, and tapping the Schedule tab again comes back to today', async () => {
     const { server, root } = await openSchedule();
     await tap(root, 'Next days'); // Thu 5 to Sat 7: today is not on screen
     await flush();
@@ -304,10 +304,29 @@ describe('views', () => {
     await flush();
     expect(lastRange(server)).toEqual({ from: nov(6), to: nov(7) });
 
-    await tap(root, 'Today');
+    await press(root, 'Schedule');
     await flush();
     expect(lastRange(server)).toEqual({ from: nov(2), to: nov(3) });
     expect(dayHeaders(root)).toEqual(['Mon 2 Nov, today']);
+  });
+
+  it('has no locate button', async () => {
+    const { root } = await openSchedule();
+    expect(onScreen(root, (n) => n.props.accessibilityLabel === 'Today' && typeof n.props.onPress === 'function')).toEqual([]);
+  });
+
+  it('coming back from another tab keeps the page the student left', async () => {
+    const { server, root } = await openSchedule();
+    await tap(root, 'Next days');
+    await flush();
+    expect(lastRange(server)).toEqual({ from: nov(5), to: nov(8) });
+
+    await press(root, 'Today');
+    await flush();
+    await press(root, 'Schedule');
+    await flush();
+    expect(lastRange(server)).toEqual({ from: nov(5), to: nov(8) });
+    expect(dayHeaders(root)[0]).toBe('Thu 5 Nov');
   });
 
   it('on a Sunday night, Week shows the week that ends that day', async () => {
@@ -500,20 +519,39 @@ describe('Sync', () => {
     return { server, root };
   }
 
+  /** What the header's Sync button says to a screen reader (it shows only an icon). */
+  const syncLabels = (root: Node) =>
+    onScreen(root, (n) => ['Sync', 'Connect Canvas'].includes(n.props.accessibilityLabel) && typeof n.props.onPress === 'function').map(
+      (n) => n.props.accessibilityLabel as string,
+    );
+
+  it('shows when Canvas was synced under the month', async () => {
+    const { root } = await openSchedule((s) => {
+      s.state.lastSyncedAt = new Date(2026, 10, 2, 8, 48).toISOString();
+    });
+    expect(texts(root)).toContain('Canvas synced 12 min ago');
+  });
+
+  it('without Canvas, the line under the month is a Connect Canvas link', async () => {
+    const { root } = await openUnconnected(false);
+    expect(texts(root)).toContain('Connect Canvas');
+  });
+
   it('Sync opens Check what Cue found', async () => {
     const { root } = await openSchedule();
-    expect(texts(root)).not.toContain('Connect Canvas');
+    expect(syncLabels(root)).toEqual(['Sync']);
+    expect(texts(root)).not.toContain('Sync');
 
-    await press(root, 'Sync');
+    await tap(root, 'Sync');
     await flush();
     expect(texts(root)).toContain('Check what Cue found');
   });
 
-  it('without Canvas, the button reads Connect Canvas and starts the login, which leads to the review', async () => {
+  it('without Canvas, the button says Connect Canvas and starts the login, which leads to the review', async () => {
     const { root } = await openUnconnected(true);
-    expect(texts(root)).not.toContain('Sync');
+    expect(syncLabels(root)).toEqual(['Connect Canvas']);
 
-    await press(root, 'Connect Canvas');
+    await tap(root, 'Connect Canvas');
     await flush();
     const web = root.findByType('WebView' as never);
     expect(web.props.source.uri).toBe('https://canvas.test/login/oauth2/auth?client_id=1&state=s1');
@@ -527,14 +565,13 @@ describe('Sync', () => {
     // Back on Schedule, which asks again whether Canvas is connected.
     await press(root, 'Cancel');
     await flush();
-    expect(texts(root)).toContain('Sync');
-    expect(texts(root)).not.toContain('Connect Canvas');
+    expect(syncLabels(root)).toEqual(['Sync']);
   });
 
   it('in token mode, Connect Canvas opens the token form', async () => {
     const { root } = await openUnconnected(false);
 
-    await press(root, 'Connect Canvas');
+    await tap(root, 'Connect Canvas');
     await flush();
     expect(onScreen(root, (n) => n.props.placeholder === 'Paste your token').length).toBeGreaterThan(0);
     await type(root, 'yourschool.instructure.com', 's.instructure.com');

@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApi } from '../api/ApiContext';
 import { ApiError, friendlyMessage } from '../api/client';
-import type { ProposedItem, SyncPreview } from '../api/types';
+import type { FieldChange, ProposedItem, SyncCounts, SyncPreview } from '../api/types';
+import { dayLabel, timeLabel } from '../dates';
 
 /** Sync failures that connecting Canvas again fixes. */
 const CONNECT_AGAIN = new Set(['canvas_token_rejected', 'canvas_not_connected']);
 
-/** View model for reviewing Canvas items before they are saved (UC1). */
-export function useSyncReview() {
+/**
+ * View model for reviewing what a sync found before it is saved (UC1): the new items to tick,
+ * Canvas's changes and removals (applied on Save), and the items skipped before. `initial` is
+ * what the sync already read: it is shown as it is, and only Try again reads Canvas again.
+ */
+export function useSyncReview(initial?: SyncPreview) {
   const api = useApi();
-  const [preview, setPreview] = useState<SyncPreview | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<SyncPreview | null>(initial ?? null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initial?.newItems.map((i) => i.key)));
   const [dates, setDates] = useState<Record<string, string | null>>({});
-  const [loading, setLoading] = useState(true);
+  const [showSkipped, setShowSkipped] = useState(false);
+  const [loading, setLoading] = useState(!initial);
+  const [readOnOpen] = useState(!initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConnect, setNeedsConnect] = useState(false);
@@ -24,8 +31,9 @@ export function useSyncReview() {
     try {
       const p = await api.previewSync();
       setPreview(p);
-      setSelected(new Set(p.items.map((i) => i.key)));
+      setSelected(new Set(p.newItems.map((i) => i.key)));
       setDates({});
+      setShowSkipped(false);
     } catch (err) {
       setError(friendlyMessage(err));
       setNeedsConnect(err instanceof ApiError && CONNECT_AGAIN.has(err.code));
@@ -35,8 +43,8 @@ export function useSyncReview() {
   }, [api]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (readOnOpen) load();
+  }, [load, readOnOpen]);
 
   const toggle = (key: string) =>
     setSelected((prev) => {
@@ -49,13 +57,12 @@ export function useSyncReview() {
   /** The date the student picked for an item (an ISO date), or null to leave it for later. */
   const setDate = (key: string, iso: string | null) => setDates((prev) => ({ ...prev, [key]: iso }));
 
-  async function confirm(): Promise<number | null> {
+  async function confirm(): Promise<SyncCounts | null> {
     if (!preview) return null;
     setSaving(true);
     setError(null);
     try {
-      const res = await api.confirmSync(preview.syncId, [...selected], buildDates(dates, selected));
-      return res.imported;
+      return await api.confirmSync(preview.syncId, [...selected], buildDates(dates, selected));
     } catch (err) {
       setError(friendlyMessage(err));
       return null;
@@ -64,14 +71,27 @@ export function useSyncReview() {
     }
   }
 
+  const nothingListed = !preview || !toReview(preview);
+
   return {
     preview,
     selected,
     toggle,
     dates,
     setDate,
-    /** The proposed items grouped by course, with the count to show. */
-    groups: groupByCourse(preview?.items ?? []),
+    /** The new items grouped by course. */
+    groups: groupByCourse(preview?.newItems ?? []),
+    changed: preview?.changed ?? [],
+    removed: preview?.removed ?? [],
+    /** The skipped items grouped by course, shown once the student asks. */
+    skippedGroups: groupByCourse(preview?.skipped ?? []),
+    skippedCount: preview?.skipped.length ?? 0,
+    showSkipped,
+    revealSkipped: () => setShowSkipped(true),
+    /** Nothing new, changed or removed. */
+    nothingListed,
+    /** Save is offered when there is something to save: anything listed, or a skipped item ticked again. */
+    canSave: !!preview && (!nothingListed || selected.size > 0),
     loading,
     saving,
     error,
@@ -80,6 +100,11 @@ export function useSyncReview() {
     reload: load,
     confirm,
   };
+}
+
+/** Whether a sync found something to review: anything new, changed or removed (skipped items alone don't count). */
+export function toReview(p: SyncPreview): boolean {
+  return p.newItems.length > 0 || p.changed.length > 0 || p.removed.length > 0;
 }
 
 /** Keeps the picked dates of the accepted items only. */
@@ -100,4 +125,53 @@ export function groupByCourse(items: ProposedItem[]): { courseName: string; item
     else groups.set(item.courseName, [item]);
   }
   return [...groups].map(([courseName, list]) => ({ courseName, items: list }));
+}
+
+const counted = (parts: [number, string][]) =>
+  parts
+    .filter(([n]) => n > 0)
+    .map(([n, word]) => `${n} ${word}`)
+    .join(', ');
+
+/** "1 new, 1 changed, 1 removed", leaving out what is zero. */
+export function summaryLine(p: SyncPreview): string {
+  return counted([
+    [p.newItems.length, 'new'],
+    [p.changed.length, 'changed'],
+    [p.removed.length, 'removed'],
+  ]);
+}
+
+/** "2 added, 1 updated", leaving out what is zero; "Saved" when only skips were recorded. */
+export function savedToast(c: SyncCounts): string {
+  return (
+    counted([
+      [c.added, 'added'],
+      [c.updated, 'updated'],
+      [c.removed, 'removed'],
+    ]) || 'Saved'
+  );
+}
+
+const LABELS: Record<FieldChange['field'], { shown: string; spoken: string; none: string }> = {
+  title: { shown: 'Title', spoken: 'title', none: 'no title' },
+  dueAt: { shown: 'Due', spoken: 'due date', none: 'no date' },
+  endsAt: { shown: 'Ends', spoken: 'end', none: 'no end' },
+  allDay: { shown: 'All day', spoken: 'all day', none: '' },
+};
+
+/** One change as the review shows it ("Due: Fri 27 Nov · 23:59 → Mon 30 Nov · 23:59") and as a screen reader says it. */
+export function describeChange(c: FieldChange): { shown: string; spoken: string } {
+  const label = LABELS[c.field];
+  const value = (v: string | boolean | null, spoken: boolean): string => {
+    if (typeof v === 'boolean') return spoken ? (v ? 'yes' : 'no') : v ? 'Yes' : 'No';
+    if (v === null) return label.none;
+    if (c.field === 'title') return v;
+    const d = new Date(v);
+    return spoken ? `${dayLabel(d)}, ${timeLabel(d)}` : `${dayLabel(d)} · ${timeLabel(d)}`;
+  };
+  return {
+    shown: `${label.shown}: ${value(c.from, false)} → ${value(c.to, false)}`,
+    spoken: `${label.spoken} changed from ${value(c.from, true)} to ${value(c.to, true)}`,
+  };
 }

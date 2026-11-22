@@ -11,6 +11,7 @@ export { ripple } from './feedback';
 export { IconButton } from './IconButton';
 export type { IoniconName } from './icons';
 export { ListRow } from './ListRow';
+export { ProfileButton } from './ProfileButton';
 export { SectionHeader } from './SectionHeader';
 export { SegmentedControl } from './SegmentedControl';
 export { Stepper } from './Stepper';

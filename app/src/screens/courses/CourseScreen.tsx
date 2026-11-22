@@ -12,6 +12,7 @@ import {
   ErrorBanner,
   IconButton,
   ListRow,
+  ProfileButton,
   SegmentedControl,
   Tag,
 } from '../../ui/kit';
@@ -57,9 +58,14 @@ export function CourseScreen({ navigation, route }: RootScreenProps<'Course'>) {
         {course ? (
           <View style={styles.codeRow}>
             <CourseDot color={color} />
-            <Text style={[type.section, { color: color.text }]}>{course.code ?? course.name}</Text>
+            <Text style={[type.section, styles.code, { color: color.text }]} numberOfLines={1}>
+              {course.code ?? course.name}
+            </Text>
           </View>
         ) : null}
+        <View style={styles.end}>
+          <ProfileButton onPress={() => navigation.navigate('Settings')} />
+        </View>
       </View>
       {course ? (
         <Text accessibilityRole="header" style={[type.largeTitle, styles.title, { color: colors.text }]}>
@@ -223,7 +229,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.sm, paddingTop: space.xs },
-  codeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  codeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
+  code: { flexShrink: 1 },
+  end: { marginLeft: 'auto' },
   title: { paddingHorizontal: space.lg },
   content: { padding: space.lg, gap: space.md },
   spinner: { paddingVertical: space.xl },

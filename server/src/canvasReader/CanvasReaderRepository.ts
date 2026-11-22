@@ -77,6 +77,20 @@ export class CanvasReaderRepository {
       .run(at.toISOString(), studentId);
   }
 
+  /** External IDs of the Canvas items this student skipped in a sync. */
+  skippedIds(studentId: string): Set<string> {
+    const rows = this.db.prepare("SELECT external_id FROM canvas_skipped WHERE student_id = ?").all(studentId) as { external_id: string }[];
+    return new Set(rows.map((r) => r.external_id));
+  }
+
+  /** Remembers `skip` as skipped and forgets `unskip`. */
+  setSkipped(studentId: string, skip: string[], unskip: string[]): void {
+    const add = this.db.prepare("INSERT OR IGNORE INTO canvas_skipped (student_id, external_id) VALUES (?, ?)");
+    const remove = this.db.prepare("DELETE FROM canvas_skipped WHERE student_id = ? AND external_id = ?");
+    for (const id of skip) add.run(studentId, id);
+    for (const id of unskip) remove.run(studentId, id);
+  }
+
   savePreview(studentId: string, preview: Omit<SyncPreview, "syncId">, ttlMs: number): SyncPreview {
     const syncId = randomUUID();
     const now = Date.now();

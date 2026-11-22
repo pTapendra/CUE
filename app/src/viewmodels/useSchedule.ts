@@ -118,6 +118,9 @@ export function useSchedule(open: { view: ScheduleView; date: Date }) {
     });
   }, []);
 
+  /** Today's page, in the view on screen. */
+  const goToday = useCallback(() => setPage((p) => keep(p, { view: p.view, from: pageStart(p.view, new Date()) })), []);
+
   /** Saves the item's study time. The open block keeps the new amount even if the re-plan moved it away. */
   async function setStudyHours(itemId: string, hours: number): Promise<boolean> {
     const ok = await actions.setStudyHours(itemId, hours);
@@ -151,7 +154,7 @@ export function useSchedule(open: { view: ScheduleView; date: Date }) {
     show,
     previous: () => setPage((p) => ({ ...p, from: addDays(p.from, -DAYS_IN_VIEW[p.view]) })),
     next: () => setPage((p) => ({ ...p, from: addDays(p.from, DAYS_IN_VIEW[p.view]) })),
-    goToday: () => setPage((p) => keep(p, { view: p.view, from: pageStart(p.view, new Date()) })),
+    goToday,
     suggestedCount: blocks.filter((b) => b.state === 'proposed').length,
     /** Accepts every suggestion that starts on the days on screen. */
     acceptVisible: () => actions.run(() => api.acceptBlocks(from, addDays(from, count))),

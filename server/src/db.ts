@@ -109,6 +109,13 @@ const MIGRATIONS: string[] = [
   DROP TABLE students;
   ALTER TABLE students_new RENAME TO students;
   `,
+  `
+  CREATE TABLE canvas_skipped (
+    student_id  TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    external_id TEXT NOT NULL,
+    PRIMARY KEY (student_id, external_id)
+  );
+  `,
 ];
 
 /**

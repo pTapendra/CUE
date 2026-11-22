@@ -9,7 +9,9 @@ import { deviceTimeZone } from '../src/timeZone';
 import { lightColors } from '../src/ui/tokens';
 import { studyTimesSummary } from '../src/viewmodels/useStudyTimes';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
-import { flush, isDisabled, press, styleOf, tap, texts } from '../test-support/ui';
+import { flush, isDisabled, onScreen, press, styleOf, tap, texts } from '../test-support/ui';
+
+type Node = ReactTestRenderer.ReactTestInstance;
 
 jest.useFakeTimers({ now: new Date(2026, 10, 2, 9, 0), doNotFake: ['nextTick', 'setImmediate'] });
 
@@ -46,7 +48,7 @@ const statsBlock: StudyBlock = {
 
 const HEADLINE = 'Know what to study, and when.';
 
-/** Opens Settings from the gear on Today. */
+/** Opens Settings from the profile icon on Today. */
 async function openSettings({ connected = true, loginAvailable = false, synced = true, linked = false, failLogout = false } = {}) {
   const server = fakeServer();
   server.state.linked = linked;
@@ -291,6 +293,14 @@ describe('Settings', () => {
       await press(root, 'Sync now');
       await flush();
       expect(texts(root)).toContain('Check what Cue found');
+    });
+
+    it('always opens Check what Cue found, even with nothing new: skipped items are shown there', async () => {
+      const { server, root } = await openSettings();
+      server.state.preview.newItems = [];
+      await press(root, 'Sync now');
+      await flush();
+      expect(texts(root)).toEqual(expect.arrayContaining(['Check what Cue found', 'Cue is up to date with Canvas.']));
     });
 
     it('reads Log in with Canvas when not connected, and opens the login, not a sync', async () => {
@@ -540,5 +550,113 @@ describe('Safe areas', () => {
     await tap(tree!.root, 'Done');
     await flush();
     expect(pagePadding('Today')).toEqual({ top: 47, bottom: 0 });
+  });
+});
+
+describe('The profile icon', () => {
+  const statistics = { id: 'c-stats', source: 'canvas' as const, name: 'Statistics', code: 'STAT' };
+
+  /** The app on Today, connected, with one course. `failCourses` makes the course list fail from then on. */
+  async function openApp() {
+    const server = fakeServer();
+    server.state.connected = true;
+    server.state.lastSyncedAt = new Date(2026, 10, 2, 8, 48).toISOString();
+    server.state.courses = [statistics];
+    server.state.items = [
+      {
+        id: 'midterm',
+        courseId: 'c-stats',
+        courseName: 'Statistics',
+        source: 'canvas',
+        kind: 'exam',
+        title: 'Stats midterm',
+        dueAt: new Date(2026, 10, 5, 9, 0).toISOString(),
+        endsAt: null,
+        allDay: false,
+        studyMinutes: null,
+        status: 'not_started',
+      },
+    ];
+    let coursesFail = false;
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      if (coursesFail && new URL(url).pathname === '/api/courses') {
+        return new Response(JSON.stringify({ error: 'server_error', message: 'x' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+      return server.fetchImpl(url, init);
+    }) as typeof fetch;
+    const client = new ApiClient('http://cue.test', memoryStore(), fetchImpl);
+    await act(async () => {
+      tree = ReactTestRenderer.create(<App client={client} />);
+    });
+    await flush();
+    return { root: tree!.root, failCourses: () => (coursesFail = true) };
+  }
+
+  const isSettings = (n: Node) => n.props.accessibilityLabel === 'Settings' && typeof n.props.onPress === 'function';
+  const isBack = (n: Node) => n.props.accessibilityLabel === 'Back' && typeof n.props.onPress === 'function';
+  const iconOf = (button: Node | undefined) => button?.findAll((n) => typeof n.props.name === 'string')[0]?.props.name;
+
+  /** The icon of the Settings button on screen, if there is one. */
+  const profileIcon = (root: Node): string | undefined => iconOf(onScreen(root, isSettings)[0]);
+
+  /**
+   * The Settings button on the same page as the Back button. The Courses page stays mounted under
+   * a course's page and comes first in the tree, so its own button must not count.
+   */
+  function settingsBesideBack(root: Node): Node | undefined {
+    let node: Node | null = onScreen(root, isBack)[0] ?? null;
+    while (node) {
+      const button = node.findAll(isSettings)[0];
+      const coursesPage = node.findAll((n) => n.props.accessibilityRole === 'header' && texts(n).includes('Courses')).length > 0;
+      if (button) return coursesPage ? undefined : button;
+      node = node.parent;
+    }
+    return undefined;
+  }
+
+  it.each(['Today', 'Schedule', 'Courses'])('on %s opens Settings, and Done comes back', async (tab) => {
+    const { root } = await openApp();
+    await press(root, tab);
+    await flush();
+    expect(profileIcon(root)).toBe('person-circle-outline');
+
+    await tap(root, 'Settings');
+    await flush();
+    expect(texts(root)).toEqual(expect.arrayContaining(['Settings', 'Done', 'Daily limit']));
+    await tap(root, 'Done');
+    await flush();
+    expect(texts(root)).not.toContain('Daily limit');
+  });
+
+  it("on a course's page opens Settings, and Done comes back to the course", async () => {
+    const { root } = await openApp();
+    await press(root, 'Courses');
+    await flush();
+    await press(root, 'Statistics');
+    await flush();
+    expect(onScreen(root, isBack)).toHaveLength(1);
+    const button = settingsBesideBack(root);
+    expect(iconOf(button)).toBe('person-circle-outline');
+
+    await act(async () => {
+      await button!.props.onPress();
+    });
+    await flush();
+    expect(texts(root)).toContain('Daily limit');
+    await tap(root, 'Done');
+    await flush();
+    expect(texts(root)).not.toContain('Daily limit');
+    expect(onScreen(root, isBack)).toHaveLength(1);
+  });
+
+  it("is on a course's page that failed to load", async () => {
+    const { root, failCourses } = await openApp();
+    await press(root, 'Courses');
+    await flush();
+    failCourses();
+    await press(root, 'Statistics');
+    await flush();
+    expect(onScreen(root, isBack)).toHaveLength(1);
+    expect(iconOf(settingsBesideBack(root))).toBe('person-circle-outline');
   });
 });

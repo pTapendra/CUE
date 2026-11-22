@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import {
@@ -13,6 +13,7 @@ import {
   ErrorBanner,
   IconButton,
   ListRow,
+  ProfileButton,
   SegmentedControl,
   Stepper,
   SyncButton,
@@ -34,19 +35,94 @@ function render(el: React.ReactElement) {
   return r;
 }
 
+describe('ProfileButton', () => {
+  it('is a Settings button with the person icon', async () => {
+    const onPress = jest.fn();
+    const r = render(<ProfileButton onPress={onPress} />);
+    const button = r.root.findAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Settings')[0];
+    expect(button.findAll((n) => typeof n.props.name === 'string')[0].props.name).toBe('person-circle-outline');
+    await tap(r.root, 'Settings');
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('SyncButton', () => {
+  /** The parts of `root` that turn: a rotate in their style's transform. */
+  const turning = (root: Node) =>
+    root.findAll((n) => {
+      const transform = StyleSheet.flatten(n.props.style)?.transform;
+      return Array.isArray(transform) && transform.some((t) => 'rotate' in t);
+    });
+
+  it('as an icon shows a check mark while in sync', () => {
+    const r = render(<SyncButton variant="icon" busy={false} inSync connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    expect(r.root.findAll((n) => n.props.name === 'checkmark')).not.toHaveLength(0);
+    expect(r.root.findAll((n) => n.props.name === 'sync')).toHaveLength(0);
+    expect(texts(r.root)).toEqual([]);
+    expect(r.root.findAll((n) => n.props.accessibilityLabel === 'In sync' && typeof n.props.onPress === 'function')).toHaveLength(1);
+  });
+
+  it('soft, says In sync with a check mark while in sync', () => {
+    const r = render(<SyncButton variant="soft" busy={false} inSync connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    expect(texts(r.root)).toContain('In sync');
+    expect(r.root.findAll((n) => n.props.name === 'checkmark')).not.toHaveLength(0);
+  });
+
+  it('as an icon spins its sync icon while busy', async () => {
+    const r = render(<SyncButton variant="icon" busy connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    await act(async () => {});
+    expect(r.root.findAll((n) => n.props.name === 'sync')).not.toHaveLength(0);
+    expect(r.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(turning(r.root)).not.toHaveLength(0);
+
+    act(() => r.update(<SyncButton variant="icon" busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />));
+    expect(turning(r.root)).toHaveLength(0);
+  });
+
+  it('as an icon stays still while busy when the phone reduces motion', async () => {
+    // React Native's test setup already stands in for this check; answer "reduce" for this one call.
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValueOnce(true);
+    const r = render(<SyncButton variant="icon" busy connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    await act(async () => {});
+    expect(r.root.findAll((n) => n.props.name === 'sync')).not.toHaveLength(0);
+    expect(turning(r.root)).toHaveLength(0);
+  });
+
+  it('as an icon has no text and no background, and says what it does to a screen reader', async () => {
+    const onSync = jest.fn();
+    const onConnect = jest.fn();
+    const r = render(<SyncButton variant="icon" busy={false} connected onSync={onSync} onConnect={onConnect} />);
+    const button = () => r.root.findAll((n) => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function')[0];
+    expect(texts(r.root)).toEqual([]);
+    expect(button().props.accessibilityLabel).toBe('Sync');
+    expect(styleOf(button()).backgroundColor).toBeUndefined();
+    expect(button().findAll((n) => n.props.name === 'sync')).not.toHaveLength(0);
+    await tap(r.root, 'Sync');
+    expect(onSync).toHaveBeenCalledTimes(1);
+
+    act(() => r.update(<SyncButton variant="icon" busy connected onSync={onSync} onConnect={onConnect} />));
+    expect(texts(r.root)).toEqual([]);
+    expect(button().props.accessibilityLabel).toBe('Syncing…');
+    expect(button().props.accessibilityState).toEqual({ disabled: true, busy: true });
+
+    act(() => r.update(<SyncButton variant="icon" busy={false} connected={false} onSync={onSync} onConnect={onConnect} />));
+    expect(texts(r.root)).toEqual([]);
+    await tap(r.root, 'Connect Canvas');
+    expect(onConnect).toHaveBeenCalledTimes(1);
+  });
+
   it('syncs, shows busy, and connects', async () => {
     const onSync = jest.fn();
     const onConnect = jest.fn();
-    const r = render(<SyncButton busy={false} connected onSync={onSync} onConnect={onConnect} />);
+    const r = render(<SyncButton variant="soft" busy={false} connected onSync={onSync} onConnect={onConnect} />);
     await press(r.root, 'Sync');
     expect(onSync).toHaveBeenCalledTimes(1);
     expect(onConnect).not.toHaveBeenCalled();
 
-    act(() => r.update(<SyncButton busy connected onSync={onSync} onConnect={onConnect} />));
+    act(() => r.update(<SyncButton variant="soft" busy connected onSync={onSync} onConnect={onConnect} />));
     expect(texts(r.root)).toContain('Syncing…');
 
-    act(() => r.update(<SyncButton busy={false} connected={false} onSync={onSync} onConnect={onConnect} />));
+    act(() => r.update(<SyncButton variant="soft" busy={false} connected={false} onSync={onSync} onConnect={onConnect} />));
     await press(r.root, 'Connect Canvas');
     expect(onConnect).toHaveBeenCalledTimes(1);
     expect(onSync).toHaveBeenCalledTimes(1);
@@ -268,7 +344,7 @@ describe('touch feedback', () => {
       undefined,
       c.line,
     ],
-    ['the Sync button', <SyncButton busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />, 'Sync', c.accent, c.accentPressed],
+    ['the header Sync button', <SyncButton variant="icon" busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />, 'Sync', undefined, c.accentTint],
     [
       'the soft Sync button',
       <SyncButton variant="soft" busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />,

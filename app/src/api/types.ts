@@ -98,12 +98,49 @@ export interface ProposedItem {
   title: string;
   dueAt: string | null;
   needsDate: boolean;
-  alreadyImported: boolean;
 }
 
+/** One field Canvas changed on a saved item: the saved value, then Canvas's. */
+export interface FieldChange {
+  field: 'title' | 'dueAt' | 'endsAt' | 'allDay';
+  from: string | boolean | null;
+  to: string | boolean | null;
+}
+
+/** A saved item Canvas changed; Save gives it Canvas's values. */
+export interface ChangedItem {
+  key: string;
+  courseName: string;
+  /** The saved kind. */
+  kind: ItemKind;
+  /** Canvas's title. */
+  title: string;
+  changes: FieldChange[];
+}
+
+/** A saved item Canvas no longer has; Save removes it from Cue. */
+export interface RemovedItem {
+  key: string;
+  courseName: string;
+  kind: ItemKind;
+  title: string;
+  dueAt: string | null;
+}
+
+/** What a sync found since the student last saved. */
 export interface SyncPreview {
   syncId: string;
-  items: ProposedItem[];
+  newItems: ProposedItem[];
+  changed: ChangedItem[];
+  removed: RemovedItem[];
+  /** Items the student skipped in an earlier sync. */
+  skipped: ProposedItem[];
+}
+
+export interface SyncCounts {
+  added: number;
+  updated: number;
+  removed: number;
 }
 
 export interface ItemInput {

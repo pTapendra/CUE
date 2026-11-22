@@ -2,23 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useApi } from '../../api/ApiContext';
-import type { Course, ProposedItem } from '../../api/types';
+import type { ChangedItem, Course, ProposedItem, RemovedItem, SyncPreview } from '../../api/types';
 import { dayLabel, timeLabel } from '../../dates';
 import { courseColorFor } from '../../ui/courseColors';
 import { Button, CourseDot, DateTimeField, ErrorBanner, Tag, useToast } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
 import { useCanvasLogin } from '../../viewmodels/useCanvasLogin';
-import { useSyncReview } from '../../viewmodels/useSyncReview';
+import { describeChange, groupByCourse, savedToast, summaryLine, useSyncReview } from '../../viewmodels/useSyncReview';
 import { CanvasLoginScreen } from '../CanvasLoginScreen';
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
 export function ReviewScreen({
+  initialPreview,
   onDone,
   onCancel,
   loginAvailable,
   onConnect,
 }: {
+  /** What the sync already read; without it, the screen reads Canvas itself. */
+  initialPreview?: SyncPreview;
   onDone: () => void;
   onCancel: () => void;
   /** The server has Canvas login set up, so the student can log in again right here. */
@@ -29,7 +30,7 @@ export function ReviewScreen({
   const api = useApi();
   const { colors, courses: palette, unknown } = useTokens();
   const toast = useToast();
-  const vm = useSyncReview();
+  const vm = useSyncReview(initialPreview);
   // After logging in again, read Canvas again right here.
   const login = useCanvasLogin(vm.reload);
   // Only for the colours: until the courses arrive (or if they can't), the dots are neutral.
@@ -54,15 +55,40 @@ export function ReviewScreen({
     );
   }
 
-  const count = vm.preview?.items.length ?? 0;
   const markFor = (name: string) => (courses ? courseColorFor(name, courses, palette, unknown) : unknown);
 
   async function save() {
-    const imported = await vm.confirm();
-    if (imported === null) return;
+    const counts = await vm.confirm();
+    if (counts === null) return;
     onDone();
-    toast.show(`${plural(imported, 'item')} saved from Canvas`);
+    toast.show(savedToast(counts));
   }
+
+  /** New or skipped items, grouped by course, with today's rows and date picker. */
+  const courseGroups = (groups: ReturnType<typeof groupByCourse>) =>
+    groups.map((g) => (
+      <View key={g.courseName} style={styles.group}>
+        <View style={styles.groupHeader}>
+          <CourseDot color={markFor(g.courseName)} />
+          <Text style={[type.section, { color: colors.text2 }]}>{g.courseName.toUpperCase()}</Text>
+        </View>
+        {g.items.map((item) => (
+          <Row
+            key={item.key}
+            item={item}
+            checked={vm.selected.has(item.key)}
+            onToggle={() => vm.toggle(item.key)}
+            date={vm.dates[item.key] ?? null}
+            onDate={(iso) => vm.setDate(item.key, iso)}
+          />
+        ))}
+      </View>
+    ));
+  const heading = (text: string) => (
+    <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
+      {text}
+    </Text>
+  );
 
   return (
     <View style={styles.root}>
@@ -71,10 +97,8 @@ export function ReviewScreen({
           <Text accessibilityRole="header" style={[type.largeTitle, { color: colors.text }]}>
             Check what Cue found
           </Text>
-          {vm.preview ? (
-            <Text style={[type.body, { color: colors.text2 }]}>
-              {`${plural(count, 'item')} from ${plural(vm.groups.length, 'course')}. Untick anything you don't want.`}
-            </Text>
+          {vm.preview && !vm.nothingListed ? (
+            <Text style={[type.body, { color: colors.text2 }]}>{summaryLine(vm.preview)}</Text>
           ) : null}
           {vm.error ? <ErrorBanner message={vm.error} /> : null}
           {vm.needsConnect ? (
@@ -88,27 +112,40 @@ export function ReviewScreen({
             )
           ) : null}
         </View>
-        {vm.preview && count === 0 ? (
-          <Text style={[type.body, { color: colors.text2 }]}>Nothing upcoming in Canvas right now.</Text>
+        {vm.preview && vm.nothingListed ? (
+          <Text style={[type.body, { color: colors.text2 }]}>Cue is up to date with Canvas.</Text>
         ) : null}
-        {vm.groups.map((g) => (
-          <View key={g.courseName} style={styles.group}>
-            <View style={styles.groupHeader}>
-              <CourseDot color={markFor(g.courseName)} />
-              <Text style={[type.section, { color: colors.text2 }]}>{g.courseName.toUpperCase()}</Text>
-            </View>
-            {g.items.map((item) => (
-              <Row
-                key={item.key}
-                item={item}
-                checked={vm.selected.has(item.key)}
-                onToggle={() => vm.toggle(item.key)}
-                date={vm.dates[item.key] ?? null}
-                onDate={(iso) => vm.setDate(item.key, iso)}
-              />
+        {vm.groups.length > 0 ? (
+          <View style={styles.section}>
+            {heading('New')}
+            {courseGroups(vm.groups)}
+          </View>
+        ) : null}
+        {vm.changed.length > 0 ? (
+          <View style={styles.section}>
+            {heading('Changed')}
+            {vm.changed.map((item) => (
+              <ChangedRow key={item.key} item={item} />
             ))}
           </View>
-        ))}
+        ) : null}
+        {vm.removed.length > 0 ? (
+          <View style={styles.section}>
+            {heading('Removed from Canvas')}
+            {vm.removed.map((item) => (
+              <RemovedRow key={item.key} item={item} />
+            ))}
+          </View>
+        ) : null}
+        {vm.skippedCount > 0 && !vm.showSkipped ? (
+          <Button title={`Show ${vm.skippedCount} skipped`} variant="plain" onPress={vm.revealSkipped} />
+        ) : null}
+        {vm.showSkipped && vm.skippedGroups.length > 0 ? (
+          <View style={styles.section}>
+            {heading('Skipped')}
+            {courseGroups(vm.skippedGroups)}
+          </View>
+        ) : null}
       </ScrollView>
       {login.authorizeUrl ? (
         <CanvasLoginScreen
@@ -119,19 +156,22 @@ export function ReviewScreen({
         />
       ) : null}
       <View style={[styles.footer, { borderColor: colors.line, backgroundColor: colors.bg }]}>
-        <Button title="Cancel" variant="secondary" onPress={onCancel} />
-        <View style={styles.save}>
-          {vm.preview ? (
-            <Button
-              title={`Save ${plural(vm.selected.size, 'item')}`}
-              busy={vm.saving}
-              disabled={vm.selected.size === 0}
-              onPress={save}
-            />
-          ) : (
-            <Button title="Try again" onPress={vm.reload} />
-          )}
-        </View>
+        {vm.preview && !vm.canSave ? (
+          <View style={styles.save}>
+            <Button title="Done" onPress={onCancel} />
+          </View>
+        ) : (
+          <>
+            <Button title="Cancel" variant="secondary" onPress={onCancel} />
+            <View style={styles.save}>
+              {vm.preview ? (
+                <Button title="Save" busy={vm.saving} onPress={save} />
+              ) : (
+                <Button title="Try again" onPress={vm.reload} />
+              )}
+            </View>
+          </>
+        )}
       </View>
     </View>
   );
@@ -154,16 +194,9 @@ function Row({
   const exam = item.kind === 'exam';
   const due = item.dueAt ? new Date(item.dueAt) : null;
   const edge = exam ? colors.exam : colors.accent;
-  const when = [due ? `${dayLabel(due)} · ${timeLabel(due)}` : null, item.alreadyImported ? 'Already saved' : null]
-    .filter(Boolean)
-    .join(' · ');
-  // Everything the row shows, for a screen reader: "Midterm, exam, Thu 5 Nov, 09:00, already saved".
-  const spoken = [
-    item.title,
-    exam ? 'exam' : null,
-    due ? `${dayLabel(due)}, ${timeLabel(due)}` : 'no date',
-    item.alreadyImported ? 'already saved' : null,
-  ]
+  const when = due ? `${dayLabel(due)} · ${timeLabel(due)}` : null;
+  // Everything the row shows, for a screen reader: "Midterm, exam, Thu 5 Nov, 09:00".
+  const spoken = [item.title, exam ? 'exam' : null, due ? `${dayLabel(due)}, ${timeLabel(due)}` : 'no date']
     .filter(Boolean)
     .join(', ');
   return (
@@ -203,12 +236,45 @@ function Row({
   );
 }
 
+/** A saved item Canvas changed: what changed, old → new. No checkbox: Save applies it. */
+function ChangedRow({ item }: { item: ChangedItem }) {
+  const { colors } = useTokens();
+  const lines = item.changes.map(describeChange);
+  const spoken = [item.title, ...lines.map((l) => l.spoken)].join(', ');
+  return (
+    <View accessible accessibilityLabel={spoken} style={[styles.row, styles.info, { backgroundColor: colors.bg2 }]}>
+      <Text style={[type.bodyStrong, { color: colors.text }]}>{item.title}</Text>
+      {item.kind === 'exam' ? <Tag label="Exam" tone="exam" /> : null}
+      <Text style={[type.meta, { color: colors.text2 }]}>{item.courseName}</Text>
+      {lines.map((l) => (
+        <Text key={l.shown} style={[type.body, { color: colors.text }]}>
+          {l.shown}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+/** A saved item Canvas no longer has. No checkbox: Save removes it. */
+function RemovedRow({ item }: { item: RemovedItem }) {
+  const { colors } = useTokens();
+  return (
+    <View accessible accessibilityLabel={`${item.title}, will be removed from Cue`} style={[styles.row, styles.info, { backgroundColor: colors.bg2 }]}>
+      <Text style={[type.bodyStrong, { color: colors.text }]}>{item.title}</Text>
+      <Text style={[type.meta, { color: colors.text2 }]}>{item.courseName}</Text>
+      <Text style={[type.body, { color: colors.text2 }]}>Will be removed from Cue</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { padding: space.lg, gap: space.lg },
   header: { gap: space.sm },
+  section: { gap: space.md },
   group: { gap: space.sm },
+  info: { gap: space.xs, paddingVertical: space.sm },
   groupHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   row: { borderRadius: radius.md, paddingHorizontal: space.md },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 44, paddingVertical: space.sm },

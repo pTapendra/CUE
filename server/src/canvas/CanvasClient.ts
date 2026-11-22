@@ -16,6 +16,8 @@ export interface CanvasClient {
   listCourses(): Promise<CanvasCourse[]>;
   listAssignments(courseId: string): Promise<CanvasAssignment[]>;
   listCalendarEvents(courseIds: string[], from: Date, to: Date): Promise<CanvasEvent[]>;
+  /** Every event of these courses, whatever its date (Canvas leaves deleted events out). */
+  listAllCalendarEvents(courseIds: string[]): Promise<CanvasEvent[]>;
   /** Who the token belongs to (GET /api/v1/users/self). */
   whoAmI(): Promise<{ id: string }>;
 }

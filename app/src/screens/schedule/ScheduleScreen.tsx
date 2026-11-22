@@ -5,11 +5,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { Item } from '../../api/types';
 import { monthTitle, parseDay, rangeLabel } from '../../dates';
 import type { TabScreenProps } from '../../navigation/types';
-import { ADD_BUTTON_CLEARANCE, AddButton, Button, ErrorBanner, IconButton, SegmentedControl, SyncButton } from '../../ui/kit';
+import { ADD_BUTTON_CLEARANCE, AddButton, Button, ErrorBanner, IconButton, ProfileButton, SegmentedControl, SyncButton } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
 import { type ScheduleView, useSchedule } from '../../viewmodels/useSchedule';
 import { useSync } from '../../viewmodels/useSync';
 import { CanvasLoginSheet } from '../CanvasLoginScreen';
+import { SyncStatus } from '../SyncStatus';
 import { BlockSheet } from '../sheets/BlockSheet';
 import { ItemSheet } from '../sheets/ItemSheet';
 import { TimeGrid } from '../TimeGrid';
@@ -25,7 +26,8 @@ const DEFAULT_VIEW: ScheduleView = '3days';
 
 /**
  * Schedule: 1, 3 or 7 days of deadlines and study blocks on a time grid.
- * Route params `{ date, view }` open a page; this is how Today opens a day.
+ * Route params `{ date, view }` open a page; this is how Today opens a day. Tapping the Schedule
+ * tab again comes back to today.
  */
 export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>) {
   const { colors } = useTokens();
@@ -45,6 +47,17 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
     navigation.setParams({ view: undefined, date: undefined });
   }, [wantedView, wantedDate, show, navigation]);
 
+  // Tapping the Schedule tab while on Schedule comes back to today's page. The tab press that
+  // brings the student here from another tab keeps the page they left.
+  const { goToday } = vm;
+  useEffect(
+    () =>
+      navigation.addListener('tabPress', () => {
+        if (navigation.isFocused()) goToday();
+      }),
+    [navigation, goToday],
+  );
+
   const openBlock = vm.openBlock;
   const suggested = vm.suggestedCount;
   const first = vm.days[0];
@@ -58,15 +71,13 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
           {monthTitle(first, last, new Date())}
         </Text>
         <View style={styles.actions}>
-          <SyncButton
-            variant="soft"
-            busy={sync.busy}
-            connected={sync.connected}
-            onSync={sync.sync}
-            onConnect={sync.connect}
-          />
-          <IconButton icon="locate-outline" label="Today" onPress={vm.goToday} />
+          <SyncButton busy={sync.busy} inSync={sync.inSync} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
+          <ProfileButton onPress={() => navigation.navigate('Settings')} />
         </View>
+      </View>
+
+      <View style={styles.status}>
+        <SyncStatus sync={sync} now={new Date()} />
       </View>
 
       <View style={styles.controls}>
@@ -173,7 +184,8 @@ const styles = StyleSheet.create({
   },
   title: { flexShrink: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  controls: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.xs },
+  status: { paddingHorizontal: space.lg },
+  controls: { paddingHorizontal: space.lg, gap: space.xs },
   pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   range: { flex: 1, textAlign: 'center' },
   notices: { flexGrow: 0, maxHeight: '30%' },

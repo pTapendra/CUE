@@ -125,7 +125,7 @@ describe.each(['light', 'dark'] as const)('every screen in %s mode', (scheme) =>
     await press(root, 'Done');
     await flush();
 
-    await press(root, 'Sync');
+    await tap(root, 'Sync');
     await flush();
     expect(texts(root)).toContain('Check what Cue found');
   });

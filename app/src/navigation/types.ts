@@ -1,6 +1,7 @@
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { SyncPreview } from '../api/types';
 
 export type TabParamList = {
   Today: undefined;
@@ -24,7 +25,8 @@ export type RootStackParamList = {
   StudyTimes: undefined;
   WhatCueKeeps: undefined;
   /** A modal. */
-  Review: undefined;
+  /** `preview`: what a sync just read, shown as it is (no second read of Canvas). */
+  Review: { preview?: SyncPreview } | undefined;
   /** A modal: the token form, for a server without Canvas login. */
   TokenConnect: undefined;
 };

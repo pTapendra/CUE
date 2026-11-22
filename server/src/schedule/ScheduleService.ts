@@ -1,4 +1,5 @@
 import type { AcceptedBlock, BlockRef, Interval, PlanItem } from "../planner/types.js";
+import type { SavedCanvasItem } from "../canvasReader/diff.js";
 import type { Course, Item, ItemKind, ItemStatus, ScheduleRepository, StudyBlock } from "./ScheduleRepository.js";
 
 export class NotFoundError extends Error {
@@ -35,6 +36,28 @@ export function normalizeDate(value: string | null): string | null {
 export interface CanvasImport {
   courses: { externalId: string; name: string; code: string | null }[];
   items: { externalId: string; courseExternalId: string; kind: ItemKind; title: string; dueAt: string | null; endsAt: string | null; allDay: boolean }[];
+}
+
+export interface CanvasSyncChanges {
+  courses: CanvasImport["courses"];
+  add: CanvasImport["items"];
+  /** Canvas's values for saved items, by item ID. */
+  update: { itemId: string; title: string; dueAt: string | null; endsAt: string | null; allDay: boolean }[];
+  /** Item IDs. */
+  remove: string[];
+}
+
+export interface CanvasSyncCounts {
+  added: number;
+  updated: number;
+  removed: number;
+}
+
+/** A Canvas item's dates as Cue stores them: Canvas may give an end that is not after the start; that end is unknown. */
+function canvasDates(item: { dueAt: string | null; endsAt: string | null }): { dueAt: string | null; endsAt: string | null } {
+  const dueAt = normalizeDate(item.dueAt);
+  const endsAt = normalizeDate(item.endsAt);
+  return { dueAt, endsAt: dueAt !== null && endsAfterStart(dueAt, endsAt) ? endsAt : null };
 }
 
 export interface BlockView {
@@ -85,7 +108,7 @@ const overlaps = (a: Interval, b: Interval) =>
   Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
 
 /** True when the end is after the start. An end that is not means the end is unknown. */
-function endsAfterStart(dueAt: string, endsAt: string | null): endsAt is string {
+export function endsAfterStart(dueAt: string, endsAt: string | null): endsAt is string {
   return endsAt !== null && Date.parse(endsAt) > Date.parse(dueAt);
 }
 
@@ -163,37 +186,50 @@ export class ScheduleService {
     };
   }
 
-  /** Called by the Canvas Reader once the student has confirmed a sync. */
+  /** Saves Canvas items as new or refreshed ones (a confirmed sync's additions only). */
   importFromCanvas(studentId: string, data: CanvasImport): number {
-    const imported = this.repo.transaction(() => {
-      const courseIds = new Map<string, string>();
-      for (const c of data.courses) {
-        courseIds.set(c.externalId, this.repo.upsertCanvasCourse(studentId, c.externalId, c.name, c.code));
-      }
-      for (const item of data.items) {
-        const courseId = courseIds.get(item.courseExternalId);
-        if (!courseId) continue;
-        const dueAt = normalizeDate(item.dueAt);
-        const endsAt = normalizeDate(item.endsAt);
-        this.repo.upsertCanvasItem(studentId, {
-          externalId: item.externalId,
-          courseId,
-          kind: item.kind,
-          title: item.title,
-          dueAt,
-          // Canvas may give an end that is not after the start; that end is unknown.
-          endsAt: dueAt !== null && endsAfterStart(dueAt, endsAt) ? endsAt : null,
-          allDay: item.allDay,
-        });
-      }
-      return data.items.length;
-    });
-    this.emit(studentId);
-    return imported;
+    return this.applyCanvasSync(studentId, { courses: data.courses, add: data.items, update: [], remove: [] }).added;
   }
 
-  importedCanvasIds(studentId: string): Set<string> {
-    return this.repo.importedExternalIds(studentId);
+  /**
+   * Called by the Canvas Reader once the student has saved a sync: adds the accepted items, gives
+   * changed ones Canvas's values, and deletes the ones gone from Canvas, in one transaction with
+   * `alongside`. Courses used by an added item are saved; the others are refreshed only if Cue has
+   * them. Items deleted meanwhile are neither re-created nor counted.
+   */
+  applyCanvasSync(studentId: string, changes: CanvasSyncChanges, alongside?: () => void): CanvasSyncCounts {
+    const counts = this.repo.transaction(() => {
+      const used = new Set(changes.add.map((i) => i.courseExternalId));
+      const courseIds = new Map<string, string>();
+      for (const c of changes.courses) {
+        if (used.has(c.externalId)) courseIds.set(c.externalId, this.repo.upsertCanvasCourse(studentId, c.externalId, c.name, c.code));
+        else this.repo.refreshCanvasCourse(studentId, c.externalId, c.name, c.code);
+      }
+      let added = 0;
+      for (const item of changes.add) {
+        const courseId = courseIds.get(item.courseExternalId);
+        if (!courseId) continue;
+        this.repo.upsertCanvasItem(studentId, { externalId: item.externalId, courseId, kind: item.kind, title: item.title, allDay: item.allDay, ...canvasDates(item) });
+        added++;
+      }
+      let updated = 0;
+      for (const u of changes.update) {
+        if (this.repo.updateCanvasItem(studentId, u.itemId, { title: u.title, allDay: u.allDay, ...canvasDates(u) })) updated++;
+      }
+      let removed = 0;
+      for (const id of changes.remove) {
+        if (this.repo.deleteItem(studentId, id)) removed++;
+      }
+      alongside?.();
+      return { added, updated, removed };
+    });
+    if (counts.added + counts.updated + counts.removed > 0) this.emit(studentId);
+    return counts;
+  }
+
+  /** Every Canvas item this student saved, for a sync to compare with. */
+  savedCanvasItems(studentId: string): SavedCanvasItem[] {
+    return this.repo.savedCanvasItems(studentId);
   }
 
   addItem(

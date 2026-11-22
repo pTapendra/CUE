@@ -3,12 +3,13 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { dayLabel } from '../../dates';
 import type { TabScreenProps } from '../../navigation/types';
 import { courseColorFor } from '../../ui/courseColors';
-import { Card, CourseDot, EmptyState, ErrorBanner, SyncButton, Tag } from '../../ui/kit';
+import { Card, CourseDot, EmptyState, ErrorBanner, ProfileButton, SyncButton, Tag } from '../../ui/kit';
 import { space, type, useTokens } from '../../ui/tokens';
 import { type CourseSummary, courseSummaries } from '../../viewmodels/courses';
 import { useOverview } from '../../viewmodels/useOverview';
 import { useSync } from '../../viewmodels/useSync';
 import { CanvasLoginSheet } from '../CanvasLoginScreen';
+import { SyncStatus } from '../SyncStatus';
 import { ProgressBar } from './ProgressBar';
 
 /** Courses: one card per course with what is next, each exam's study plan, and exams still without a date. */
@@ -26,15 +27,12 @@ export function CoursesScreen({ navigation }: TabScreenProps<'Courses'>) {
           <Text accessibilityRole="header" style={[type.largeTitle, styles.title, { color: colors.text }]}>
             Courses
           </Text>
-          <SyncButton
-            variant="soft"
-            busy={sync.busy}
-            connected={sync.connected}
-            onSync={sync.sync}
-            onConnect={sync.connect}
-          />
+          <View style={styles.actions}>
+            <SyncButton busy={sync.busy} inSync={sync.inSync} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
+            <ProfileButton onPress={() => navigation.navigate('Settings')} />
+          </View>
         </View>
-        <Text style={[type.body, { color: colors.text2 }]}>Your courses · synced from Canvas</Text>
+        <SyncStatus sync={sync} now={now} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -53,7 +51,7 @@ export function CoursesScreen({ navigation }: TabScreenProps<'Courses'>) {
                 : 'Connect Canvas to bring in your courses.'
             }
             action={
-              <SyncButton variant="soft" busy={sync.busy} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
+              <SyncButton variant="soft" busy={sync.busy} inSync={sync.inSync} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
             }
           />
         ) : (
@@ -122,6 +120,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.xs },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   title: { flexShrink: 1 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   content: { padding: space.lg, gap: space.md },
   spinner: { paddingVertical: space.xl },
   card: { gap: space.sm },

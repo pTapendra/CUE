@@ -16,7 +16,7 @@ import { hoursText, studyTimesSummary } from '../../viewmodels/useStudyTimes';
 import { useSync } from '../../viewmodels/useSync';
 import { CanvasLoginSheet } from '../CanvasLoginScreen';
 
-/** Settings, a full-screen modal opened from the gear on Today: Canvas, the study plan, privacy and the version. */
+/** Settings, a full-screen modal opened from the profile icon on every page: Canvas, the study plan, privacy and the version. */
 export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
   const api = useApi();
   const { colors } = useTokens();

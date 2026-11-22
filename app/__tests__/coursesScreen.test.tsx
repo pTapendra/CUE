@@ -112,11 +112,21 @@ async function pick(root: Node, label: string, date: Date) {
 }
 
 describe('Courses', () => {
+  it('shows when Canvas was synced under the title', async () => {
+    const { root } = await openCourses((s) => {
+      semester(s);
+      s.state.lastSyncedAt = new Date(2026, 10, 2, 8, 48).toISOString();
+    });
+    expect(texts(root)).toContain('Canvas synced 12 min ago');
+  });
+
   it('shows the title, subtitle and a card per course with its next item and plan', async () => {
     const { root } = await openCourses(semester);
     const shown = texts(root);
 
-    expect(shown).toEqual(expect.arrayContaining(['Courses', 'Your courses · synced from Canvas', 'Sync']));
+    expect(shown).toContain('Courses');
+    expect(shown).not.toContain('Your courses · synced from Canvas');
+    expect(onScreen(root, (n) => n.props.accessibilityLabel === 'Sync' && typeof n.props.onPress === 'function')).toHaveLength(1);
     expect(shown).toEqual(
       expect.arrayContaining([
         'DB',
@@ -315,6 +325,6 @@ describe('A course', () => {
     const { root } = await openStatistics();
     await tap(root, 'Back');
     await flush();
-    expect(texts(root)).toContain('Your courses · synced from Canvas');
+    expect(texts(root)).toContain('Canvas connected'); // the line under the Courses title
   });
 });
