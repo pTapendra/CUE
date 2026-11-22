@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { SavedCanvasItem } from "../canvasReader/diff.js";
 import type { Db } from "../db.js";
 
 export type Source = "canvas" | "manual";
@@ -125,7 +126,72 @@ export class ScheduleRepository {
     return new Set(rows.map((r) => r.external_id));
   }
 
-  /** Inserts or refreshes a Canvas item. The student's status is kept on refresh. */
+  /** Updates a saved Canvas course's name and code; does nothing if Cue doesn't have it. */
+  refreshCanvasCourse(studentId: string, externalId: string, name: string, code: string | null): void {
+    this.db
+      .prepare("UPDATE courses SET name = ?, code = ? WHERE student_id = ? AND source = 'canvas' AND external_id = ?")
+      .run(name, code, studentId, externalId);
+  }
+
+  /** Every Canvas item this student saved, with its course's Canvas ID. */
+  savedCanvasItems(studentId: string): SavedCanvasItem[] {
+    const rows = this.db
+      .prepare(
+        `SELECT i.id, i.external_id, c.external_id AS course_external_id, c.name AS course_name, i.kind, i.title,
+                i.due_at, i.ends_at, i.all_day
+         FROM items i LEFT JOIN courses c ON c.id = i.course_id
+         WHERE i.student_id = ? AND i.source = 'canvas'`,
+      )
+      .all(studentId) as {
+      id: string;
+      external_id: string;
+      course_external_id: string | null;
+      course_name: string | null;
+      kind: ItemKind;
+      title: string;
+      due_at: string | null;
+      ends_at: string | null;
+      all_day: number;
+    }[];
+    return rows.map((r) => ({
+      itemId: r.id,
+      externalId: r.external_id,
+      courseExternalId: r.course_external_id,
+      courseName: r.course_name,
+      kind: r.kind,
+      title: r.title,
+      dueAt: r.due_at,
+      endsAt: r.ends_at,
+      allDay: r.all_day === 1,
+    }));
+  }
+
+  /**
+   * Gives a saved Canvas item Canvas's title, dates and all-day flag. Without a Canvas date the
+   * saved date and end stay. False if the item is gone.
+   */
+  updateCanvasItem(
+    studentId: string,
+    itemId: string,
+    v: { title: string; dueAt: string | null; endsAt: string | null; allDay: boolean },
+  ): boolean {
+    const keepDates = v.dueAt === null ? 1 : 0;
+    return (
+      this.db
+        .prepare(
+          `UPDATE items SET title = ?, all_day = ?, updated_at = ?,
+             due_at = CASE WHEN ? THEN due_at ELSE ? END,
+             ends_at = CASE WHEN ? THEN ends_at ELSE ? END
+           WHERE student_id = ? AND id = ? AND source = 'canvas'`,
+        )
+        .run(v.title, v.allDay ? 1 : 0, new Date().toISOString(), keepDates, v.dueAt, keepDates, v.endsAt, studentId, itemId).changes > 0
+    );
+  }
+
+  /**
+   * Inserts or refreshes a Canvas item. On refresh the student's kind and status stay, and so does
+   * the saved date when Canvas has none.
+   */
   upsertCanvasItem(
     studentId: string,
     v: { externalId: string; courseId: string; kind: ItemKind; title: string; dueAt: string | null; endsAt: string | null; allDay: boolean },
@@ -136,8 +202,10 @@ export class ScheduleRepository {
         `INSERT INTO items (id, student_id, course_id, source, external_id, kind, title, due_at, ends_at, all_day, created_at, updated_at)
          VALUES (?, ?, ?, 'canvas', ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (student_id, source, external_id) DO UPDATE SET
-           course_id = excluded.course_id, kind = excluded.kind, title = excluded.title,
-           due_at = excluded.due_at, ends_at = excluded.ends_at, all_day = excluded.all_day, updated_at = excluded.updated_at`,
+           course_id = excluded.course_id, title = excluded.title,
+           due_at = COALESCE(excluded.due_at, items.due_at),
+           ends_at = CASE WHEN excluded.due_at IS NULL THEN items.ends_at ELSE excluded.ends_at END,
+           all_day = excluded.all_day, updated_at = excluded.updated_at`,
       )
       .run(randomUUID(), studentId, v.courseId, v.externalId, v.kind, v.title, v.dueAt, v.endsAt, v.allDay ? 1 : 0, now, now);
   }
