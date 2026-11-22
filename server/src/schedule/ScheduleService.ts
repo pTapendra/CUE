@@ -85,7 +85,7 @@ const overlaps = (a: Interval, b: Interval) =>
   Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
 
 /** True when the end is after the start. An end that is not means the end is unknown. */
-function endsAfterStart(dueAt: string, endsAt: string | null): endsAt is string {
+export function endsAfterStart(dueAt: string, endsAt: string | null): endsAt is string {
   return endsAt !== null && Date.parse(endsAt) > Date.parse(dueAt);
 }
 
