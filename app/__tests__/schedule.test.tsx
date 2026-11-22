@@ -291,7 +291,7 @@ describe('views', () => {
     expect(texts(root)).toContain('Oct – Nov');
   });
 
-  it('Day asks for one day, and Today comes back to today', async () => {
+  it('Day asks for one day, and tapping the Schedule tab again comes back to today', async () => {
     const { server, root } = await openSchedule();
     await tap(root, 'Next days'); // Thu 5 to Sat 7: today is not on screen
     await flush();
@@ -304,10 +304,29 @@ describe('views', () => {
     await flush();
     expect(lastRange(server)).toEqual({ from: nov(6), to: nov(7) });
 
-    await tap(root, 'Today');
+    await press(root, 'Schedule');
     await flush();
     expect(lastRange(server)).toEqual({ from: nov(2), to: nov(3) });
     expect(dayHeaders(root)).toEqual(['Mon 2 Nov, today']);
+  });
+
+  it('has no locate button', async () => {
+    const { root } = await openSchedule();
+    expect(onScreen(root, (n) => n.props.accessibilityLabel === 'Today' && typeof n.props.onPress === 'function')).toEqual([]);
+  });
+
+  it('coming back from another tab keeps the page the student left', async () => {
+    const { server, root } = await openSchedule();
+    await tap(root, 'Next days');
+    await flush();
+    expect(lastRange(server)).toEqual({ from: nov(5), to: nov(8) });
+
+    await press(root, 'Today');
+    await flush();
+    await press(root, 'Schedule');
+    await flush();
+    expect(lastRange(server)).toEqual({ from: nov(5), to: nov(8) });
+    expect(dayHeaders(root)[0]).toBe('Thu 5 Nov');
   });
 
   it('on a Sunday night, Week shows the week that ends that day', async () => {

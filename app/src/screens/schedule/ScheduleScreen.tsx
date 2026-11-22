@@ -25,7 +25,8 @@ const DEFAULT_VIEW: ScheduleView = '3days';
 
 /**
  * Schedule: 1, 3 or 7 days of deadlines and study blocks on a time grid.
- * Route params `{ date, view }` open a page; this is how Today opens a day.
+ * Route params `{ date, view }` open a page; this is how Today opens a day. Tapping the Schedule
+ * tab again comes back to today.
  */
 export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>) {
   const { colors } = useTokens();
@@ -44,6 +45,17 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
     show(wantedView, parseDay(wantedDate) ?? new Date());
     navigation.setParams({ view: undefined, date: undefined });
   }, [wantedView, wantedDate, show, navigation]);
+
+  // Tapping the Schedule tab while on Schedule comes back to today's page. The tab press that
+  // brings the student here from another tab keeps the page they left.
+  const { goToday } = vm;
+  useEffect(
+    () =>
+      navigation.addListener('tabPress', () => {
+        if (navigation.isFocused()) goToday();
+      }),
+    [navigation, goToday],
+  );
 
   const openBlock = vm.openBlock;
   const suggested = vm.suggestedCount;
@@ -65,7 +77,6 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
             onSync={sync.sync}
             onConnect={sync.connect}
           />
-          <IconButton icon="locate-outline" label="Today" onPress={vm.goToday} />
           <ProfileButton onPress={() => navigation.navigate('Settings')} />
         </View>
       </View>
