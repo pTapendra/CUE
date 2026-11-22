@@ -91,9 +91,10 @@ describe("DefaultStrategy", () => {
   });
 
   it("counts the item's accepted blocks when it doubles up", () => {
-    const r = plan({ items: [exam("E", "2026-11-04T05:59:00Z", 180)],
-      accepted: [{ id: "a", itemId: "E", startsAt: "2026-11-03T00:00:00.000Z", endsAt: "2026-11-03T01:00:00.000Z" }] });
-    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T01:00:00.000Z", "2026-11-04T00:00:00.000Z"]);
+    // Accepted on Tue; Mon, Tue and Wed then each hold one, so the extra block goes on Mon, not Tue.
+    const r = plan({ items: [exam("E", "2026-11-05T05:59:00Z", 240)],
+      accepted: [{ id: "a", itemId: "E", startsAt: "2026-11-04T00:00:00.000Z", endsAt: "2026-11-04T01:00:00.000Z" }] });
+    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T00:00:00.000Z", "2026-11-03T01:00:00.000Z", "2026-11-05T00:00:00.000Z"]);
     expect(r.shortfalls).toEqual([]);
   });
 
@@ -108,9 +109,9 @@ describe("DefaultStrategy", () => {
   });
 
   it("doubles up against the day a range past midnight starts on", () => {
-    const r = plan({ settings: settings(onlyMonday("22:00", "01:00"), 120), items: [exam("E", "2026-11-03T18:00:00Z", 180)] });
-    // Mon 22:00, 23:00 CST; the 00:00 Tuesday slot counts against Monday's 2-hour limit.
-    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T04:00:00.000Z", "2026-11-03T05:00:00.000Z"]);
+    const r = plan({ settings: settings(onlyMonday("23:00", "02:00"), 120), items: [exam("E", "2026-11-03T18:00:00Z", 180)] });
+    // Mon 23:00 and Tue 00:00 CST; that second block counts against Monday's 2-hour limit, so 01:00 is not used.
+    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T05:00:00.000Z", "2026-11-03T06:00:00.000Z"]);
     expect(r.shortfalls.map((s) => s.plannedMinutes)).toEqual([120]);
   });
 
