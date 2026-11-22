@@ -1,4 +1,4 @@
-import type { Course, Item, PlannerSettings, Shortfall, StudyBlock } from '../src/api/types';
+import type { ChangedItem, Course, Item, PlannerSettings, ProposedItem, RemovedItem, Shortfall, StudyBlock } from '../src/api/types';
 
 type Handler = (body: any, url: URL) => { status: number; body?: unknown };
 
@@ -42,10 +42,13 @@ export function fakeServer() {
     } as PlannerSettings,
     preview: {
       syncId: '11111111-1111-4111-8111-111111111111',
-      items: [
-        { key: 'assignment:1', courseName: 'Databases', kind: 'assignment', title: 'SQL homework', dueAt: '2026-11-03T22:00:00.000Z', needsDate: false, alreadyImported: false },
-        { key: 'assignment:2', courseName: 'Software Engineering', kind: 'exam', title: 'Midterm Exam', dueAt: null, needsDate: true, alreadyImported: false },
-      ],
+      newItems: [
+        { key: 'assignment:1', courseName: 'Databases', kind: 'assignment', title: 'SQL homework', dueAt: '2026-11-03T22:00:00.000Z', needsDate: false },
+        { key: 'assignment:2', courseName: 'Software Engineering', kind: 'exam', title: 'Midterm Exam', dueAt: null, needsDate: true },
+      ] as ProposedItem[],
+      changed: [] as ChangedItem[],
+      removed: [] as RemovedItem[],
+      skipped: [] as ProposedItem[],
     },
     calls: [] as { method: string; path: string; query: Record<string, string>; body: any; auth: string | null }[],
   };
@@ -110,7 +113,8 @@ export function fakeServer() {
         ? { status: state.syncError.status, body: { error: state.syncError.error, message: 'x' } }
         : { status: 200, body: state.preview },
     'POST /api/canvas/sync/confirm': (b) => {
-      for (const p of state.preview.items.filter((i) => b.accept.includes(i.key))) {
+      const accepted = [...state.preview.newItems, ...state.preview.skipped].filter((i) => b.accept.includes(i.key));
+      for (const p of accepted) {
         state.items.push({
           id: String(nextId++),
           courseId: null,
@@ -125,7 +129,7 @@ export function fakeServer() {
           status: 'not_started',
         });
       }
-      return { status: 200, body: { imported: b.accept.length } };
+      return { status: 200, body: { added: accepted.length, updated: state.preview.changed.length, removed: state.preview.removed.length } };
     },
     'GET /api/schedule/week': (_b, url) => {
       const from = Date.parse(url.searchParams.get('from')!);

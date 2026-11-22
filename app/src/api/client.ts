@@ -7,6 +7,7 @@ import type {
   ItemStatus,
   Overview,
   PlannerSettings,
+  SyncCounts,
   SyncPreview,
   Week,
 } from './types';
@@ -159,7 +160,7 @@ export class ApiClient {
   }
 
   confirmSync(syncId: string, accept: string[], dates: Record<string, string>) {
-    return this.call<{ imported: number }>('POST', '/api/canvas/sync/confirm', { syncId, accept, dates });
+    return this.call<SyncCounts>('POST', '/api/canvas/sync/confirm', { syncId, accept, dates });
   }
 
   /** The schedule from `from` up to `to`. */

@@ -432,7 +432,7 @@ describe('the Schedule tab', () => {
   }
 
   it.each([
-    ['Save 2 items', 'Today'],
+    ['Save', 'Today'],
     ['Cancel', 'Schedule'],
   ])('a sync from Schedule: %s goes to %s', async (button, tab) => {
     const { root } = await openSchedule();
