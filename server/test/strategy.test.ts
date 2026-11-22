@@ -68,11 +68,50 @@ describe("DefaultStrategy", () => {
     expect(r.proposed).toEqual([{ itemId: "E", startsAt: "2026-11-03T01:00:00.000Z", endsAt: "2026-11-03T02:00:00.000Z" }]);
   });
 
-  it("counts accepted study toward the item and never doubles a day", () => {
+  it("counts accepted study toward the item and doubles a day only when the days run out", () => {
     const r = plan({ items: [exam("E", "2026-11-13T15:00:00Z", 120)],
       accepted: [{ id: "a", itemId: "E", startsAt: "2026-11-13T00:00:00.000Z", endsAt: "2026-11-13T01:00:00.000Z" }] });
     expect(r.proposed).toHaveLength(1);
     expect(r.proposed[0].startsAt).not.toMatch(/^2026-11-13/);
+  });
+
+  it("puts a second block on the same day when only one day is left", () => {
+    const r = plan({ items: [assignment("H", "2026-11-03T05:59:00Z", 120)] }); // due Mon 2 Nov 23:59 CST
+    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T00:00:00.000Z", "2026-11-03T01:00:00.000Z"]);
+    expect(r.shortfalls).toEqual([]);
+  });
+
+  it("adds the extra blocks to the day with the fewest, earlier day first", () => {
+    const r = plan({ items: [assignment("H", "2026-11-04T05:59:00Z", 300)] }); // due Tue 3 Nov 23:59 CST
+    expect(r.proposed.map((b) => b.startsAt)).toEqual([
+      "2026-11-03T00:00:00.000Z", "2026-11-03T01:00:00.000Z", "2026-11-03T02:00:00.000Z",
+      "2026-11-04T00:00:00.000Z", "2026-11-04T01:00:00.000Z",
+    ]);
+    expect(r.shortfalls).toEqual([]);
+  });
+
+  it("counts the item's accepted blocks when it doubles up", () => {
+    const r = plan({ items: [exam("E", "2026-11-04T05:59:00Z", 180)],
+      accepted: [{ id: "a", itemId: "E", startsAt: "2026-11-03T00:00:00.000Z", endsAt: "2026-11-03T01:00:00.000Z" }] });
+    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T01:00:00.000Z", "2026-11-04T00:00:00.000Z"]);
+    expect(r.shortfalls).toEqual([]);
+  });
+
+  it("keeps the daily limit and rejected slots when it doubles up", () => {
+    const due = "2026-11-03T05:59:00Z"; // Mon 2 Nov 23:59 CST
+    const limited = plan({ settings: settings(undefined, 60), items: [assignment("H", due, 120)] });
+    expect(limited.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T00:00:00.000Z"]);
+    expect(limited.shortfalls).toEqual([{ itemId: "H", itemTitle: "H", dueAt: due, neededMinutes: 120, plannedMinutes: 60 }]);
+    const r = plan({ items: [assignment("H", due, 120)],
+      rejected: [{ itemId: "H", startsAt: "2026-11-03T01:00:00.000Z", endsAt: "2026-11-03T02:00:00.000Z" }] });
+    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T00:00:00.000Z", "2026-11-03T02:00:00.000Z"]);
+  });
+
+  it("doubles up against the day a range past midnight starts on", () => {
+    const r = plan({ settings: settings(onlyMonday("22:00", "01:00"), 120), items: [exam("E", "2026-11-03T18:00:00Z", 180)] });
+    // Mon 22:00, 23:00 CST; the 00:00 Tuesday slot counts against Monday's 2-hour limit.
+    expect(r.proposed.map((b) => b.startsAt)).toEqual(["2026-11-03T04:00:00.000Z", "2026-11-03T05:00:00.000Z"]);
+    expect(r.shortfalls.map((s) => s.plannedMinutes)).toEqual([120]);
   });
 
   it("starts earlier than the lead time when the lead days are not enough", () => {

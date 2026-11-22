@@ -39,14 +39,14 @@ export class DefaultStrategy implements PlanningStrategy {
 
       const rejected = input.rejected.filter((r) => r.itemId === item.id).map(toRange);
       const itemDays = new Set([...accepted, ...proposed].filter((p) => p.itemId === item.id).map((p) => p.day));
-      const usable = (s: Slot) =>
+      const fits = (s: Slot) =>
         s.start >= nowMs && s.end <= dueMs &&
         !busy.some((b) => overlaps(s.start, s.end, b.start, b.end)) &&
         !accepted.some((a) => overlaps(s.start, s.end, a.start, a.end)) &&
         !proposed.some((p) => overlaps(s.start, s.end, p.start, p.end)) &&
         !rejected.some((r) => overlaps(s.start, s.end, r.start, r.end)) &&
-        (dayUsed.get(s.day) ?? 0) + blockMinutes <= settings.dailyLimitMinutes &&
-        !itemDays.has(s.day);
+        (dayUsed.get(s.day) ?? 0) + blockMinutes <= settings.dailyLimitMinutes;
+      const usable = (s: Slot) => fits(s) && !itemDays.has(s.day);
 
       const earliestByDay = new Map<string, Slot>();
       for (const s of slots) {
@@ -71,6 +71,28 @@ export class DefaultStrategy implements PlanningStrategy {
         dayUsed.set(slot.day, (dayUsed.get(slot.day) ?? 0) + blockMinutes);
         placed++;
       }
+
+      // Too few days for one block a day: add the rest to the day with the fewest of this item's
+      // blocks (the earlier day on a tie), at that day's earliest free slot.
+      const perDay = new Map<string, number>();
+      for (const p of [...accepted, ...proposed]) {
+        if (p.itemId === item.id) perDay.set(p.day, (perDay.get(p.day) ?? 0) + 1);
+      }
+      const count = (s: Slot) => perDay.get(s.day) ?? 0;
+      while (placed < needed) {
+        let best: Slot | undefined;
+        for (const s of slots) {
+          if (!fits(s)) continue;
+          if (!best || count(s) < count(best) ||
+            (count(s) === count(best) && (s.day < best.day || (s.day === best.day && s.start < best.start)))) best = s;
+        }
+        if (!best) break;
+        proposed.push({ itemId: item.id, start: best.start, end: best.end, day: best.day });
+        perDay.set(best.day, count(best) + 1);
+        dayUsed.set(best.day, (dayUsed.get(best.day) ?? 0) + blockMinutes);
+        placed++;
+      }
+
       if (placed < needed) {
         shortfalls.push({
           itemId: item.id, itemTitle: item.title, dueAt: item.dueAt,
