@@ -232,10 +232,6 @@ export class ScheduleService {
     return this.repo.savedCanvasItems(studentId);
   }
 
-  importedCanvasIds(studentId: string): Set<string> {
-    return this.repo.importedExternalIds(studentId);
-  }
-
   addItem(
     studentId: string,
     v: { courseId: string | null; kind: ItemKind; title: string; dueAt: string | null; endsAt?: string | null; studyMinutes?: number },

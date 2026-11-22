@@ -118,14 +118,6 @@ export class ScheduleRepository {
     return { id, source: "manual", name, code };
   }
 
-  /** Canvas external ids of items this student has already imported. */
-  importedExternalIds(studentId: string): Set<string> {
-    const rows = this.db
-      .prepare("SELECT external_id FROM items WHERE student_id = ? AND source = 'canvas'")
-      .all(studentId) as { external_id: string }[];
-    return new Set(rows.map((r) => r.external_id));
-  }
-
   /** Updates a saved Canvas course's name and code; does nothing if Cue doesn't have it. */
   refreshCanvasCourse(studentId: string, externalId: string, name: string, code: string | null): void {
     this.db

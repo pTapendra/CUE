@@ -1,5 +1,6 @@
 import {
   CanvasAuthError,
+  CanvasUnavailableError,
   type CanvasAssignment,
   type CanvasClient,
   type CanvasCourse,
@@ -15,6 +16,8 @@ export interface FakeCanvasData {
 /** In-memory Canvas for tests and offline demos. */
 export class FakeCanvasClient implements CanvasClient {
   rejectToken = false;
+  /** When set, looking up one event fails as if Canvas could not be reached. */
+  failEventLookups = false;
   userId = "42";
 
   constructor(public data: FakeCanvasData) {}
@@ -37,6 +40,12 @@ export class FakeCanvasClient implements CanvasClient {
       const t = Date.parse(e.startAt);
       return t >= from.getTime() && t <= to.getTime();
     });
+  }
+
+  async getCalendarEvent(id: string) {
+    this.check();
+    if (this.failEventLookups) throw new CanvasUnavailableError("lookup failed");
+    return this.data.events.find((e) => e.id === id) ?? null;
   }
 
   async whoAmI() {

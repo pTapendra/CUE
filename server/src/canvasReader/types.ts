@@ -16,8 +16,6 @@ export interface ProposedItem {
   allDay: boolean;
   /** True when this is an exam and Canvas gave no date: the student should add one. */
   needsDate: boolean;
-  /** True when this item was confirmed in an earlier sync. */
-  alreadyImported?: boolean;
 }
 
 export interface ProposedCourse {
@@ -75,8 +73,7 @@ export interface SyncGroups {
   removed: RemovedItem[];
 }
 
-export interface SyncPreview {
+export interface SyncPreview extends SyncGroups {
   syncId: string;
   courses: ProposedCourse[];
-  items: ProposedItem[];
 }

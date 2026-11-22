@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
 import type { AccountService, CurrentDevice } from "../accounts/AccountService.js";
-import { CanvasAuthError, type CanvasClient, type CanvasClientFactory } from "../canvas/CanvasClient.js";
+import { CanvasAuthError, type CanvasClient, type CanvasClientFactory, type CanvasEvent } from "../canvas/CanvasClient.js";
 import { CanvasLoginRefusedError, type CanvasLogin } from "../canvas/CanvasLogin.js";
 import { decrypt, encrypt } from "../crypto.js";
-import type { ScheduleService } from "../schedule/ScheduleService.js";
+import type { CanvasSyncCounts, ScheduleService } from "../schedule/ScheduleService.js";
 import type { CanvasReaderRepository, StoredConnection } from "./CanvasReaderRepository.js";
+import { diffCanvas } from "./diff.js";
 import type { ItemKind, ProposedCourse, ProposedItem, SyncPreview } from "./types.js";
 
 export class CanvasNotConnectedError extends Error {
@@ -276,34 +277,50 @@ export class CanvasReaderService {
     }
   }
 
-  /** Reads Canvas and returns items to confirm. Stores nothing in the schedule. */
+  /**
+   * Reads Canvas and returns what's new, changed, removed and skipped against what the student
+   * saved. Stores nothing in the schedule.
+   */
   async preview(studentId: string): Promise<SyncPreview> {
     const now = this.now();
     const from = new Date(now.getTime() - DAY);
     const to = new Date(now.getTime() + 180 * DAY);
-    const imported = this.schedule.importedCanvasIds(studentId);
+    const saved = this.schedule.savedCanvasItems(studentId);
+    const skippedIds = this.repo.skippedIds(studentId);
 
-    const { courses, items } = await this.withClient(studentId, (client) => this.readCanvas(client, imported, from, to));
-    items.sort((x, y) => (x.dueAt ?? "9999").localeCompare(y.dueAt ?? "9999"));
+    const { courses, groups } = await this.withClient(studentId, async (client) => {
+      const read = { ...(await this.readCanvas(client, from, to)), from, to };
+      let groups = diffCanvas(read, saved, skippedIds);
+      // Canvas only lists events within the dates read: ask for each missing one before calling it removed.
+      const unsure = new Set<string>();
+      let found = false;
+      for (const gone of groups.removed.filter((r) => r.key.startsWith("event:"))) {
+        try {
+          const event = await client.getCalendarEvent(gone.key.slice("event:".length));
+          if (event) {
+            read.items.push(this.proposeEvent(event, read.courses));
+            found = true;
+          }
+        } catch {
+          unsure.add(gone.key);
+        }
+      }
+      if (found || unsure.size > 0) groups = diffCanvas(read, saved, skippedIds, unsure);
+      return { courses: read.courses, groups };
+    });
     this.repo.markSynced(studentId, now);
-    return this.repo.savePreview(studentId, { courses, items }, PREVIEW_TTL);
+    return this.repo.savePreview(studentId, { courses, ...groups }, PREVIEW_TTL);
   }
 
-  private async readCanvas(
-    client: CanvasClient,
-    imported: Set<string>,
-    from: Date,
-    to: Date,
-  ): Promise<{ courses: ProposedCourse[]; items: ProposedItem[] }> {
+  /** Every course and assignment, and the events from `from` to `to`, before `keep`. */
+  private async readCanvas(client: CanvasClient, from: Date, to: Date): Promise<{ courses: ProposedCourse[]; items: ProposedItem[] }> {
     const canvasCourses = await client.listCourses();
     const courses: ProposedCourse[] = canvasCourses.map((c) => ({ externalId: c.id, name: c.name, code: c.courseCode }));
-    const nameOf = new Map(courses.map((c) => [c.externalId, c.name]));
     const items: ProposedItem[] = [];
 
     for (const course of canvasCourses) {
       for (const a of await client.listAssignments(course.id)) {
         const kind: ItemKind = EXAM_WORDS.test(a.name) ? "exam" : "assignment";
-        if (!keep(a.dueAt, kind, from)) continue;
         const externalId = `assignment:${a.id}`;
         items.push({
           key: externalId,
@@ -316,43 +333,43 @@ export class CanvasReaderService {
           endsAt: null,
           allDay: false,
           needsDate: kind === "exam" && !a.dueAt,
-          alreadyImported: imported.has(externalId),
         });
       }
     }
 
-    const events = await client.listCalendarEvents(canvasCourses.map((c) => c.id), from, to);
-    for (const e of events) {
-      const kind: ItemKind = EXAM_WORDS.test(e.title) ? "exam" : "event";
-      if (!keep(e.startAt, kind, from)) continue;
-      const externalId = `event:${e.id}`;
-      items.push({
-        key: externalId,
-        externalId,
-        courseExternalId: e.courseId,
-        courseName: nameOf.get(e.courseId) ?? "Course",
-        kind,
-        title: e.title,
-        dueAt: e.startAt,
-        endsAt: e.endAt,
-        allDay: e.allDay,
-        needsDate: kind === "exam" && !e.startAt,
-        alreadyImported: imported.has(externalId),
-      });
+    for (const e of await client.listCalendarEvents(canvasCourses.map((c) => c.id), from, to)) {
+      items.push(this.proposeEvent(e, courses));
     }
-
     return { courses, items };
   }
 
+  private proposeEvent(e: CanvasEvent, courses: ProposedCourse[]): ProposedItem {
+    const kind: ItemKind = EXAM_WORDS.test(e.title) ? "exam" : "event";
+    const externalId = `event:${e.id}`;
+    return {
+      key: externalId,
+      externalId,
+      courseExternalId: e.courseId,
+      courseName: courses.find((c) => c.externalId === e.courseId)?.name ?? "Course",
+      kind,
+      title: e.title,
+      dueAt: e.startAt,
+      endsAt: e.endAt,
+      allDay: e.allDay,
+      needsDate: kind === "exam" && !e.startAt,
+    };
+  }
+
   /**
-   * Stores the items the student accepted. `dates` lets the student fill in
-   * a date Canvas did not give (for example an exam), keyed by item key.
+   * Saves a sync: adds the new and skipped items the student accepted (`dates` fills in a date
+   * Canvas did not give, keyed by item key), gives changed items Canvas's values, deletes the
+   * items gone from Canvas, and remembers the new items left unticked as skipped.
    */
-  confirm(studentId: string, syncId: string, acceptKeys: string[], dates: Record<string, string> = {}): number {
+  confirm(studentId: string, syncId: string, acceptKeys: string[], dates: Record<string, string> = {}): CanvasSyncCounts {
     const preview = this.repo.takePreview(studentId, syncId);
     if (!preview) throw new SyncExpiredError();
     const accepted = new Set(acceptKeys);
-    const items = preview.items
+    const add = [...preview.newItems, ...preview.skipped]
       .filter((i) => accepted.has(i.key))
       .map((i) => ({
         externalId: i.externalId,
@@ -363,9 +380,18 @@ export class CanvasReaderService {
         endsAt: i.endsAt,
         allDay: i.allDay,
       }));
-    const used = new Set(items.map((i) => i.courseExternalId));
-    const courses = preview.courses.filter((c) => used.has(c.externalId));
-    return this.schedule.importFromCanvas(studentId, { courses, items });
+    const skip = preview.newItems.filter((i) => !accepted.has(i.key)).map((i) => i.key);
+    const unskip = preview.skipped.filter((i) => accepted.has(i.key)).map((i) => i.key);
+    return this.schedule.applyCanvasSync(
+      studentId,
+      {
+        courses: preview.courses,
+        add,
+        update: preview.changed.map((c) => ({ itemId: c.itemId, title: c.title, dueAt: c.dueAt, endsAt: c.endsAt, allDay: c.allDay })),
+        remove: preview.removed.map((r) => r.itemId),
+      },
+      () => this.repo.setSkipped(studentId, skip, unskip),
+    );
   }
 
   private checkUrl(raw: string): string {
@@ -384,10 +410,4 @@ export class CanvasReaderService {
     }
     return url.origin;
   }
-}
-
-/** Keeps dated work from `from` onward, and undated exams so the student can add the date. */
-function keep(date: string | null, kind: ItemKind, from: Date): boolean {
-  if (!date) return kind === "exam";
-  return Date.parse(date) >= from.getTime();
 }

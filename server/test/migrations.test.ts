@@ -64,7 +64,7 @@ describe("migrations", () => {
     db.prepare(`INSERT INTO items (id, student_id, source, external_id, kind, title, due_at, created_at, updated_at)
                 VALUES ('i1', 's1', 'manual', 'i1', 'assignment', 'Essay', NULL, 'x', 'x')`).run();
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(3);
+    expect(db.pragma("user_version", { simple: true })).toBe(4);
     const cols = (db.prepare("PRAGMA table_info(items)").all() as { name: string }[]).map((c) => c.name);
     expect(cols).toEqual(expect.arrayContaining(["ends_at", "all_day", "study_minutes"]));
     expect(db.prepare("SELECT title, all_day FROM items").get()).toEqual({ title: "Essay", all_day: 0 });
@@ -74,7 +74,7 @@ describe("migrations", () => {
   it("runs each migration once", () => {
     const db = openDb(":memory:");
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(3);
+    expect(db.pragma("user_version", { simple: true })).toBe(4);
   });
 
   it("reads and writes the new item fields", () => {
@@ -93,7 +93,7 @@ describe("migrations", () => {
     db.prepare("INSERT INTO students VALUES ('s1', 'h', '2026-11-01T00:00:00Z')").run();
     db.prepare("INSERT INTO canvas_connections (student_id, base_url, token_sealed, last_synced_at) VALUES ('s1', 'https://c.edu', 'sealed', '2026-11-01T00:00:00Z')").run();
     migrate(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(3);
+    expect(db.pragma("user_version", { simple: true })).toBe(4);
     expect(db.prepare("SELECT * FROM canvas_connections").get()).toEqual({
       student_id: "s1",
       base_url: "https://c.edu",
@@ -110,7 +110,7 @@ describe("migrations", () => {
     db.exec(ORIGINAL_SCHEMA);
     migrate(db); // build the schema at version 2 first, then rewind students to the old shape
     db.pragma("foreign_keys = OFF");
-    db.exec(`DROP TABLE devices;
+    db.exec(`DROP TABLE devices; DROP TABLE canvas_skipped;
       CREATE TABLE students_old (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
       DROP TABLE students; ALTER TABLE students_old RENAME TO students;`);
     db.pragma("foreign_keys = ON");

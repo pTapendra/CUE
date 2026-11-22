@@ -171,8 +171,7 @@ export function createApp(s: Services) {
 
   api.post("/canvas/sync/confirm", (req, res) => {
     const body = schemas.confirm.parse(req.body);
-    const imported = s.canvasReader.confirm(sid(req), body.syncId, body.accept, body.dates);
-    res.json({ imported });
+    res.json(s.canvasReader.confirm(sid(req), body.syncId, body.accept, body.dates));
   });
 
   // --- Schedule Manager (UC2) ---

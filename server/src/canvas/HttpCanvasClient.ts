@@ -64,12 +64,24 @@ export class HttpCanvasClient implements CanvasClient {
       for (const id of chunk) params.append("context_codes[]", `course_${id}`);
       const rows = await this.getAll<any>("/api/v1/calendar_events", params);
       for (const e of rows) {
-        const match = /^course_(.+)$/.exec(String(e.context_code ?? ""));
-        if (!match) continue;
-        events.push({ id: String(e.id), courseId: match[1], title: String(e.title ?? "Event"), startAt: e.start_at ?? null, endAt: e.end_at ?? null, allDay: e.all_day === true });
+        const event = toEvent(e);
+        if (event) events.push(event);
       }
     }
     return events;
+  }
+
+  async getCalendarEvent(id: string): Promise<CanvasEvent | null> {
+    const res = await this.get(`${this.baseUrl}/api/v1/calendar_events/${encodeURIComponent(id)}`, { notFound: true });
+    if (res === null) return null;
+    let body: any;
+    try {
+      body = await res.json();
+    } catch {
+      throw new CanvasUnavailableError("Unreadable reply");
+    }
+    if (body?.workflow_state === "deleted") return null;
+    return toEvent(body);
   }
 
   async whoAmI(): Promise<{ id: string }> {
@@ -101,7 +113,10 @@ export class HttpCanvasClient implements CanvasClient {
     return out;
   }
 
-  private async get(url: string): Promise<Response> {
+  private async get(url: string): Promise<Response>;
+  /** With `notFound`, a 404 gives null instead of an error. */
+  private async get(url: string, opts: { notFound: true }): Promise<Response | null>;
+  private async get(url: string, opts?: { notFound: true }): Promise<Response | null> {
     let res: Response;
     try {
       res = await this.fetchImpl(url, {
@@ -112,9 +127,17 @@ export class HttpCanvasClient implements CanvasClient {
       throw new CanvasUnavailableError((err as Error).message);
     }
     if (res.status === 401) throw new CanvasAuthError();
+    if (res.status === 404 && opts?.notFound) return null;
     if (!res.ok) throw new CanvasUnavailableError(`HTTP ${res.status}`);
     return res;
   }
+}
+
+/** A Canvas calendar event in a course; null for any other context. */
+function toEvent(e: any): CanvasEvent | null {
+  const match = /^course_(.+)$/.exec(String(e?.context_code ?? ""));
+  if (!match) return null;
+  return { id: String(e.id), courseId: match[1], title: String(e.title ?? "Event"), startAt: e.start_at ?? null, endAt: e.end_at ?? null, allDay: e.all_day === true };
 }
 
 export function nextLink(header: string | null): string | null {

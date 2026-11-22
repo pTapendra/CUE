@@ -99,6 +99,29 @@ describe("HttpCanvasClient", () => {
     expect(events[0]).toMatchObject({ endAt: "2026-11-28T06:00:00Z", allDay: true });
   });
 
+  it("getCalendarEvent reads one event; a 404 or a deleted event is null", async () => {
+    const { impl, calls } = fakeFetch({
+      "https://s.edu/api/v1/calendar_events/900": {
+        body: { id: 900, title: "Final exam", start_at: "2027-06-10T15:00:00Z", end_at: "2027-06-10T17:00:00Z", all_day: false, context_code: "course_102" },
+      },
+      "https://s.edu/api/v1/calendar_events/901": { body: { id: 901, title: "Gone", workflow_state: "deleted", context_code: "course_102" } },
+      "https://s.edu/api/v1/calendar_events/902": { body: { errors: [] }, status: 500 },
+    });
+    const client = new HttpCanvasClient("https://s.edu", "t", impl);
+    expect(await client.getCalendarEvent("900")).toEqual({
+      id: "900",
+      courseId: "102",
+      title: "Final exam",
+      startAt: "2027-06-10T15:00:00Z",
+      endAt: "2027-06-10T17:00:00Z",
+      allDay: false,
+    });
+    expect(calls[0]).toEqual({ url: "https://s.edu/api/v1/calendar_events/900", method: "GET", auth: "Bearer t" });
+    expect(await client.getCalendarEvent("901")).toBeNull();
+    expect(await client.getCalendarEvent("903")).toBeNull(); // 404
+    await expect(client.getCalendarEvent("902")).rejects.toBeInstanceOf(CanvasUnavailableError);
+  });
+
   it("parses Link headers", () => {
     expect(nextLink(null)).toBeNull();
     expect(nextLink('<https://a/x?page=2>; rel="next"')).toBe("https://a/x?page=2");
