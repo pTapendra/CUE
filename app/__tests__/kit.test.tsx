@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import {
@@ -47,6 +47,33 @@ describe('ProfileButton', () => {
 });
 
 describe('SyncButton', () => {
+  /** The parts of `root` that turn: a rotate in their style's transform. */
+  const turning = (root: Node) =>
+    root.findAll((n) => {
+      const transform = StyleSheet.flatten(n.props.style)?.transform;
+      return Array.isArray(transform) && transform.some((t) => 'rotate' in t);
+    });
+
+  it('as an icon spins its sync icon while busy', async () => {
+    const r = render(<SyncButton variant="icon" busy connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    await act(async () => {});
+    expect(r.root.findAll((n) => n.props.name === 'sync')).not.toHaveLength(0);
+    expect(r.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(turning(r.root)).not.toHaveLength(0);
+
+    act(() => r.update(<SyncButton variant="icon" busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />));
+    expect(turning(r.root)).toHaveLength(0);
+  });
+
+  it('as an icon stays still while busy when the phone reduces motion', async () => {
+    // React Native's test setup already stands in for this check; answer "reduce" for this one call.
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValueOnce(true);
+    const r = render(<SyncButton variant="icon" busy connected onSync={jest.fn()} onConnect={jest.fn()} />);
+    await act(async () => {});
+    expect(r.root.findAll((n) => n.props.name === 'sync')).not.toHaveLength(0);
+    expect(turning(r.root)).toHaveLength(0);
+  });
+
   it('as an icon has no text and no background, and says what it does to a screen reader', async () => {
     const onSync = jest.fn();
     const onConnect = jest.fn();

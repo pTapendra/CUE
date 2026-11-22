@@ -1,5 +1,5 @@
-import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { radius, space, type, useTokens } from '../tokens';
 import { ripple } from './feedback';
@@ -35,11 +35,7 @@ export function SyncButton({ busy, connected, onSync, onConnect, variant = 'icon
       }
     >
       {iconOnly ? (
-        busy ? (
-          <ActivityIndicator color={colors.accent} />
-        ) : (
-          <Ionicons name="sync" size={22} color={colors.accent} />
-        )
+        <SyncIcon spinning={busy} color={colors.accent} />
       ) : (
         <View style={styles.row}>
           {busy ? <ActivityIndicator color={colors.accent} /> : <Ionicons name="sync" size={16} color={colors.accent} />}
@@ -48,6 +44,46 @@ export function SyncButton({ busy, connected, onSync, onConnect, variant = 'icon
       )}
     </Pressable>
   );
+}
+
+/** The sync icon, turning about once a second while Cue syncs; still when the phone asks to reduce motion. */
+function SyncIcon({ spinning, color }: { spinning: boolean; color: string }) {
+  const reduceMotion = useReduceMotion();
+  const [turn] = useState(() => new Animated.Value(0));
+  const spin = spinning && !reduceMotion;
+  useEffect(() => {
+    if (!spin) {
+      turn.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.timing(turn, { toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spin, turn]);
+
+  const icon = <Ionicons name="sync" size={22} color={color} />;
+  if (!spin) return icon;
+  const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return <Animated.View style={{ transform: [{ rotate }] }}>{icon}</Animated.View>;
+}
+
+/** Whether the phone asks apps to reduce motion (and stays up to date when that changes). */
+function useReduceMotion(): boolean {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    let current = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((on) => current && setReduce(on))
+      .catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce);
+    return () => {
+      current = false;
+      subscription.remove();
+    };
+  }, []);
+  return reduce;
 }
 
 const styles = StyleSheet.create({
