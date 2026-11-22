@@ -55,7 +55,7 @@ async function openReview(setup?: (server: ReturnType<typeof fakeServer>) => voi
   const { root } = await launch(server);
   await press(root, 'Schedule');
   await flush();
-  await press(root, 'Sync');
+  await tap(root, 'Sync');
   await flush();
   return { server, root };
 }

@@ -144,7 +144,10 @@ describe('Today', () => {
 
     const shown = texts(root);
     expect(selectedTab(root)).toBe('Today');
-    expect(shown).toEqual(expect.arrayContaining(['Today', 'Sync', 'Mon 2 Nov', 'Canvas synced 12 min ago']));
+    expect(shown).toEqual(expect.arrayContaining(['Today', 'Mon 2 Nov', 'Canvas synced 12 min ago']));
+    // The header's Sync button is an icon: no word, but a screen reader hears "Sync".
+    expect(shown).not.toContain('Sync');
+    expect(onScreen(root, (n) => n.props.accessibilityLabel === 'Sync' && typeof n.props.onPress === 'function')).toHaveLength(1);
     expect(shown).toEqual(
       expect.arrayContaining(['Up next · Tomorrow, 19:00', 'Study for Stats midterm', 'Statistics · 1 h · exam Thu 5 Nov, 09:00']),
     );

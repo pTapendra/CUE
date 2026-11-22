@@ -436,7 +436,7 @@ describe('the Schedule tab', () => {
     ['Cancel', 'Schedule'],
   ])('a sync from Schedule: %s goes to %s', async (button, tab) => {
     const { root } = await openSchedule();
-    await press(root, 'Sync');
+    await tap(root, 'Sync');
     await flush();
     expect(texts(root)).toContain('Check what Cue found');
 

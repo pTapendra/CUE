@@ -47,18 +47,41 @@ describe('ProfileButton', () => {
 });
 
 describe('SyncButton', () => {
+  it('as an icon has no text and no background, and says what it does to a screen reader', async () => {
+    const onSync = jest.fn();
+    const onConnect = jest.fn();
+    const r = render(<SyncButton variant="icon" busy={false} connected onSync={onSync} onConnect={onConnect} />);
+    const button = () => r.root.findAll((n) => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function')[0];
+    expect(texts(r.root)).toEqual([]);
+    expect(button().props.accessibilityLabel).toBe('Sync');
+    expect(styleOf(button()).backgroundColor).toBeUndefined();
+    expect(button().findAll((n) => n.props.name === 'sync')).not.toHaveLength(0);
+    await tap(r.root, 'Sync');
+    expect(onSync).toHaveBeenCalledTimes(1);
+
+    act(() => r.update(<SyncButton variant="icon" busy connected onSync={onSync} onConnect={onConnect} />));
+    expect(texts(r.root)).toEqual([]);
+    expect(button().props.accessibilityLabel).toBe('Syncing…');
+    expect(button().props.accessibilityState).toEqual({ disabled: true, busy: true });
+
+    act(() => r.update(<SyncButton variant="icon" busy={false} connected={false} onSync={onSync} onConnect={onConnect} />));
+    expect(texts(r.root)).toEqual([]);
+    await tap(r.root, 'Connect Canvas');
+    expect(onConnect).toHaveBeenCalledTimes(1);
+  });
+
   it('syncs, shows busy, and connects', async () => {
     const onSync = jest.fn();
     const onConnect = jest.fn();
-    const r = render(<SyncButton busy={false} connected onSync={onSync} onConnect={onConnect} />);
+    const r = render(<SyncButton variant="soft" busy={false} connected onSync={onSync} onConnect={onConnect} />);
     await press(r.root, 'Sync');
     expect(onSync).toHaveBeenCalledTimes(1);
     expect(onConnect).not.toHaveBeenCalled();
 
-    act(() => r.update(<SyncButton busy connected onSync={onSync} onConnect={onConnect} />));
+    act(() => r.update(<SyncButton variant="soft" busy connected onSync={onSync} onConnect={onConnect} />));
     expect(texts(r.root)).toContain('Syncing…');
 
-    act(() => r.update(<SyncButton busy={false} connected={false} onSync={onSync} onConnect={onConnect} />));
+    act(() => r.update(<SyncButton variant="soft" busy={false} connected={false} onSync={onSync} onConnect={onConnect} />));
     await press(r.root, 'Connect Canvas');
     expect(onConnect).toHaveBeenCalledTimes(1);
     expect(onSync).toHaveBeenCalledTimes(1);
@@ -280,7 +303,7 @@ describe('touch feedback', () => {
       undefined,
       c.line,
     ],
-    ['the Sync button', <SyncButton busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />, 'Sync', c.accent, c.accentPressed],
+    ['the header Sync button', <SyncButton variant="icon" busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />, 'Sync', undefined, c.accentTint],
     [
       'the soft Sync button',
       <SyncButton variant="soft" busy={false} connected onSync={jest.fn()} onConnect={jest.fn()} />,

@@ -70,13 +70,7 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
           {monthTitle(first, last, new Date())}
         </Text>
         <View style={styles.actions}>
-          <SyncButton
-            variant="soft"
-            busy={sync.busy}
-            connected={sync.connected}
-            onSync={sync.sync}
-            onConnect={sync.connect}
-          />
+          <SyncButton busy={sync.busy} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
           <ProfileButton onPress={() => navigation.navigate('Settings')} />
         </View>
       </View>

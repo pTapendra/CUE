@@ -116,7 +116,8 @@ describe('Courses', () => {
     const { root } = await openCourses(semester);
     const shown = texts(root);
 
-    expect(shown).toEqual(expect.arrayContaining(['Courses', 'Your courses · synced from Canvas', 'Sync']));
+    expect(shown).toEqual(expect.arrayContaining(['Courses', 'Your courses · synced from Canvas']));
+    expect(onScreen(root, (n) => n.props.accessibilityLabel === 'Sync' && typeof n.props.onPress === 'function')).toHaveLength(1);
     expect(shown).toEqual(
       expect.arrayContaining([
         'DB',

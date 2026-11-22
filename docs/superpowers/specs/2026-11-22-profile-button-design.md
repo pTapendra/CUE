@@ -13,6 +13,7 @@ Settings could only be reached from the gear on Today. The student wants it with
 - One shared button, so it looks and behaves the same everywhere. Screen readers hear "Settings", because that is where it goes.
 - Schedule loses its locate ("Today") button. Its header is: month, Sync, profile icon.
 - Tapping the Schedule tab while already on Schedule returns to today's page, in the view the student is using.
+- The Sync button in the headers of Today, Schedule and Courses is just the sync icon, with no words and no background, like the profile icon beside it. A screen reader still hears "Sync", "Syncing…" or "Connect Canvas". The Sync buttons inside the empty states of Today and Courses keep their words, since the card around them explains them.
 
 ## Non-goals
 

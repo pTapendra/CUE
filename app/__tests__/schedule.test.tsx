@@ -519,20 +519,27 @@ describe('Sync', () => {
     return { server, root };
   }
 
+  /** What the header's Sync button says to a screen reader (it shows only an icon). */
+  const syncLabels = (root: Node) =>
+    onScreen(root, (n) => ['Sync', 'Connect Canvas'].includes(n.props.accessibilityLabel) && typeof n.props.onPress === 'function').map(
+      (n) => n.props.accessibilityLabel as string,
+    );
+
   it('Sync opens Check what Cue found', async () => {
     const { root } = await openSchedule();
-    expect(texts(root)).not.toContain('Connect Canvas');
+    expect(syncLabels(root)).toEqual(['Sync']);
+    expect(texts(root)).not.toContain('Sync');
 
-    await press(root, 'Sync');
+    await tap(root, 'Sync');
     await flush();
     expect(texts(root)).toContain('Check what Cue found');
   });
 
-  it('without Canvas, the button reads Connect Canvas and starts the login, which leads to the review', async () => {
+  it('without Canvas, the button says Connect Canvas and starts the login, which leads to the review', async () => {
     const { root } = await openUnconnected(true);
-    expect(texts(root)).not.toContain('Sync');
+    expect(syncLabels(root)).toEqual(['Connect Canvas']);
 
-    await press(root, 'Connect Canvas');
+    await tap(root, 'Connect Canvas');
     await flush();
     const web = root.findByType('WebView' as never);
     expect(web.props.source.uri).toBe('https://canvas.test/login/oauth2/auth?client_id=1&state=s1');
@@ -546,14 +553,13 @@ describe('Sync', () => {
     // Back on Schedule, which asks again whether Canvas is connected.
     await press(root, 'Cancel');
     await flush();
-    expect(texts(root)).toContain('Sync');
-    expect(texts(root)).not.toContain('Connect Canvas');
+    expect(syncLabels(root)).toEqual(['Sync']);
   });
 
   it('in token mode, Connect Canvas opens the token form', async () => {
     const { root } = await openUnconnected(false);
 
-    await press(root, 'Connect Canvas');
+    await tap(root, 'Connect Canvas');
     await flush();
     expect(onScreen(root, (n) => n.props.placeholder === 'Paste your token').length).toBeGreaterThan(0);
     await type(root, 'yourschool.instructure.com', 's.instructure.com');
