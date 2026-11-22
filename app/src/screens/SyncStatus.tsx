@@ -7,13 +7,15 @@ import type { Sync } from '../viewmodels/useSync';
 
 /**
  * Under the title of every page with a Sync button: "Syncing…", when Canvas was last synced, or a
- * Connect Canvas link. Each state is 44 pt tall, so the page doesn't jump when it changes.
+ * Connect Canvas link. Each state is 44 pt tall, and "Syncing…" has an icon where the ✓ is, so
+ * neither the page nor the words jump when it changes.
  */
 export function SyncStatus({ sync, now }: { sync: Sync; now: Date }) {
   const { colors } = useTokens();
   if (sync.busy) {
     return (
-      <View style={styles.line}>
+      <View style={[styles.line, styles.synced]}>
+        <Ionicons name="sync" size={14} color={colors.text2} />
         <Text style={[type.body, { color: colors.text2 }]}>Syncing…</Text>
       </View>
     );
