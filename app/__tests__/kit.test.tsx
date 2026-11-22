@@ -13,6 +13,7 @@ import {
   ErrorBanner,
   IconButton,
   ListRow,
+  ProfileButton,
   SegmentedControl,
   Stepper,
   SyncButton,
@@ -33,6 +34,17 @@ function render(el: React.ReactElement) {
   });
   return r;
 }
+
+describe('ProfileButton', () => {
+  it('is a Settings button with the person icon', async () => {
+    const onPress = jest.fn();
+    const r = render(<ProfileButton onPress={onPress} />);
+    const button = r.root.findAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Settings')[0];
+    expect(button.findAll((n) => typeof n.props.name === 'string')[0].props.name).toBe('person-circle-outline');
+    await tap(r.root, 'Settings');
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('SyncButton', () => {
   it('syncs, shows busy, and connects', async () => {

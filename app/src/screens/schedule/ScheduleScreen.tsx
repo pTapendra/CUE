@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { Item } from '../../api/types';
 import { monthTitle, parseDay, rangeLabel } from '../../dates';
 import type { TabScreenProps } from '../../navigation/types';
-import { ADD_BUTTON_CLEARANCE, AddButton, Button, ErrorBanner, IconButton, SegmentedControl, SyncButton } from '../../ui/kit';
+import { ADD_BUTTON_CLEARANCE, AddButton, Button, ErrorBanner, IconButton, ProfileButton, SegmentedControl, SyncButton } from '../../ui/kit';
 import { radius, space, type, useTokens } from '../../ui/tokens';
 import { type ScheduleView, useSchedule } from '../../viewmodels/useSchedule';
 import { useSync } from '../../viewmodels/useSync';
@@ -66,6 +66,7 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
             onConnect={sync.connect}
           />
           <IconButton icon="locate-outline" label="Today" onPress={vm.goToday} />
+          <ProfileButton onPress={() => navigation.navigate('Settings')} />
         </View>
       </View>
 

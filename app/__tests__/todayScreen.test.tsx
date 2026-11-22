@@ -390,7 +390,7 @@ describe('Today', () => {
     expect(selectedTab(root)).toBe('Schedule');
   });
 
-  it('the gear opens Settings', async () => {
+  it('the profile icon opens Settings', async () => {
     const { root } = await openToday();
     await tap(root, 'Settings');
     await flush();

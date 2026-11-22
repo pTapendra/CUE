@@ -15,8 +15,8 @@ import {
   DayStrip,
   EmptyState,
   ErrorBanner,
-  IconButton,
   ListRow,
+  ProfileButton,
   SectionHeader,
   SyncButton,
   Tag,
@@ -32,7 +32,7 @@ import { ItemSheet } from '../sheets/ItemSheet';
 
 /**
  * Today: the week at a glance, the next study block, what is due in the next 7 days,
- * and what still has no date. Sync and Settings live in its header.
+ * and what still has no date. Sync and the profile icon (Settings) live in its header.
  */
 export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
   const { colors, courses: palette, unknown } = useTokens();
@@ -85,7 +85,7 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
           </Text>
           <View style={styles.actions}>
             <SyncButton busy={sync.busy} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
-            <IconButton icon="settings-outline" label="Settings" onPress={() => navigation.navigate('Settings')} />
+            <ProfileButton onPress={() => navigation.navigate('Settings')} />
           </View>
         </View>
         <View style={styles.subtitle}>

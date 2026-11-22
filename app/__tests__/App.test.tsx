@@ -390,7 +390,7 @@ describe('connecting with the token form', () => {
   });
 });
 
-describe('Settings, from the gear on Today', () => {
+describe('Settings, from the profile icon on Today', () => {
   it('loads Today and the schedule again after study times are saved', async () => {
     const server = fakeServer();
     server.state.connected = true;
