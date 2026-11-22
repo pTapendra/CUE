@@ -9,15 +9,17 @@ const CONNECT_AGAIN = new Set(['canvas_token_rejected', 'canvas_not_connected'])
 
 /**
  * View model for reviewing what a sync found before it is saved (UC1): the new items to tick,
- * Canvas's changes and removals (applied on Save), and the items skipped before.
+ * Canvas's changes and removals (applied on Save), and the items skipped before. `initial` is
+ * what the sync already read: it is shown as it is, and only Try again reads Canvas again.
  */
-export function useSyncReview() {
+export function useSyncReview(initial?: SyncPreview) {
   const api = useApi();
-  const [preview, setPreview] = useState<SyncPreview | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<SyncPreview | null>(initial ?? null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initial?.newItems.map((i) => i.key)));
   const [dates, setDates] = useState<Record<string, string | null>>({});
   const [showSkipped, setShowSkipped] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initial);
+  const [readOnOpen] = useState(!initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConnect, setNeedsConnect] = useState(false);
@@ -41,8 +43,8 @@ export function useSyncReview() {
   }, [api]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (readOnOpen) load();
+  }, [load, readOnOpen]);
 
   const toggle = (key: string) =>
     setSelected((prev) => {
@@ -69,7 +71,7 @@ export function useSyncReview() {
     }
   }
 
-  const nothingListed = !preview || (preview.newItems.length === 0 && preview.changed.length === 0 && preview.removed.length === 0);
+  const nothingListed = !preview || !toReview(preview);
 
   return {
     preview,
@@ -98,6 +100,11 @@ export function useSyncReview() {
     reload: load,
     confirm,
   };
+}
+
+/** Whether a sync found something to review: anything new, changed or removed (skipped items alone don't count). */
+export function toReview(p: SyncPreview): boolean {
+  return p.newItems.length > 0 || p.changed.length > 0 || p.removed.length > 0;
 }
 
 /** Keeps the picked dates of the accepted items only. */

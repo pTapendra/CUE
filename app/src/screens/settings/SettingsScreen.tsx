@@ -147,7 +147,7 @@ export function SettingsScreen({ navigation }: RootScreenProps<'Settings'>) {
           />
           {sync.connected ? (
             <>
-              <Action title="Sync now" onPress={() => navigation.navigate('Review')} />
+              <Action title="Sync now" busy={sync.busy} onPress={sync.sync} />
               <Action title="Disconnect Canvas" danger onPress={confirmDisconnect} />
             </>
           ) : (

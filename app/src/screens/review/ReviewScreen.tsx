@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useApi } from '../../api/ApiContext';
-import type { ChangedItem, Course, ProposedItem, RemovedItem } from '../../api/types';
+import type { ChangedItem, Course, ProposedItem, RemovedItem, SyncPreview } from '../../api/types';
 import { dayLabel, timeLabel } from '../../dates';
 import { courseColorFor } from '../../ui/courseColors';
 import { Button, CourseDot, DateTimeField, ErrorBanner, Tag, useToast } from '../../ui/kit';
@@ -12,11 +12,14 @@ import { describeChange, groupByCourse, savedToast, summaryLine, useSyncReview }
 import { CanvasLoginScreen } from '../CanvasLoginScreen';
 
 export function ReviewScreen({
+  initialPreview,
   onDone,
   onCancel,
   loginAvailable,
   onConnect,
 }: {
+  /** What the sync already read; without it, the screen reads Canvas itself. */
+  initialPreview?: SyncPreview;
   onDone: () => void;
   onCancel: () => void;
   /** The server has Canvas login set up, so the student can log in again right here. */
@@ -27,7 +30,7 @@ export function ReviewScreen({
   const api = useApi();
   const { colors, courses: palette, unknown } = useTokens();
   const toast = useToast();
-  const vm = useSyncReview();
+  const vm = useSyncReview(initialPreview);
   // After logging in again, read Canvas again right here.
   const login = useCanvasLogin(vm.reload);
   // Only for the colours: until the courses arrive (or if they can't), the dots are neutral.

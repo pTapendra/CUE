@@ -127,11 +127,12 @@ function CourseRoute(props: RootScreenProps<'Course'>) {
   );
 }
 
-function ReviewRoute({ navigation }: RootScreenProps<'Review'>) {
+function ReviewRoute({ navigation, route }: RootScreenProps<'Review'>) {
   const { loginAvailable } = useStartup();
   return (
     <Page>
       <ReviewScreen
+        initialPreview={route.params?.preview}
         loginAvailable={loginAvailable}
         onDone={() => backToTabs(navigation, 'Today')}
         onCancel={() => backToTabs(navigation)}

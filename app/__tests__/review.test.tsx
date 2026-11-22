@@ -194,10 +194,28 @@ describe('Check what Cue found', () => {
     expect(labels).toContain('Lab 2, will be removed from Cue');
   });
 
-  it('when nothing is new, says Cue is up to date and Done closes without saving', async () => {
+  it('when nothing is new, Sync stays on Schedule and says In sync with Canvas', async () => {
     const { server, root } = await openReview((s) => {
       s.state.preview.newItems = [];
     });
+    expect(texts(root)).not.toContain('Check what Cue found');
+    expect(texts(root)).toContain('In sync with Canvas');
+    expect(selectedTab(root)).toBe('Schedule');
+    expect(server.state.calls.some((c) => c.path === '/api/canvas/sync/confirm')).toBe(false);
+  });
+
+  it('opened with what the sync read, the review does not read Canvas again', async () => {
+    const { server } = await openReview();
+    expect(server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/sync')).toHaveLength(1);
+  });
+
+  it('with only skipped items, Show opens the review, which says Cue is up to date; Done closes without saving', async () => {
+    const { server, root } = await openReview((s) => {
+      s.state.preview.skipped = s.state.preview.newItems;
+      s.state.preview.newItems = [];
+    });
+    await press(root, 'Show');
+    await flush();
     expect(texts(root)).toContain('Cue is up to date with Canvas.');
     expect(texts(root)).not.toContain('Save');
     expect(texts(root)).not.toContain('Cancel');
@@ -213,6 +231,8 @@ describe('Check what Cue found', () => {
       s.state.preview.skipped = s.state.preview.newItems;
       s.state.preview.newItems = [];
     });
+    await press(root, 'Show');
+    await flush();
     expect(texts(root)).toContain('Cue is up to date with Canvas.');
     await press(root, 'Show 2 skipped');
     expect(texts(root)).toContain('Skipped');

@@ -295,6 +295,15 @@ describe('Settings', () => {
       expect(texts(root)).toContain('Check what Cue found');
     });
 
+    it('with nothing new, stays in Settings and says In sync with Canvas', async () => {
+      const { server, root } = await openSettings();
+      server.state.preview.newItems = [];
+      await press(root, 'Sync now');
+      await flush();
+      expect(texts(root)).not.toContain('Check what Cue found');
+      expect(texts(root)).toEqual(expect.arrayContaining(['Daily limit', 'In sync with Canvas']));
+    });
+
     it('reads Log in with Canvas when not connected, and opens the login, not a sync', async () => {
       const { server, root } = await openSettings({ connected: false, loginAvailable: true });
       expect(texts(root)).toContain('Not connected');

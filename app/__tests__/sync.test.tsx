@@ -2,13 +2,15 @@ import React from 'react';
 import { Pressable, Text } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, type NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ApiProvider } from '../src/api/ApiContext';
 import { ApiClient } from '../src/api/client';
 import { type Startup, StartupContext } from '../src/navigation/startup';
 import type { RootStackParamList } from '../src/navigation/types';
 import { CanvasLoginSheet } from '../src/screens/CanvasLoginScreen';
+import { ToastProvider } from '../src/ui/kit';
 import { useSync } from '../src/viewmodels/useSync';
+import { toReview } from '../src/viewmodels/useSyncReview';
 import { fakeServer, memoryStore } from '../test-support/fakeServer';
 import { flush, press, texts } from '../test-support/ui';
 
@@ -43,7 +45,15 @@ const Marker = (label: string) =>
   function MarkerScreen() {
     return <Text>{label}</Text>;
   };
-const ReviewMarker = Marker('Review screen');
+/** Stands in for Check what Cue found, and says whether it was given what the sync read. */
+function ReviewMarker({ route }: NativeStackScreenProps<RootStackParamList, 'Review'>) {
+  return (
+    <>
+      <Text>Review screen</Text>
+      <Text>{`preview ${route.params?.preview ? 'given' : 'none'}`}</Text>
+    </>
+  );
+}
 const TokenMarker = Marker('Token screen');
 const SettingsMarker = Marker('Settings screen');
 
@@ -56,6 +66,7 @@ async function open(server: Server, startup: Startup = { loginAvailable: false, 
     tree = ReactTestRenderer.create(
       <ApiProvider client={client}>
         <StartupContext.Provider value={startup}>
+          <ToastProvider>
           <NavigationContainer ref={nav}>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="Tabs" component={Probe} />
@@ -64,6 +75,7 @@ async function open(server: Server, startup: Startup = { loginAvailable: false, 
               <Stack.Screen name="Settings" component={SettingsMarker} />
             </Stack.Navigator>
           </NavigationContainer>
+          </ToastProvider>
         </StartupContext.Provider>
       </ApiProvider>,
     );
@@ -81,6 +93,19 @@ afterEach(async () => {
 
 const connectionReads = (server: Server) =>
   server.state.calls.filter((c) => c.method === 'GET' && c.path === '/api/canvas/connection').length;
+const syncReads = (server: Server) => server.state.calls.filter((c) => c.method === 'POST' && c.path === '/api/canvas/sync').length;
+
+describe('toReview', () => {
+  const item = { key: 'k', courseName: 'C', kind: 'assignment' as const, title: 'T', dueAt: null, needsDate: false };
+  const none = { syncId: 's', newItems: [], changed: [], removed: [], skipped: [] };
+  it('is true when anything is new, changed or removed, and not for skipped items alone', () => {
+    expect(toReview(none)).toBe(false);
+    expect(toReview({ ...none, skipped: [item] })).toBe(false);
+    expect(toReview({ ...none, newItems: [item] })).toBe(true);
+    expect(toReview({ ...none, changed: [{ key: 'k', courseName: 'C', kind: 'assignment', title: 'T', changes: [] }] })).toBe(true);
+    expect(toReview({ ...none, removed: [{ key: 'k', courseName: 'C', kind: 'assignment', title: 'T', dueAt: null }] })).toBe(true);
+  });
+});
 
 describe('useSync', () => {
   it('reads the connection when its screen is focused, and again when it comes back', async () => {
@@ -103,14 +128,78 @@ describe('useSync', () => {
     expect(texts(root)).toEqual(expect.arrayContaining(['connected false', 'synced null']));
   });
 
-  it('when connected, sync opens Review, which runs the sync', async () => {
+  it('when Canvas has something new, sync reads it once and opens Review with it', async () => {
     const server = fakeServer();
     server.state.connected = true;
     const { root } = await open(server);
 
     await press(root, 'sync');
     await flush();
+    expect(texts(root)).toEqual(expect.arrayContaining(['Review screen', 'preview given']));
+    expect(syncReads(server)).toBe(1);
+  });
+
+  it('when nothing is new, sync stays and says In sync with Canvas', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    server.state.preview.newItems = [];
+    const { root } = await open(server);
+    expect(connectionReads(server)).toBe(1);
+
+    await press(root, 'sync');
+    await flush();
+    expect(texts(root)).not.toContain('Review screen');
+    expect(texts(root)).toEqual(expect.arrayContaining(['In sync with Canvas', 'busy false']));
+    // The synced time is read again.
+    expect(connectionReads(server)).toBe(2);
+  });
+
+  it('with only skipped items, the toast offers Show, which opens Review with them', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    server.state.preview.skipped = server.state.preview.newItems;
+    server.state.preview.newItems = [];
+    const { root } = await open(server);
+
+    await press(root, 'sync');
+    await flush();
+    expect(texts(root)).toContain('In sync with Canvas · 2 skipped');
+    expect(texts(root)).not.toContain('Review screen');
+    await press(root, 'Show');
+    await flush();
+    expect(texts(root)).toEqual(expect.arrayContaining(['Review screen', 'preview given']));
+    expect(syncReads(server)).toBe(1);
+  });
+
+  it('is busy while it reads, and a second tap does nothing', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const gated = (async (url: string, init?: RequestInit) => {
+      if (new URL(url).pathname === '/api/canvas/sync') await gate;
+      return server.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const { root } = await open(server, undefined, gated);
+
+    await press(root, 'sync');
+    expect(texts(root)).toContain('busy true');
+    await press(root, 'sync');
+    await act(async () => release());
+    await flush();
+    expect(syncReads(server)).toBe(1);
     expect(texts(root)).toContain('Review screen');
+  });
+
+  it('when the read fails, sync opens Review, which explains', async () => {
+    const server = fakeServer();
+    server.state.connected = true;
+    server.state.syncError = { status: 409, error: 'canvas_token_rejected' };
+    const { root } = await open(server);
+
+    await press(root, 'sync');
+    await flush();
+    expect(texts(root)).toEqual(expect.arrayContaining(['Review screen', 'preview none']));
   });
 
   it('when not connected, sync connects instead (in token mode, the token form)', async () => {
@@ -155,7 +244,9 @@ describe('useSync', () => {
     });
     await flush();
     expect(root.findAllByType('WebView' as never)).toHaveLength(0);
-    expect(texts(root)).toContain('Review screen');
+    // The finished login runs the sync: everything is new, so the review opens with it.
+    expect(texts(root)).toEqual(expect.arrayContaining(['Review screen', 'preview given']));
+    expect(syncReads(server)).toBe(1);
   });
 
   it('reports linked from the connection status', async () => {
