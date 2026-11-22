@@ -10,6 +10,7 @@ import { radius, space, type, useTokens } from '../../ui/tokens';
 import { type ScheduleView, useSchedule } from '../../viewmodels/useSchedule';
 import { useSync } from '../../viewmodels/useSync';
 import { CanvasLoginSheet } from '../CanvasLoginScreen';
+import { SyncStatus } from '../SyncStatus';
 import { BlockSheet } from '../sheets/BlockSheet';
 import { ItemSheet } from '../sheets/ItemSheet';
 import { TimeGrid } from '../TimeGrid';
@@ -73,6 +74,10 @@ export function ScheduleScreen({ navigation, route }: TabScreenProps<'Schedule'>
           <SyncButton busy={sync.busy} inSync={sync.inSync} connected={sync.connected} onSync={sync.sync} onConnect={sync.connect} />
           <ProfileButton onPress={() => navigation.navigate('Settings')} />
         </View>
+      </View>
+
+      <View style={styles.status}>
+        <SyncStatus sync={sync} now={new Date()} />
       </View>
 
       <View style={styles.controls}>
@@ -179,7 +184,8 @@ const styles = StyleSheet.create({
   },
   title: { flexShrink: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  controls: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.xs },
+  status: { paddingHorizontal: space.lg },
+  controls: { paddingHorizontal: space.lg, gap: space.xs },
   pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   range: { flex: 1, textAlign: 'center' },
   notices: { flexGrow: 0, maxHeight: '30%' },

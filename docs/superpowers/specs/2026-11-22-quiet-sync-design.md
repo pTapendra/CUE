@@ -15,6 +15,7 @@ Every Sync button opened "Check what Cue found" at once, and that page read Canv
 - The header icons and the empty-state buttons work this way, and so does finishing a Canvas login started from them (a first login brings everything in, so the review opens).
 - Settings → **Sync now** always opens the review, which reads Canvas itself: it is the way to items skipped before ("Show N skipped").
 - The read fails (offline, Canvas wants a new login, …): the review page opens as before; it reads again and explains, with Try again or Log in with Canvas.
+- Every page with a Sync button shows Today's status line under its title: "Syncing…", "✓ Canvas synced just now / 12 min ago", or a Connect Canvas link. Schedule: under the month, above the view controls. Courses: instead of "Your courses · synced from Canvas". A course's page has no Sync button and no line.
 
 ## Non-goals
 

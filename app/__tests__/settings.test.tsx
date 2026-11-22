@@ -607,7 +607,8 @@ describe('The profile icon', () => {
     let node: Node | null = onScreen(root, isBack)[0] ?? null;
     while (node) {
       const button = node.findAll(isSettings)[0];
-      if (button) return texts(node).includes('Your courses · synced from Canvas') ? undefined : button;
+      const coursesPage = node.findAll((n) => n.props.accessibilityRole === 'header' && texts(n).includes('Courses')).length > 0;
+      if (button) return coursesPage ? undefined : button;
       node = node.parent;
     }
     return undefined;

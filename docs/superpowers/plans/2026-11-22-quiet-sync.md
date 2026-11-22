@@ -76,3 +76,16 @@
 - [ ] **Step 4: Run the whole app suite, typecheck and lint** — `cd app && npm test && npm run typecheck && npm run lint`. Expected: all pass; only the two existing `no-void` warnings.
 
 - [ ] **Step 5: Commit** `App: the header Sync icon spins while Cue reads Canvas`; README Today line mentions the in-place sync.
+
+### Task 3: The sync status line on Schedule and Courses
+
+**Files:**
+- Create: `app/src/screens/SyncStatus.tsx` (moved from `TodayScreen.tsx`)
+- Modify: `app/src/screens/today/TodayScreen.tsx`, `app/src/screens/schedule/ScheduleScreen.tsx`, `app/src/screens/courses/CoursesScreen.tsx`
+- Test: `app/__tests__/schedule.test.tsx`, `app/__tests__/coursesScreen.test.tsx`, `app/__tests__/settings.test.tsx` (its course-page helper used the old Courses subtitle)
+
+- [ ] **Step 1: Write the failing tests**: Schedule shows `Canvas synced 12 min ago` (lastSyncedAt 08:48, now 09:00) and, without Canvas, a `Connect Canvas` text link; Courses shows `Canvas synced 12 min ago` and no longer `Your courses · synced from Canvas`.
+- [ ] **Step 2: Run them to see them fail** — `cd app && npx jest __tests__/schedule.test.tsx __tests__/coursesScreen.test.tsx`.
+- [ ] **Step 3: Implement**: one shared `SyncStatus({ sync, now })`; Schedule puts it under the month; Courses in place of its subtitle.
+- [ ] **Step 4: Whole suite, typecheck, lint.**
+- [ ] **Step 5: Commit** `App: Schedule and Courses show when Canvas was synced, like Today`

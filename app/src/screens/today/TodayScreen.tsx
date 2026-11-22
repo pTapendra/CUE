@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Item, StudyBlock } from '../../api/types';
 import { dayKey, dayLabel } from '../../dates';
@@ -23,10 +23,11 @@ import {
   useToast,
 } from '../../ui/kit';
 import { type CourseColor, space, type, useTokens } from '../../ui/tokens';
-import { blockMeta, syncedLabel, type UpNext, upNextLabel, weekMarks, whenLabel } from '../../viewmodels/today';
-import { type Sync, useSync } from '../../viewmodels/useSync';
+import { blockMeta, type UpNext, upNextLabel, weekMarks, whenLabel } from '../../viewmodels/today';
+import { useSync } from '../../viewmodels/useSync';
 import { useToday } from '../../viewmodels/useToday';
 import { CanvasLoginSheet } from '../CanvasLoginScreen';
+import { SyncStatus } from '../SyncStatus';
 import { BlockSheet } from '../sheets/BlockSheet';
 import { ItemSheet } from '../sheets/ItemSheet';
 
@@ -245,27 +246,6 @@ export function TodayScreen({ navigation }: TabScreenProps<'Today'>) {
   );
 }
 
-/** Under the title: when Canvas was synced, "Syncing…", or a Connect Canvas link. */
-function SyncStatus({ sync, now }: { sync: Sync; now: Date }) {
-  const { colors } = useTokens();
-  if (sync.busy) return <Text style={[type.body, { color: colors.text2 }]}>Syncing…</Text>;
-  if (!sync.connected) {
-    return (
-      <Pressable accessibilityRole="button" onPress={sync.connect} style={styles.link}>
-        <Text style={[type.bodyStrong, { color: colors.accent }]}>Connect Canvas</Text>
-      </Pressable>
-    );
-  }
-  return (
-    <View style={styles.synced}>
-      <Ionicons name="checkmark-circle" size={14} color={colors.ok} />
-      <Text style={[type.body, { color: colors.text2 }]}>
-        {sync.lastSyncedAt ? `Canvas synced ${syncedLabel(sync.lastSyncedAt, now)}` : 'Canvas connected'}
-      </Text>
-    </View>
-  );
-}
-
 /** The next accepted study block, else the suggestions to review, else a prompt to plan. */
 function UpNextCard({
   upNext,
@@ -348,8 +328,6 @@ const styles = StyleSheet.create({
   title: { flexShrink: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   subtitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.md },
-  synced: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: 44 },
-  link: { minHeight: 44, justifyContent: 'center' },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
   spinner: { paddingVertical: space.xl },
   card: { gap: space.sm },

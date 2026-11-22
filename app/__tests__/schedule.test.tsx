@@ -525,6 +525,18 @@ describe('Sync', () => {
       (n) => n.props.accessibilityLabel as string,
     );
 
+  it('shows when Canvas was synced under the month', async () => {
+    const { root } = await openSchedule((s) => {
+      s.state.lastSyncedAt = new Date(2026, 10, 2, 8, 48).toISOString();
+    });
+    expect(texts(root)).toContain('Canvas synced 12 min ago');
+  });
+
+  it('without Canvas, the line under the month is a Connect Canvas link', async () => {
+    const { root } = await openUnconnected(false);
+    expect(texts(root)).toContain('Connect Canvas');
+  });
+
   it('Sync opens Check what Cue found', async () => {
     const { root } = await openSchedule();
     expect(syncLabels(root)).toEqual(['Sync']);

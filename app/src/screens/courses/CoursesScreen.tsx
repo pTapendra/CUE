@@ -9,6 +9,7 @@ import { type CourseSummary, courseSummaries } from '../../viewmodels/courses';
 import { useOverview } from '../../viewmodels/useOverview';
 import { useSync } from '../../viewmodels/useSync';
 import { CanvasLoginSheet } from '../CanvasLoginScreen';
+import { SyncStatus } from '../SyncStatus';
 import { ProgressBar } from './ProgressBar';
 
 /** Courses: one card per course with what is next, each exam's study plan, and exams still without a date. */
@@ -31,7 +32,7 @@ export function CoursesScreen({ navigation }: TabScreenProps<'Courses'>) {
             <ProfileButton onPress={() => navigation.navigate('Settings')} />
           </View>
         </View>
-        <Text style={[type.body, { color: colors.text2 }]}>Your courses · synced from Canvas</Text>
+        <SyncStatus sync={sync} now={now} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
